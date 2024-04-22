@@ -15,9 +15,6 @@
 ;; (epsilon)            nothing
 ;; epsilon              alias for (epsilon)
 
-(define test0 '("[" (choice epsilon (mu "[token]" (choice epsilon ("," rec)))) "]"))
-test0
-
 ;;; PHASE 1
 ;;;
 ;;; Turns input syntax into the "logical representation" of RRDs, of which a key
@@ -67,6 +64,7 @@ test0
                      (list 'term expr))]
     ['epsilon '(epsilon)]
     ['rec (list 'rec 0)]
+    [(list 'rec _) expr]
     [(list 'mu exprs ..1) (list 'mu (cons 'seq (map normalize-syntax exprs)))]
     [(list* 'choice exprs) (cons 'choice (map normalize-syntax exprs))]
     [(? list?) (cons 'seq (map normalize-syntax expr))]
@@ -76,7 +74,7 @@ test0
   ;; Counts the number of holes at the given de Bruijn level in expr.
   (match expr
     [(or (list 'term _) (list 'nonterm _) (list 'rec _) '(epsilon)) 0]
-    [(list 'hole level _) 1]
+    [(list 'hole l _) (if (= l level) 1 0)]
     [(list 'mu sub) (count-holes sub (+ 1 level))]
     [(or (list* 'choice subs) (list* 'seq subs))
      (apply + (map (lambda (s) (count-holes s level)) subs))]))
@@ -99,7 +97,7 @@ test0
   ;; recursions within inner mu forms are not touched. They are handled by a
   ;; separate call to this function from partition-tail-recursions.
   (match expr
-    [(or (list 'term _) (list 'nonterm _) '(epsilon)) (cons expr '())]
+    [(or (list 'term _) (list 'nonterm _) (list 'hole _ _) '(epsilon)) (cons expr '())]
     [(list* 'choice subs)
      (let* ([subparts (map (lambda (e) (partition-tail-recursions e level)) subs)]
             [subctxs (map (lambda (p) (car p)) subparts)]
@@ -144,19 +142,15 @@ test0
   ;; Turns the input syntax of an RRD into its logical representation.
   (compose logical-representation-normalized normalize-syntax))
 
-(define test1 (logical-representation test0))
-test1
-
 
 ;;; PHASE 2
 
-(struct span (top center bot width) #:transparent)
+(struct span (top center bot) #:transparent)
 (define (get-span repr)
   (if (eq? (car repr) 'with-top-at) (get-span (caddr repr)) (cadr repr)))
 (define linear-top (compose span-top get-span))
 (define linear-center (compose span-center get-span))
 (define linear-bot (compose span-bot get-span))
-(define linear-width (compose span-width get-span))
 (define (linear-height repr)
   (+ (- (linear-bot repr) (linear-top repr)) 1))
 
@@ -173,9 +167,9 @@ test1
 (define (annotate-lines-shifts logical)
   (match logical
     [(list* (and head (or 'term 'nonterm 'rec 'epsilon)) rests)
-     (list* head (span 0 0 0 (if (eq? head 'epsilon) 0 1)) rests)]
+     (list* head (span 0 0 0) rests)]
     [(list* 'hole rests)   ; bot := -1 means zero height
-     (list* 'hole (span 0 0 -1 0) rests)]
+     (list* 'hole (span 0 0 -1) rests)]
     [(list* 'choice subs)
      (let* ([choices (map annotate-lines-shifts subs)]
             [height (apply + (map linear-height choices))]
@@ -183,36 +177,29 @@ test1
             [stacked-choices (stacked choices (- half-height))])
        (list*
         'choice
-        (span (+ 1 (- half-height)) 0 (car stacked-choices)
-              ; +1 for the split, and +1 for the join if two or more non-hole choices
-              (+ (if (>= (count (lambda (c) (not (eq? (car c) 'hole))) choices) 2) 2 1)
-                 (apply max (map linear-width (cdr stacked-choices)))))
+        (span (+ 1 (- half-height)) 0 (car stacked-choices))
         (reverse (cdr stacked-choices))))]
     [(list* 'seq subs)
      (let ([annotated (map annotate-lines-shifts subs)])
        (list* 'seq
               (span (apply min (map linear-top annotated))
                     0
-                    (apply max (map linear-bot annotated))
-                    (apply + (map linear-width annotated)))
+                    (apply max (map linear-bot annotated)))
               annotated))]
     [(list* 'mu fsub bsubs)
      (let* ([annotated-fsub (annotate-lines-shifts fsub)]
-            [stacked-bsubs (stacked (map annotate-lines-shifts bsubs)
+            [stacked-bsubs (stacked (reverse (map annotate-lines-shifts bsubs))
                                     (linear-bot annotated-fsub))])
        (list*
         'mu
-        (span (linear-top annotated-fsub) 0 (car stacked-bsubs)
-              ; +1 for the recursive join
-              ; TODO: the below is an approximation!
-              (+ 1 (apply max (map linear-width (cons annotated-fsub (cdr stacked-bsubs))))))
+        (span (linear-top annotated-fsub) 0 (car stacked-bsubs))
         annotated-fsub
-        ; stacked also reverses bsubs, which we want here
-        (cdr stacked-bsubs)))]))
+        (reverse (cdr stacked-bsubs))))]))
 
 (define (shifted-span a-span shift)
-  (span (+ shift (span-top a-span)) (+ shift (span-center a-span))
-        (+ shift (span-bot a-span)) (span-width a-span)))
+  (span (+ shift (span-top a-span))
+        (+ shift (span-center a-span))
+        (+ shift (span-bot a-span))))
 
 (define (resolve-shifts annotated cur-shift)
   (match annotated
@@ -226,10 +213,6 @@ test1
 
 (define (linear-physical-representation logical)
   (resolve-shifts (annotate-lines-shifts logical) 0))
-
-(define test2
-  (linear-physical-representation test1))
-test2
 
 
 ;;; PHASE 3
@@ -282,24 +265,67 @@ test2
              [else (raise-arguments-error
                     'connect-to!
                     "vertical connection already occupied"
-                    "neighbors" neighbors "other-neighbors" other-neighbors)])])))
-    (abstract to-image)))
+                    "neighbors" neighbors "other-neighbors" other-neighbors
+                    "row" row "col" col "other-row" other-row)])])))
+    (abstract min-width)
+    (define/pubment (draw! a-dc col-to-x row-to-y)
+      (let ([idxs-outs
+             (filter (lambda (n) (and (not (eq? (cdr n) #f)) (eq? (cadr n) #f)))
+                     (map (lambda (i) (cons i (vector-ref neighbors i))) (range 0 4)))]
+            [anchor-point
+             (lambda (col row anchor)
+               (list (col-to-x (+ col (list-ref '(0.5 0 -0.5 0) anchor)))
+                     (row-to-y (+ row (list-ref '(0 0.5 0 -0.5) anchor)))))])
+        (inner '() draw! a-dc col-to-x row-to-y)
+        (for-each
+         (lambda (idx-out)
+           (let ([neighbor-col (get-field col (caddr idx-out))]
+                 [neighbor-row (get-field row (caddr idx-out))]
+                 [anchor (car idx-out)]
+                 [a-path (new dc-path%)])
+             (when (or (> (abs (- neighbor-col col)) 1) (> (abs (- neighbor-row row)) 1))
+               (send/apply a-path move-to (anchor-point col row anchor))
+               (send/apply a-path line-to
+                           (anchor-point neighbor-col neighbor-row (modulo (+ anchor 2) 4)))
+               (send a-dc draw-path a-path))))
+         idxs-outs)))))
 
 (define rrd-junction%
   (class rrd-node% (super-new)
-    (inherit-field neighbors)
-    (define/override (to-image)
+    (inherit-field row col neighbors)
+    (define/augment (draw! a-dc col-to-x row-to-y)
       (let* ([conn-idxs (indexes-where (vector->list neighbors) (lambda (n) (not (eq? n #f))))]
              [conn-neighs (map (lambda (i) (cons i (vector-ref neighbors i))) conn-idxs)]
              [ins (filter (lambda (n) (eq? (cadr n) #t)) conn-neighs)]
              [outs (filter (lambda (n) (eq? (cadr n) #f)) conn-neighs)]
-             [in-outs (cartesian-product ins outs)])
-        in-outs))))
+             [in-outs (cartesian-product ins outs)]
+             [anchor-points (map (lambda (c r) (list (col-to-x c) (row-to-y r)))
+                                 (list (+ col 0.5) col (- col 0.5) col)
+                                 (list row (+ row 0.5) row (- row 0.5)))]
+             [towards-center (lambda (p ratio) (let ([x (first p)] (y (second p)))
+                                                 (list (+ x (* ratio (- (col-to-x col) x)))
+                                                       (+ y (* ratio (- (row-to-y row) y))))))])
+        (send a-dc set-pen "black" 1 'solid)
+        (for-each
+         (lambda (io)
+           (let ([pti (list-ref anchor-points (first (first io)))]
+                 [pto (list-ref anchor-points (first (second io)))]
+                 [a-path (new dc-path%)])
+             (send/apply a-path move-to pti)
+             (send/apply a-path line-to (towards-center pti 0.3))
+             (send/apply a-path curve-to (append (towards-center pti 0.6)
+                                                 (towards-center pto 0.6)
+                                                 (towards-center pto 0.3)))
+             (send/apply a-path line-to pto)
+             (send a-dc draw-path a-path)))
+         in-outs)))
+    (define/override (min-width a-dc) 20)))
 
 (define rrd-station%
   (class rrd-node% (super-new)
     (init-field terminal? label)
-    (inherit-field row)
+    (inherit-field row col)
+    (field [padding-x 5] [padding-y 2])
     (define/override (connect-to! other)
       (let ([other-row (get-field row other)])
         (if (= row other-row)
@@ -307,138 +333,230 @@ test2
             (raise-arguments-error 'connect-to!
                                    "stations can only be connected horizontally"
                                    "row" row "other-row" other-row))))
-    (define/override (to-image)
-      label)))
+    (define/override (min-width a-dc)
+      (let-values ([(width height descent extra) (send a-dc get-text-extent label #f #t)])
+        ; *4 to have space outside the box too
+        (+ width (* 4 padding-x))))
+    (define/augment (draw! a-dc col-to-x row-to-y)
+      (let-values ([(width height descent extra) (send a-dc get-text-extent label #f #t)])
+        (let* ([text-x (- (col-to-x col) (/ width 2))]
+               [text-y (- (row-to-y row) (/ height 2))]
+               [box-x (- text-x padding-x)]
+               [box-y ( - text-y padding-y)]
+               [box-width (+ width (* 2 padding-x))]
+               [box-height (+ height (* 2 padding-y))])
+          (send a-dc set-pen "black" 1 'solid)
+          (send a-dc set-brush "white" 'solid)
+          (if terminal?
+              (send a-dc draw-rounded-rectangle
+                    box-x box-y box-width box-height)
+              (send a-dc draw-rectangle
+                    box-x box-y box-width box-height))
+          (send a-dc draw-text label text-x text-y #t)
+          (send a-dc draw-line
+                (col-to-x (- col 0.5)) (row-to-y row)
+                box-x (row-to-y row))
+          (send a-dc draw-line
+                (+ box-x box-width) (row-to-y row)
+                (col-to-x (+ col 0.5)) (row-to-y row)))))))
 
-(define (grid-physical-representation linear col recursions)
-  (match linear
-    [(list (and head (or 'term 'nonterm 'rec)) span label)
-     (let ([rrd (new rrd-station%
-                     [terminal? (eq? head 'term)]
-                     [label (if (eq? head 'rec) (string-append "rec " (~a label)) label)]
-                     [row (span-center span)] [col col])])
-       (list rrd rrd))]
-    [(list 'epsilon span)
-     (let ([rrd (new rrd-junction% [row (span-center span)] [col col])])
-       (list rrd rrd))]
-    [(list* 'seq span sub subs)
-     (let ([subgrid (grid-physical-representation sub col recursions)])
-       (list
-        (first subgrid)
-        (foldl
-         (lambda (s end)
-           (let ([sgrid (grid-physical-representation s (+ 1 (get-field col end)) recursions)])
-             (send end connect-to! (first sgrid))
-             (second sgrid)))
-         (second subgrid)
-         (filter-not (lambda (s) (eq? (car s) 'epsilon)) subs))))]
-    [(list* 'choice span subs)
-     (let-values ([(holes nonholes) (partition (lambda (s) (eq? (car s) 'hole)) subs)])
-       (let* ([recs (map
-                     (lambda (h) (let ([level (caddr h)] [index (cadddr h)])
-                                   (list-ref (list-ref recursions level) index)))
-                     holes)]
-              [max-rec-end (if (empty? recs) (- col 1)
-                               (apply max (map (lambda (r) (get-field col (second r))) recs)))]
-              [start (if (> col max-rec-end) col (+ 1 max-rec-end))]
-              [nonhole-grids
-               (map
-                (lambda (nh) (grid-physical-representation nh (+ 1 start) recursions))
-                nonholes)]
-              [end
-               (+ 1 (apply max (map (lambda (nh) (get-field col (second nh))) nonhole-grids)))]
-              [split (new rrd-junction% [row (span-center span)] [col start])])
-         (let-values
-             ([(lowest-split join)
-               (if
-                (andmap (lambda (s) (eq? (car s) 'epsilon)) nonholes)
-                (values split split)
-                (let* ([join (new rrd-junction% [row (span-center span)] [col end])]
-                       [split-join (list split join)]
-                       [nonhole-junctions-f
-                        (lambda (r prev)
-                          (let ([nhs (new rrd-junction% [row (get-field row (first r))] [col start])]
-                                ; (second r) should be on same row as (first r) though
-                                [nhj (new rrd-junction% [row (get-field row (second r))] [col end])])
-                            (send (first prev) connect-to! nhs)
-                            (send nhs connect-to! (first r))
-                            (send (second r) connect-to! nhj)
-                            (send nhj connect-to! (second prev))
-                            (list nhs nhj)))]
-                       [nonhole-junctions-up ; unused in body, named for convenience
-                        (foldr nonhole-junctions-f split-join
-                               (filter
-                                (lambda (nhg) (< (get-field row (first nhg)) (span-center span)))
-                                nonhole-grids))]
-                       [nonhole-junctions-down
-                        (foldl nonhole-junctions-f split-join
-                               (filter
-                                (lambda (nhg) (> (get-field row (first nhg)) (span-center span)))
-                                nonhole-grids))]
-                       [nonhole-center-maybe ; unused in body, named for convenience
-                        (let ([maybe
-                               (filter
-                                (lambda (nhg) (= (get-field row (first nhg)) (span-center span)))
-                                nonhole-grids)])
-                          (unless (empty? maybe)
-                            (send split connect-to! (first (first maybe)))
-                            (send (second (first maybe)) connect-to! join)))])
-                  (values (first nonhole-junctions-down) join)))])
-           (begin
+(define-syntax-rule (cons!-and-return expr l)
+  (let ([val expr]) (set! l (cons val l)) val))
+
+(define (grid-physical-representation linear)
+  (let ([all-nodes '()])
+    (define (helper linear col recursions)
+      (match linear
+        [(list (and head (or 'term 'nonterm 'rec)) span label)
+         (let ([rrd (cons!-and-return
+                     (new rrd-station%
+                          [terminal? (eq? head 'term)]
+                          [label (if (eq? head 'rec) (string-append "rec " (~a label)) label)]
+                          [row (span-center span)] [col col])
+                     all-nodes)])
+           (list rrd rrd))]
+        [(list 'epsilon span)
+         (let ([rrd (cons!-and-return
+                     (new rrd-junction% [row (span-center span)] [col col])
+                     all-nodes)])
+           (list rrd rrd))]
+        [(list* 'seq span sub subs)
+         (let ([subgrid (helper sub col recursions)])
+           (list
+            (first subgrid)
+            (foldl
+             (lambda (s end)
+               (let ([sgrid (helper s (+ 1 (get-field col end)) recursions)])
+                 (send end connect-to! (first sgrid))
+                 (second sgrid)))
+             (second subgrid)
+             (filter-not (lambda (s) (eq? (car s) 'epsilon)) subs))))]
+        [(list* 'choice span subs)
+         (let-values ([(holes nonholes) (partition (lambda (s) (eq? (car s) 'hole)) subs)])
+           (let* ([recs (map
+                         (lambda (h) (let ([level (caddr h)] [index (cadddr h)])
+                                       (list-ref (list-ref recursions level) index)))
+                         holes)]
+                  [max-rec-end (if (empty? recs) (- col 1)
+                                   (apply max (map (lambda (r) (get-field col (second r))) recs)))]
+                  [start (if (> col max-rec-end) col (+ 1 max-rec-end))]
+                  [nonhole-grids
+                   (map
+                    (lambda (nh) (helper nh (+ 1 start) recursions))
+                    nonholes)]
+                  [end
+                   (+ 1 (apply max (map (lambda (nh) (get-field col (second nh))) nonhole-grids)))]
+                  [split (cons!-and-return
+                          (new rrd-junction% [row (span-center span)] [col start])
+                          all-nodes)])
+             (let-values
+                 ([(lowest-split join)
+                   (match (filter-not (lambda (s) (eq? (car s) 'epsilon)) nonholes) 
+                     ['()
+                      (values split split)]
+                     [(list center)
+                      (let ([center-grid
+                             (first
+                              (filter
+                               (lambda (nhg) (= (get-field row (first nhg)) (span-center span)))
+                               nonhole-grids))])
+                        (send split connect-to! (first center-grid))
+                        (values split (second center-grid)))]
+                     [_
+                      (let* ([join (cons!-and-return
+                                    (new rrd-junction% [row (span-center span)] [col end])
+                                    all-nodes)]
+                             [split-join (list split join)]
+                             [nonhole-junctions-f
+                              (lambda (r prev)
+                                (let ([nhs (cons!-and-return
+                                            (new rrd-junction% [row (get-field row (first r))] [col start])
+                                            all-nodes)]
+                                      ; (second r) should be on same row as (first r) though
+                                      [nhj (cons!-and-return
+                                            (new rrd-junction% [row (get-field row (second r))] [col end])
+                                            all-nodes)])
+                                  (send (first prev) connect-to! nhs)
+                                  (send nhs connect-to! (first r))
+                                  (send (second r) connect-to! nhj)
+                                  (send nhj connect-to! (second prev))
+                                  (list nhs nhj)))]
+                             [nonhole-junctions-up ; unused in body, named for convenience
+                              (foldr nonhole-junctions-f split-join
+                                     (filter
+                                      (lambda (nhg) (< (get-field row (first nhg)) (span-center span)))
+                                      nonhole-grids))]
+                             [nonhole-junctions-down
+                              (foldl nonhole-junctions-f split-join
+                                     (filter
+                                      (lambda (nhg) (> (get-field row (first nhg)) (span-center span)))
+                                      nonhole-grids))]
+                             [nonhole-center-maybe ; unused in body, named for convenience
+                              (let ([maybe
+                                     (filter
+                                      (lambda (nhg) (= (get-field row (first nhg)) (span-center span)))
+                                      nonhole-grids)])
+                                (unless (empty? maybe)
+                                  (send split connect-to! (first (first maybe)))
+                                  (send (second (first maybe)) connect-to! join)))])
+                        (values (first nonhole-junctions-down) join))])])
+               (begin
+                 (foldl
+                  (lambda (r prev)
+                    (let ([hj (cons!-and-return
+                               (new rrd-junction% [row (get-field row (second r))] [col start])
+                               all-nodes)])
+                      (send prev connect-to! hj)
+                      (send hj connect-to! (second r))
+                      hj))
+                  lowest-split
+                  recs)
+                 (list split join)))))]
+        [(list* 'mu span fsub bsubs)
+         (let* ([join (cons!-and-return
+                       (new rrd-junction% [row (span-center span)] [col col])
+                       all-nodes)]
+                [bsub-grids
+                 (second
+                  (foldl
+                   (lambda (s prev)
+                     (let ([sjoin (cons!-and-return
+                                   (new rrd-junction% [row (linear-center s)] [col col])
+                                   all-nodes)]
+                           ; TODO: but somehow need to be reversed
+                           [sgrid (helper s (+ 1 col) recursions)])
+                       (send (first sgrid) connect-to! sjoin)
+                       (send sjoin connect-to! (first prev))
+                       (list sjoin (cons sgrid (second prev)))))
+                   (list join '())
+                   bsubs))]
+                [fsub-grid
+                 (helper fsub (+ 1 col) (cons bsub-grids recursions))])
+           (send join connect-to! (first fsub-grid))
+           (list join (second fsub-grid)))]))
+    (let* ([all-start-end (helper linear 0 '())]
+           [all-start (first all-start-end)]
+           [all-end (second all-start-end)])
+      ; dummy junctions for start and end lines
+      ; not added to all-nodes!
+      (send (new rrd-junction% [row (get-field row all-start)] [col (- (get-field col all-start) 1)])
+            connect-to! all-start)
+      (send all-end connect-to!
+            (new rrd-junction% [row (get-field row all-start)] [col (+ (get-field col all-end) 1)])))
+    all-nodes))
+
+(define rrd
+  (compose grid-physical-representation linear-physical-representation logical-representation))
+
+(define (draw-rrd expr)
+  (let ([my-rrd (rrd expr)]
+        [my-dc (new svg-dc% [width 1000] [height 300] [output "rrd.svg"] [exists 'truncate])])
+    (send* my-dc (start-doc "drawing…") (start-page))
+    (send my-dc set-origin 30 100)
+    (let* ([acc-min-widths-by-col
+            (cdr
              (foldl
-              (lambda (r prev)
-                (let ([hj (new rrd-junction% [row (get-field row (second r))] [col start])])
-                  (send prev connect-to! hj)
-                  (send hj connect-to! (second r))
-                  hj))
-              lowest-split
-              recs)
-             (list split join)))))]
-    [(list* 'mu span fsub bsubs)
-     (let* ([join (new rrd-junction% [row (span-center span)] [col col])]
-            [bsub-grids
-             (reverse
-              (second
-               (foldl
-                (lambda (s prev)
-                  (let ([sjoin (new rrd-junction% [row (linear-center s)] [col col])]
-                        ; but somehow need to be reversed
-                        [sgrid (grid-physical-representation s (+ 1 col) recursions)])
-                    (send (first sgrid) connect-to! sjoin)
-                    (send sjoin connect-to! (first prev))
-                    (list sjoin (cons sgrid (second prev)))))
-                (list join '())
-                bsubs)))]
-            [fsub-grid
-             (grid-physical-representation fsub (+ 1 col) (cons bsub-grids recursions))])
-       (send join connect-to! (first fsub-grid))
-       (list join (second fsub-grid)))]))
+              (lambda (c acc)
+                (let ([this-acc
+                       (+ (car acc)
+                          (apply max (map (lambda (cc) (send (cdr cc) min-width my-dc)) c)))])
+                  `(,this-acc . ((,(caar c) . ,this-acc) . ,(cdr acc)))))
+              '(0 (-1 . 0))
+              (sort
+               (group-by car (map (lambda (c) (cons (get-field col c) c)) my-rrd))
+               < #:key caar)))]
+           [cols (inclusive-range 0 (caar acc-min-widths-by-col))]
+           [col-width-f
+            (lambda (raw-col)
+              (let* ([col (- raw-col 0.5)]
+                     [fr-x (assf (lambda (c) (= c (floor col))) acc-min-widths-by-col)]
+                     [cl-x (assf (lambda (c) (= c (ceiling col))) acc-min-widths-by-col)])
+                (+ (cdr fr-x) (* (- (cdr cl-x) (cdr fr-x)) (- col (car fr-x))))))])
+      (for-each (lambda (component)
+                  (send component draw! my-dc col-width-f (lambda (r) (* 30 r)))) my-rrd))
+    (send* my-dc (end-page) (end-doc))))
 
-(define (display-rrd root seen)
-  (cond
-    [(memq root seen) '()]
-    [(is-a? root rrd-station%)
-     (display (get-field label root))
-     (display (get-field row root))
-     (display (get-field col root))
-     (displayln "")
-     (vector-map (lambda (n) (display-rrd (cadr n) (cons root (cons n seen))))
-                 (vector-filter-not (lambda (n) (eq? n #f)) (get-field neighbors root)))]
-    [(is-a? root rrd-junction%)
-     (display "junction ")
-     (display (get-field row root))
-     (display (get-field col root))
-     (displayln "")
-     (vector-map (lambda (n) (display-rrd (cadr n) (cons root (cons n seen))))
-                 (vector-filter (lambda (n) (and (not (eq? n #f)) (not (eq? (car n) #t))))
-                                (get-field neighbors root)))]))
+#;(draw-rrd
+ '(mu "c" (choice "a" "b" ("," rec))))
 
-(define test3
-  (grid-physical-representation
-   (linear-physical-representation
-    (logical-representation
-     '("a" "b" (choice (choice "c" "d") "e" "f") "g")))
-   0
-   '()))
-(display-rrd (first test3) '())
-(display-rrd (first (grid-physical-representation test2 0 '())) '())
+#;(draw-rrd
+  '("a" "b" (choice (choice "c" "d") "e" "f") "g"))
+
+#;(draw-rrd
+ '((choice "-" epsilon)
+   (choice "0" ("[nonzero digit]" (choice epsilon
+                                          (mu "[digit]" (choice epsilon rec)))))
+   (choice epsilon ("." (mu "[digit]" (choice epsilon rec))))
+   (choice epsilon ((choice "e" "E") (choice "-" epsilon "+") (mu "[digit]" (choice epsilon rec))))))
+
+#;(draw-rrd
+ '(mu (choice "[phrase]"
+              ((mu "[phrase]" (choice ("and" "[phrase]") ("," rec)))))
+      (choice ("and" "[that]") (";" rec))))
+
+(draw-rrd
+ '(mu "c"
+      (mu "a"
+          (choice ("e" (choice epsilon
+                               ("b" rec)))
+                  ("d" (rec 0))))))
