@@ -83,7 +83,7 @@
   ;; Increments all hole numbers at the given de Bruijn level by n in expr.
   (match expr
     [(or (list 'term _) (list 'nonterm _) (list 'rec _) '(epsilon)) expr]
-    [(list 'hole level k) (list 'hole level (+ n k))]
+    [(list 'hole l k) (if (= l level) (list 'hole l (+ n k)) expr)]
     [(list 'mu sub) (list 'mu (shift-holes n sub (+ 1 level)))]
     [(list* 'choice subs) (cons 'choice (map (lambda (s) (shift-holes n s level)) subs))]
     [(list* 'seq subs) (cons 'seq (map (lambda (s) (shift-holes n s level)) subs))]))
@@ -188,7 +188,7 @@
               annotated))]
     [(list* 'mu fsub bsubs)
      (let* ([annotated-fsub (annotate-lines-shifts fsub)]
-            [stacked-bsubs (stacked (reverse (map annotate-lines-shifts bsubs))
+            [stacked-bsubs (stacked (map annotate-lines-shifts bsubs)
                                     (linear-bot annotated-fsub))])
        (list*
         'mu
@@ -363,6 +363,35 @@
 (define-syntax-rule (cons!-and-return expr l)
   (let ([val expr]) (set! l (cons val l)) val))
 
+(define (reverse-expr linear)
+  (match linear
+    [(list* (or 'term 'nonterm 'rec 'hole 'epsilon) rests) linear]
+    [(list* 'seq span subs)
+     (list* 'seq span (reverse (map reverse-expr subs)))]
+    [(list* (and head (or 'choice 'mu)) span subs)
+     (list* head span (map reverse-expr subs))]))
+
+(define (reverse-connections! start)
+  (let loop ([agenda (list start)] [seen '()])
+    (unless (empty? agenda)
+      (let ([node (car agenda)] [news '()])
+        (if (memq node seen)
+            (loop (cdr agenda) seen)
+            (begin
+              (set-field! neighbors node
+                          (vector-map
+                           (lambda (n)
+                             (if (eq? n #f) n
+                                 (begin
+                                   (set! news (cons (second n) news))
+                                   (list (not (first n)) (second n)))))
+                           (get-field neighbors node)))
+              (loop
+               (append
+                news
+                (cdr agenda))
+               (cons node seen))))))))
+
 (define (grid-physical-representation linear)
   (let ([all-nodes '()])
     (define (helper linear col recursions)
@@ -380,8 +409,9 @@
                      (new rrd-junction% [row (span-center span)] [col col])
                      all-nodes)])
            (list rrd rrd))]
-        [(list* 'seq span sub subs)
-         (let ([subgrid (helper sub col recursions)])
+        [(list* 'seq span subs)
+         (let* ([noneps-subs (filter-not (lambda (s) (eq? (car s) 'epsilon)) subs)]
+                [subgrid (helper (car noneps-subs) col recursions)])
            (list
             (first subgrid)
             (foldl
@@ -390,7 +420,7 @@
                  (send end connect-to! (first sgrid))
                  (second sgrid)))
              (second subgrid)
-             (filter-not (lambda (s) (eq? (car s) 'epsilon)) subs))))]
+             (cdr noneps-subs))))]
         [(list* 'choice span subs)
          (let-values ([(holes nonholes) (partition (lambda (s) (eq? (car s) 'hole)) subs)])
            (let* ([recs (map
@@ -400,10 +430,7 @@
                   [max-rec-end (if (empty? recs) (- col 1)
                                    (apply max (map (lambda (r) (get-field col (second r))) recs)))]
                   [start (if (> col max-rec-end) col (+ 1 max-rec-end))]
-                  [nonhole-grids
-                   (map
-                    (lambda (nh) (helper nh (+ 1 start) recursions))
-                    nonholes)]
+                  [nonhole-grids (map (lambda (nh) (helper nh (+ 1 start) recursions)) nonholes)]
                   [end
                    (+ 1 (apply max (map (lambda (nh) (get-field col (second nh))) nonhole-grids)))]
                   [split (cons!-and-return
@@ -411,18 +438,16 @@
                           all-nodes)])
              (let-values
                  ([(lowest-split join)
-                   (match (filter-not (lambda (s) (eq? (car s) 'epsilon)) nonholes) 
-                     ['()
+                   (cond
+                     [(andmap (lambda (s) (eq? (car s) 'epsilon)) nonholes)
+                      ; the corresponding nonhole-grids do not have connections and are hence not drawn
                       (values split split)]
-                     [(list center)
-                      (let ([center-grid
-                             (first
-                              (filter
-                               (lambda (nhg) (= (get-field row (first nhg)) (span-center span)))
-                               nonhole-grids))])
+                     [(and (= 1 (length nonholes))
+                           (= (span-center span) (linear-center (first nonholes))))
+                      (let ([center-grid (first nonhole-grids)])
                         (send split connect-to! (first center-grid))
                         (values split (second center-grid)))]
-                     [_
+                     [else
                       (let* ([join (cons!-and-return
                                     (new rrd-junction% [row (span-center span)] [col end])
                                     all-nodes)]
@@ -477,19 +502,21 @@
                        (new rrd-junction% [row (span-center span)] [col col])
                        all-nodes)]
                 [bsub-grids
-                 (second
-                  (foldl
-                   (lambda (s prev)
-                     (let ([sjoin (cons!-and-return
-                                   (new rrd-junction% [row (linear-center s)] [col col])
-                                   all-nodes)]
-                           ; TODO: but somehow need to be reversed
-                           [sgrid (helper s (+ 1 col) recursions)])
-                       (send (first sgrid) connect-to! sjoin)
-                       (send sjoin connect-to! (first prev))
-                       (list sjoin (cons sgrid (second prev)))))
-                   (list join '())
-                   bsubs))]
+                 (reverse
+                  (second
+                   (foldl
+                    (lambda (s prev)
+                      (let ([sjoin (cons!-and-return
+                                    (new rrd-junction% [row (linear-center s)] [col col])
+                                    all-nodes)]
+                            ; TODO: but somehow need to be reversed
+                            [sgrid (helper s #;(reverse-expr s) (+ 1 col) recursions)])
+                        (reverse-connections! (second sgrid))
+                        (send (first sgrid) connect-to! sjoin)
+                        (send sjoin connect-to! (first prev))
+                        (list sjoin (cons sgrid (second prev)))))
+                    (list join '())
+                    bsubs)))]
                 [fsub-grid
                  (helper fsub (+ 1 col) (cons bsub-grids recursions))])
            (send join connect-to! (first fsub-grid))
@@ -508,9 +535,9 @@
 (define rrd
   (compose grid-physical-representation linear-physical-representation logical-representation))
 
-(define (draw-rrd expr)
+(define (draw-rrd output expr)
   (let ([my-rrd (rrd expr)]
-        [my-dc (new svg-dc% [width 1000] [height 300] [output "rrd.svg"] [exists 'truncate])])
+        [my-dc (new svg-dc% [width 1000] [height 300] [output output] [exists 'truncate])])
     (send* my-dc (start-doc "drawing…") (start-page))
     (send my-dc set-origin 30 100)
     (let* ([acc-min-widths-by-col
@@ -536,27 +563,55 @@
                   (send component draw! my-dc col-width-f (lambda (r) (* 30 r)))) my-rrd))
     (send* my-dc (end-page) (end-doc))))
 
-#;(draw-rrd
- '(mu "c" (choice "a" "b" ("," rec))))
+(draw-rrd "json-list.svg"
+ '("["
+   (choice epsilon
+           (mu "[token]"
+               (choice epsilon ("," rec))))
+   "]"))
 
-#;(draw-rrd
+(draw-rrd "choice-test.svg"
   '("a" "b" (choice (choice "c" "d") "e" "f") "g"))
 
-#;(draw-rrd
+(draw-rrd "json-number.svg"
  '((choice "-" epsilon)
    (choice "0" ("[nonzero digit]" (choice epsilon
                                           (mu "[digit]" (choice epsilon rec)))))
    (choice epsilon ("." (mu "[digit]" (choice epsilon rec))))
    (choice epsilon ((choice "e" "E") (choice "-" epsilon "+") (mu "[digit]" (choice epsilon rec))))))
 
-#;(draw-rrd
+(draw-rrd "well-parenthesized-mus-1.svg"
  '(mu (choice "[phrase]"
               ((mu "[phrase]" (choice ("and" "[phrase]") ("," rec)))))
-      (choice ("and" "[that]") (";" rec))))
+      (choice ("and" (choice "[phrase]"
+                             ((mu "[phrase]" (choice ("and" "[phrase]") ("," rec))))))
+              (";" rec))))
+
+(draw-rrd "crossing-mus-1.svg"
+ '(mu "a" (mu "b" (choice ("c" (choice ("d" (choice epsilon ("rabcd" (rec 1))))
+                                       ("rbc" rec)
+                                       ("rabc" (rec 1))))
+                          ("rb" rec)))))
 
 (draw-rrd
- '(mu "c"
-      (mu "a"
-          (choice ("e" (choice epsilon
-                               ("b" rec)))
-                  ("d" (rec 0))))))
+ "crossing-mus-2.svg"
+ '(mu "a" (mu "b" (choice (rec 1) ("c" (choice epsilon rec))))))
+
+(draw-rrd "well-parenthesized-mus-2.svg"
+ '(mu
+   (mu
+    "a"
+    (mu
+     (mu "b" (choice epsilon ("rb" rec)))
+     "c"
+     (choice epsilon ("rbc" rec)))
+    (choice epsilon ("rabc" rec)))
+   "d"
+   (choice epsilon ("rabcd" rec))))
+
+(draw-rrd
+ "big-backloop-test.svg"
+ '(mu "a" (choice epsilon
+                  (choice ("b" (choice "c" "d" "e") (mu "[thing]" (choice epsilon ("," rec))) rec)
+                          ("[thing]" rec)))))
+
