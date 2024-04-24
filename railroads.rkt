@@ -1,5 +1,7 @@
 #lang racket
 
+(provide rrd draw-rrd)
+
 ;; syntax:
 ;; "a"                  alias for (term "a")
 ;; (term "a")           terminal
@@ -554,86 +556,35 @@
                       logical-representation))
 
 (define (draw-rrd output expr)
-  (let ([my-rrd (rrd expr)]
-        [my-dc (new svg-dc% [width 1000] [height 300] [output output] [exists 'truncate])])
+  (let* ([my-linear (linear-physical-representation (logical-representation expr))]
+         [my-rrd (grid-physical-representation my-linear)]
+         [temp-dc (new svg-dc% [width 1000] [height 1000] [output output] [exists 'truncate])]
+         [acc-min-widths-by-col
+          (cdr
+           (foldl
+            (lambda (c acc)
+              (let ([this-acc
+                     (+ (car acc)
+                        (apply max (map (lambda (cc) (send (cdr cc) min-width temp-dc)) c)))])
+                `(,this-acc . ((,(caar c) . ,this-acc) . ,(cdr acc)))))
+            '(0 (-1 . 0))
+            (sort
+             (group-by car (map (lambda (c) (cons (get-field col c) c)) my-rrd))
+             < #:key caar)))]
+         [cols (inclusive-range 0 (caar acc-min-widths-by-col))]
+         [col-width-f
+          (lambda (raw-col)
+            (let* ([col (- raw-col 0.5)]
+                   [fr-x (assf (lambda (c) (= c (floor col))) acc-min-widths-by-col)]
+                   [cl-x (assf (lambda (c) (= c (ceiling col))) acc-min-widths-by-col)])
+              (+ (cdr fr-x) (* (- (cdr cl-x) (cdr fr-x)) (- col (car fr-x))))))]
+         [row-height-f (lambda (r) (* 30 (+ r (- (linear-top my-linear)) 0.5)))]
+         [my-dc (new svg-dc%
+                     [width (cdar acc-min-widths-by-col)]
+                     [height (- (row-height-f (+ (linear-bot my-linear) 0.5))
+                                (row-height-f (- (linear-top my-linear) 0.5)))]
+                     [output output] [exists 'truncate])])
     (send* my-dc (start-doc "drawing…") (start-page))
-    (send my-dc set-origin 30 100)
-    (let* ([acc-min-widths-by-col
-            (cdr
-             (foldl
-              (lambda (c acc)
-                (let ([this-acc
-                       (+ (car acc)
-                          (apply max (map (lambda (cc) (send (cdr cc) min-width my-dc)) c)))])
-                  `(,this-acc . ((,(caar c) . ,this-acc) . ,(cdr acc)))))
-              '(0 (-1 . 0))
-              (sort
-               (group-by car (map (lambda (c) (cons (get-field col c) c)) my-rrd))
-               < #:key caar)))]
-           [cols (inclusive-range 0 (caar acc-min-widths-by-col))]
-           [col-width-f
-            (lambda (raw-col)
-              (let* ([col (- raw-col 0.5)]
-                     [fr-x (assf (lambda (c) (= c (floor col))) acc-min-widths-by-col)]
-                     [cl-x (assf (lambda (c) (= c (ceiling col))) acc-min-widths-by-col)])
-                (+ (cdr fr-x) (* (- (cdr cl-x) (cdr fr-x)) (- col (car fr-x))))))])
-      (for-each (lambda (component)
-                  (send component draw! my-dc col-width-f (lambda (r) (* 30 r)))) my-rrd))
+    (for-each (lambda (component)
+                (send component draw! my-dc col-width-f row-height-f)) my-rrd)
     (send* my-dc (end-page) (end-doc))))
-
-(draw-rrd "json-number.svg"
-          '((choice "-" epsilon)
-            (choice "0" ("[nonzero digit]" (choice epsilon
-                                                   (mu "[digit]" (choice epsilon rec)))))
-            (choice epsilon ("." (mu "[digit]" (choice epsilon rec))))
-            (choice epsilon ((choice "e" "E") (choice "-" epsilon "+") (mu "[digit]" (choice epsilon rec))))))
-
-(draw-rrd
- "json-list.svg"
- '("["
-   (choice epsilon
-           (mu "[token]"
-               (choice epsilon ("," rec))))
-   "]"))
-
-(draw-rrd "choice-test.svg"
-          '("a" "b" (choice (choice "c" "d") "e" "f") "g"))
-
-(draw-rrd "well-parenthesized-mus-1.svg"
-          '(mu (choice "[phrase]"
-                       ((mu "[phrase]" (choice ("and" "[phrase]") ("," rec)))))
-               (choice ("and" (choice "[phrase]"
-                                      ((mu "[phrase]" (choice ("and" "[phrase]") ("," rec))))))
-                       (";" rec))))
-
-(draw-rrd "crossing-mus-1.svg"
-          '(mu "a" (mu "b" (choice ("c" (choice ("d" (choice epsilon ("rabcd" (rec 1))))
-                                                ("rbc" rec)
-                                                ("rabc" (rec 1))))
-                                   ("rb" rec)))))
-
-
-(draw-rrd
- "crossing-mus-2.svg"
- '(mu "a" (mu "b" (choice (rec 1) ("c" (choice epsilon rec))))))
-
-(draw-rrd "well-parenthesized-mus-2.svg"
-          '(mu
-            (mu
-             "a"
-             (mu
-              (mu "b" (choice epsilon ("rb" rec)))
-              "c"
-              (choice epsilon ("rbc" rec)))
-             (choice epsilon ("rabc" rec)))
-            "d"
-            (choice epsilon ("rabcd" rec))))
-
-(draw-rrd
- "big-backloop-test.svg"
- '(mu "a" (choice epsilon
-                  (choice ("b"
-                           (choice "c" "d" "e")
-                           (mu "[thing]" (choice epsilon ("," "and" rec)))
-                           rec)
-                          ("[thing]" rec)))))
