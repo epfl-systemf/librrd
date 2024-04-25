@@ -429,19 +429,25 @@
                       (lambda (s1 s2) (send s2 connect-to! s1)))]
         [subs (map (if forward? first second) sub-grids)]
         [col (get-field col junction)])
-    (foldl
-     (lambda (sub prev-juncs)
-       (let ([new-row (get-field row sub)])
-         (if (= new-row (get-field row (car prev-juncs)))
-             (begin
-               (connect! (car prev-juncs) sub)
-               prev-juncs)
+    (remq*
+     subs
+     (foldl
+      (lambda (sub prev-juncs)
+        (let ([new-row (get-field row sub)])
+          (cond
+            [(= new-row (get-field row (car prev-juncs)))
+             (connect! (car prev-juncs) sub)
+             prev-juncs]
+            [(= col (get-field col sub)) ; should only happen for epsilon subs
+             (connect! (car prev-juncs) sub)
+             (cons sub prev-juncs)]
+            [else
              (let ([new-junc (new rrd-junction% [row new-row] [col col])])
                (connect! (car prev-juncs) new-junc)
                (connect! new-junc sub)
-               (cons new-junc prev-juncs)))))
-     (list junction)
-     subs)))
+               (cons new-junc prev-juncs))])))
+      (list junction)
+      subs))))
 
 (define (grid-helper linear recursions)
   (match linear
@@ -499,8 +505,11 @@
                            (split-extend! grids-below)
                            (join-extend! nonhole-grids-below))])
                (unless (empty? nonhole-grids-at)
-                 (send split connect-to! (first (first nonhole-grids-at)))
-                 (send (second (first nonhole-grids-at)) connect-to! join))
+                 (if (eq? 'epsilon (car (first nonholes-at)))
+                     (send split connect-to! join)
+                     (begin
+                       (send split connect-to! (first (first nonhole-grids-at)))
+                       (send (second (first nonhole-grids-at)) connect-to! join))))
                (list split join (cons split (cons join extended-nodes)))))
            (let ([extended-nodes (split-extend! recs)])
              (if (eq? type 'epsilon-join)
