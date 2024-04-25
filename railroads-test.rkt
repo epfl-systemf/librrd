@@ -7,65 +7,73 @@
         [reference (string-append filename "-ref.svg")])
     (draw-rrd drawn rrd)
     #;(check-equal? (port->string (open-input-file drawn #:mode 'text))
-                  (port->string (open-input-file reference #:mode 'text))
-                  "SVG output does not match reference")))
+                    (port->string (open-input-file reference #:mode 'text))
+                    "SVG output does not match reference")))
 
 (test-case
     "JSON number spec"
   (draw-rrd-and-compare
-   '((choice "-" epsilon)
-     (choice "0" ("[nonzero digit]" (choice epsilon
-                                            (mu "[digit]" (choice epsilon rec)))))
-     (choice epsilon ("." (mu "[digit]" (choice epsilon rec))))
-     (choice epsilon ((choice "e" "E") (choice "-" epsilon "+") (mu "[digit]" (choice epsilon rec)))))
+   '((+ "-" epsilon)
+     (+ "0" ("[nonzero digit]" (+ epsilon
+                                  (mu "[digit]" (+ epsilon rec)))))
+     (+ epsilon ("." (mu "[digit]" (+ epsilon rec))))
+     (+ epsilon ((+ "e" "E") (+ "-" epsilon "+") (mu "[digit]" (+ epsilon rec)))))
    "json-number"))
 
 (draw-rrd
  "json-list.svg"
  '("["
-   (choice epsilon
-           (mu "[token]"
-               (choice epsilon ("," rec))))
+   (+ epsilon
+      (mu "[token]"
+          (+ epsilon ("," rec))))
    "]"))
 
 (draw-rrd "choice-test.svg"
-          '("a" "b" (choice (choice "c" "d") "e" "f") "g"))
+          '("a" "b" (+ (+ "c" "d") "e" "f") "g"))
 
 (draw-rrd "well-parenthesized-mus-1.svg"
-          '(mu (choice "[phrase]"
-                       ((mu "[phrase]" (choice ("and" "[phrase]") ("," rec)))))
-               (choice ("and" (choice "[phrase]"
-                                      ((mu "[phrase]" (choice ("and" "[phrase]") ("," rec))))))
-                       (";" rec))))
+          '(mu (+ "[phrase]"
+                  ((mu "[phrase]" (+ ("and" "[phrase]") ("," rec)))))
+               (+ ("and" (+ "[phrase]"
+                            ((mu "[phrase]" (+ ("and" "[phrase]") ("," rec))))))
+                  (";" rec))))
 
 (draw-rrd "crossing-mus-1.svg"
-          '(mu "a" (mu "b" (choice ("c" (choice ("d" (choice epsilon ("rabcd" (rec 1))))
-                                                ("rbc" rec)
-                                                ("rabc" (rec 1))))
-                                   ("rb" rec)))))
+          '(mu "a" (mu "b" (+ ("c" (+ ("d" (+ epsilon ("rabcd" (rec 1))))
+                                      ("rbc" rec)
+                                      ("rabc" (rec 1))))
+                              ("rb" rec)))))
 
 
 (draw-rrd
  "crossing-mus-2.svg"
- '(mu "a" (mu "b" (choice (rec 1) ("c" (choice epsilon rec))))))
+ '(mu "a" (mu "b" (+ (rec 1) ("c" (+ epsilon rec))))))
 
 (draw-rrd "well-parenthesized-mus-2.svg"
           '(mu
             (mu
              "a"
              (mu
-              (mu "b" (choice epsilon ("rb" rec)))
+              (mu "b" (+ epsilon ("rb" rec)))
               "c"
-              (choice epsilon ("rbc" rec)))
-             (choice epsilon ("rabc" rec)))
+              (+ epsilon ("rbc" rec)))
+             (+ epsilon ("rabc" rec)))
             "d"
-            (choice epsilon ("rabcd" rec))))
+            (+ epsilon ("rabcd" rec))))
 
 (draw-rrd
  "big-backloop-test.svg"
- '(mu "a" (choice epsilon
-                  (choice ("b"
-                           (choice "c" "d" "e")
-                           (mu "[thing]" (choice epsilon ("," "and" rec)))
-                           rec)
-                          ("[thing]" rec)))))
+ '(mu "a" (+ epsilon
+             (+ ("b"
+                 (+ "c" "d" "e")
+                 (mu "[thing]" (+ epsilon ("," "and" rec)))
+                 rec)
+                ("[thing]" rec)))))
+
+(draw-rrd
+ "lots-of-epsilons.svg"
+ '((mu (+ epsilon
+          ((mu (+ epsilon ((mu (+ epsilon rec)) rec))) rec)))
+   (+ epsilon epsilon epsilon)
+   (epsilon epsilon "a")))
+

@@ -9,7 +9,7 @@
 ;; (nonterm "a")        named nonterminal
 ;; (seq A ...)          sequence
 ;; (A ...)              alias for (seq A ...)
-;; (choice A ...)       choice
+;; (+ A ...)            choice
 ;; (mu A)               recursive binder
 ;; (mu A ...)           alias for (mu (seq A ...))
 ;; (rec n)              recurse to nth enclosing binder, de Bruijn indexed
@@ -68,7 +68,7 @@
     ['rec (list 'rec 0)]
     [(list 'rec _) expr]
     [(list 'mu exprs ..1) (list 'mu (cons 'seq (map normalize-syntax exprs)))]
-    [(list* 'choice exprs) (cons 'choice (map normalize-syntax exprs))]
+    [(list* '+ exprs) (cons '+ (map normalize-syntax exprs))]
     [(? list?) (cons 'seq (map normalize-syntax expr))]
     [_ expr]))
 
@@ -78,7 +78,7 @@
     [(or (list 'term _) (list 'nonterm _) (list 'rec _) '(epsilon)) 0]
     [(list 'hole l _) (if (= l level) 1 0)]
     [(list 'mu sub) (count-holes sub (+ 1 level))]
-    [(or (list* 'choice subs) (list* 'seq subs))
+    [(or (list* '+ subs) (list* 'seq subs))
      (apply + (map (lambda (s) (count-holes s level)) subs))]))
 
 (define (shift-holes n expr level)
@@ -87,7 +87,7 @@
     [(or (list 'term _) (list 'nonterm _) (list 'rec _) '(epsilon)) expr]
     [(list 'hole l k) (if (= l level) (list 'hole l (+ n k)) expr)]
     [(list 'mu sub) (list 'mu (shift-holes n sub (+ 1 level)))]
-    [(list* 'choice subs) (cons 'choice (map (lambda (s) (shift-holes n s level)) subs))]
+    [(list* '+ subs) (cons '+ (map (lambda (s) (shift-holes n s level)) subs))]
     [(list* 'seq subs) (cons 'seq (map (lambda (s) (shift-holes n s level)) subs))]))
 
 (define (partition-tail-recursions expr level)
@@ -100,15 +100,15 @@
   ;; separate call to this function from partition-tail-recursions.
   (match expr
     [(or (list 'term _) (list 'nonterm _) (list 'hole _ _) '(epsilon)) (cons expr '())]
-    [(list* 'choice subs)
+    [(list* '+ subs)
      (let* ([subparts (map (lambda (e) (partition-tail-recursions e level)) subs)]
             [subctxs (map (lambda (p) (car p)) subparts)]
             [subrecs (map (lambda (p) (cdr p)) subparts)])
        (if
         (andmap (lambda (ctx) (eq? (car ctx) 'hole)) subctxs)   ; each subrecs has length 1
         (cons (list 'hole level 0)
-              (list (cons 'choice (apply append (reverse subrecs)))))
-        (cons (cons 'choice
+              (list (cons '+ (apply append (reverse subrecs)))))
+        (cons (cons '+
                     (cdr (foldr (lambda (ctx acc)
                                   (cons (+ (car acc) (count-holes ctx level))
                                         (cons (shift-holes (car acc) ctx level) (cdr acc))))
@@ -137,7 +137,7 @@
     [(list 'mu sub)
      (let ([subfbs (map logical-representation-normalized (partition-tail-recursions sub 0))])
        (list* 'mu subfbs))]
-    [(list* 'choice subs) (cons 'choice (map logical-representation-normalized subs))]
+    [(list* '+ subs) (cons '+ (map logical-representation-normalized subs))]
     [(list* 'seq subs) (cons 'seq (map logical-representation-normalized subs))]))
 
 (define logical-representation
@@ -181,12 +181,11 @@
            (list* head new-span rests)]
           [(list 'epsilon _)
            (list 'epsilon (struct-copy span new-span
-                                       [left (span-right new-span)]
-                                       [right (span-left new-span)]))]
+                                       [right (- (span-left new-span) 1)]))]
           [(list* (and head (or 'seq 'mu)) _ subs)
            (list* head new-span (map loop subs))]
-          [(list* 'choice _ type holes nonholes)
-           (list* 'choice new-span type holes (map loop nonholes))])))))
+          [(list* '+ _ type holes nonholes)
+           (list* '+ new-span type holes (map loop nonholes))])))))
 
 (define (annotate-lines-shifts logical left recursions)
   (match logical
@@ -196,7 +195,7 @@
     [(list 'hole level index)   ; bot := -1 means zero height
      (let ([rec (list-ref (list-ref recursions level) index)])
        (list 'hole (span 0 0 -1 #f (linear-right rec)) level index))]
-    [(list* 'choice subs)
+    [(list* '+ subs)
      (let-values ([(holes nonholes) (partition (lambda (s) (eq? (car s) 'hole)) subs)])
        (let* ([annotated-holes (map (lambda (h) (annotate-lines-shifts h #f recursions)) holes)]
               [hole-rights (map (lambda (h) (+ 1 (linear-right h))) annotated-holes)]
@@ -220,7 +219,7 @@
                             (+ 1 (apply max (map linear-right annotated-nonholes)))
                             'explicit-join))])
            (list*
-            'choice
+            '+
             (span (+ 1 (- half-height)) 0 (car stacked-nonholes) my-left my-right)
             ; TODO: document
             type annotated-holes
@@ -269,8 +268,8 @@
     [(list* (and head (or 'seq 'mu)) span subs)
      (list* head (shifted-span span cur-shift)
             (map (lambda (r) (resolve-shifts r cur-shift)) subs))]
-    [(list* 'choice span type holes nonholes)
-     (list* 'choice (shifted-span span cur-shift) type holes
+    [(list* '+ span type holes nonholes)
+     (list* '+ (shifted-span span cur-shift) type holes
             (map (lambda (r) (resolve-shifts r cur-shift)) nonholes))]))
 
 (define (linear-physical-representation logical)
@@ -472,7 +471,7 @@
              (list (second sub-grid) (append (third sub-grid) (second prev-end-all)))))
          (rest first-sub-grid)
          (rest noneps-subs))))]
-    [(list* 'choice (span _ center _ left right) type holes nonholes)
+    [(list* '+ (span _ center _ left right) type holes nonholes)
      (let* ([recs
              (map
               (lambda (h)
