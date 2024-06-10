@@ -510,7 +510,7 @@
                        (send split connect-to! (first (first nonhole-grids-at)))
                        (send (second (first nonhole-grids-at)) connect-to! join))))
                (list split join (cons split (cons join extended-nodes)))))
-           (let ([extended-nodes (split-extend! recs)])
+           (let ([extended-nodes (split-extend! (sort recs < #:key (lambda (g) (get-field row (first g)))))])
              (if (eq? type 'epsilon-join)
                  (list split split (cons split extended-nodes))
                  ; else type = sub-join, i.e. exactly one, centered nonhole sub

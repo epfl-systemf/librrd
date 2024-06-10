@@ -21,6 +21,13 @@
    "json-number"))
 
 (draw-rrd
+ "json-number-alt.svg"
+ '((+ "-" epsilon)
+   (+ "0" ("[nonzero digit]" (mu (+ epsilon ("[digit]" rec)))))
+     (+ epsilon ("." (mu "[digit]" (+ epsilon rec))))
+     (+ epsilon ((+ "e" "E") (+ "-" epsilon "+") (mu "[digit]" (+ epsilon rec))))))
+
+(draw-rrd
  "json-list.svg"
  '("["
    (+ epsilon
@@ -44,6 +51,12 @@
                                       ("rabc" (rec 1))))
                               ("rb" rec)))))
 
+(draw-rrd "crossing-mus-3.svg"
+          '(mu "a" (mu "b" (+ ("c" (+ ("rbc" rec)
+                                      epsilon))
+                              ("rb" rec)))
+               (+ ("d" (+ epsilon ("rabcd" rec)))
+                  ("rabc" rec))))
 
 (draw-rrd
  "crossing-mus-2.svg"
@@ -77,3 +90,29 @@
    (+ epsilon epsilon epsilon)
    (epsilon epsilon "a")))
 
+
+(draw-rrd
+ "regex-style-without-backloop"
+ '((mu (+ epsilon ("[CTE]" "," rec))) "[CTE]"))
+
+(draw-rrd
+ "els-1.svg"
+ '("a" "[b]" "c"))
+
+(draw-rrd
+ "els-2.svg"
+ '("a" "[b]" (+ "c" "d" (+ "e" "f" "g"))))
+
+(draw-rrd
+ "els-3.svg"
+ '(mu "a" "b" (+ epsilon ("," rec))))
+
+(draw-rrd
+ "els-4.svg"
+ '(mu "a" "b" (+ epsilon ("c" rec) ("d" (+ "e" "f") rec))))
+
+(draw-rrd
+ "els-thank-you.svg"
+ '("Thank"
+   (mu "you" (+ epsilon ("and" rec)))
+   "!"))
