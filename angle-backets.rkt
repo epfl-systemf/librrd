@@ -43,6 +43,8 @@
             [diag-bot maybe-rev-diag2]
             [align-items center]))]))
 
+(define MIN-STRUT-WIDTH 6)
+
 (define diagram%
   (class object% (super-new)
     (init-field natural-width
@@ -89,14 +91,12 @@
                 align-items
                 ;; always packed tightly along vertical axis
                 #;justify-content
-                [gap 8]
-                ; depends on which tips are available
-                [TODO-tip-const 6])
+                [gap 8])
     
     (super-new [direction (get-field direction diag-top)]
                [natural-width (+ (max (get-field natural-width diag-top)
                                       (get-field natural-width diag-bot))
-                                 (* 2 TODO-tip-const))]
+                                 (* 2 MIN-STRUT-WIDTH))]
                [natural-height (+ (get-field natural-height diag-top)
                                   (get-field natural-height diag-bot)
                                   gap)]
@@ -136,33 +136,38 @@
       ; draw diag2 at (aligned-x diag2.w), y + diag1.h + gap, chosen tips
       ; draw self sides (+ padding if needed) per specified tips
       (let* ([dc (new record-dc%)]
-             [natural-width-top (get-field natural-width diag-top)]
-             [natural-width-bot (get-field natural-width diag-bot)]
-             [sub-effective-width
-              (max natural-width-top natural-width-bot)]
-             [effective-width (+ sub-effective-width (* 2 TODO-tip-const))]
+             [left-tip-width (if (memq left-tip '(top bot)) 0 MIN-STRUT-WIDTH)]
+             [right-tip-width (if (memq right-tip '(top bot)) 0 MIN-STRUT-WIDTH)]
              ;; TODO: non-default tips per align-items
-             [layout-top (send diag-top lay-out 'default 'default sub-effective-width)]
-             [layout-bot (send diag-bot lay-out 'default 'default sub-effective-width)]
+             [sub-width (- width left-tip-width right-tip-width)]
+             [try-layout-top (send diag-top lay-out 'bot 'bot sub-width)]
+             [try-layout-bot (send diag-bot lay-out 'top 'top sub-width)]
+             [try-effective-width-top (get-field width try-layout-top)]
+             [try-effective-width-bot (get-field width try-layout-bot)]
+             [sub-effective-width (max try-effective-width-top try-effective-width-bot
+                                       (- width left-tip-width right-tip-width))]
+             [layout-top (send diag-top lay-out 'bot 'bot sub-effective-width)]
+             [layout-bot (send diag-bot lay-out 'top 'top sub-effective-width)]
              [effective-width-top (get-field width layout-top)]
              [effective-width-bot (get-field width layout-bot)]
-             [sub-x-left TODO-tip-const]
+             [sub-x-left left-tip-width]
              [sub-x-right (+ sub-x-left sub-effective-width)]
-             [x-top (+ TODO-tip-const (align-items sub-effective-width effective-width-top))]
-             [x-bot (+ TODO-tip-const (align-items sub-effective-width effective-width-bot))]
-             [y-tip-top-left (send diag-top tip? 'left 'default)]
-             [y-tip-top-right (send diag-top tip? 'right 'default)]
+             [x-top (+ sub-x-left (align-items sub-effective-width effective-width-top))]
+             [x-bot (+ sub-x-left (align-items sub-effective-width effective-width-bot))]
+             [y-tip-top-left (send diag-top tip? 'left 'bot)]
+             [y-tip-top-right (send diag-top tip? 'right 'bot)]
              [effective-height-top (get-field height layout-top)]
              [effective-height-bot (get-field height layout-bot)]
              [y-top 0]
              [y-bot (+ y-top effective-height-top gap)]
              #;[effective-height (+ effective-height-top gap effective-height-bot)]
              [effective-height (+ y-bot effective-height-bot (- y-top))]
-             [y-tip-bot-left (+ y-bot
-                                (send diag-bot tip? 'left 'default))]
-             [y-tip-bot-right (+ y-bot
-                                 (send diag-bot tip? 'right 'default))])
+             [y-tip-bot-left (+ y-bot (send diag-bot tip? 'left 'top))]
+             [y-tip-bot-right (+ y-bot (send diag-bot tip? 'right 'top))]
+             [effective-width (+ sub-effective-width left-tip-width right-tip-width)])
+
         (set-random-color! dc)
+
         ; top with horizontals
         (send dc draw-line
               sub-x-left y-tip-top-left
@@ -190,13 +195,15 @@
               sub-x-right y-tip-top-right
               sub-x-right y-tip-bot-right)
         ; left tip
-        (send dc draw-line
-              0 (tip? 'left left-tip)
-              sub-x-left (tip? 'left left-tip))
+        (unless (memq left-tip '(top bot))
+          (send dc draw-line
+                0 (tip? 'left left-tip)
+                sub-x-left (tip? 'left left-tip)))
         ; right tip
-        (send dc draw-line
-              sub-x-right (tip? 'right right-tip)
-              effective-width (tip? 'right right-tip))
+        (unless (memq right-tip '(top bot))
+          (send dc draw-line
+                sub-x-right (tip? 'right right-tip)
+                effective-width (tip? 'right right-tip)))
 
         (new layout% [width effective-width] [height effective-height]
              [draw-proc (send dc get-recorded-procedure)])))))
@@ -218,17 +225,17 @@
 
 (define atomic-block-diagram%
   (class block-diagram%
-    (init-field terminal? label [padding-x 6] [padding-y 4] [min-strut 6])
+    (init-field terminal? label [padding-x 6] [padding-y 4])
     (field [label-width (text-width label)] [label-height (text-height label)])
     (super-new
-     [natural-width (+ label-width (* 2 padding-x) (* 2 min-strut))]
+     [natural-width (+ label-width (* 2 padding-x) (* 2 MIN-STRUT-WIDTH))]
      [natural-height (+ label-height (* 2 padding-y))]
      [num-logical-rows '((left . 1) (right . 1))])
     (inherit-field natural-width natural-height)
 
     (define/override (tip? side spec)
       (case spec
-        [(default 0) (/ natural-height 2)]
+        [(default 0 top bot) (/ natural-height 2)]
         [else #f]))
 
     (define/override (lay-out left-tip right-tip width)
@@ -237,15 +244,15 @@
              ;; these are all relative coördinates!
              [box-width (+ label-width (* 2 padding-x))]
              [box-height natural-height]
-             [box-x min-strut]
+             [box-x MIN-STRUT-WIDTH]
              [box-y 0]
              [text-x (+ box-x padding-x)]
              [text-y (+ box-y padding-y)]
              [struts-y (/ natural-height 2)]
              [lstrut-lx 0]
-             [lstrut-rx (+ lstrut-lx min-strut)]
-             [rstrut-lx (+ min-strut box-width)]
-             [rstrut-rx (+ rstrut-lx min-strut)])
+             [lstrut-rx (+ lstrut-lx MIN-STRUT-WIDTH)]
+             [rstrut-lx (+ MIN-STRUT-WIDTH box-width)]
+             [rstrut-rx (+ rstrut-lx MIN-STRUT-WIDTH)])
         (set-random-color! dc)
         (send dc set-pen "black" 1 'solid)
         (send dc set-brush "white" 'transparent)
@@ -269,7 +276,7 @@
     (inherit-field natural-height)
     (define/override (tip? side spec)
       (case spec
-        [(default 0) 0]
+        [(default 0 top bot) 0]
         [else #f]))
     (define/override (lay-out left-tip right-tip width)
       (let ([dc (new record-dc%)])
@@ -321,7 +328,7 @@
 
     (define/override (tip? side spec)
       (case spec
-        [(default 0) (apply max (map (lambda (d) (send d tip? side 'default)) diags))]
+        [(default 0 top bot) (apply max (map (lambda (d) (send d tip? side 'default)) diags))]
         [else #f]))
 
     (define/override (lay-out left-tip right-tip width)
@@ -363,23 +370,32 @@
              [draw-proc (send dc get-recorded-procedure)])))))
 
 (define (reverse-diagram diag)
-  (if (is-a? diag happend-inline-diagram%)
-      (with-destruct-object-as diag
-        (diags align-items justify-content min-gap extra-width-absorb)
-        (new happend-inline-diagram%
-             [diags (reverse diag-diags)]
-             [align-items diag-align-items]
-             [justify-content diag-justify-content]
-             [min-gap diag-min-gap]
-             [extra-width-absorb diag-extra-width-absorb]))
-      diag))
+  (cond
+    [(is-a? diag happend-inline-diagram%)
+     (with-destruct-object-as diag
+       (diags align-items justify-content min-gap extra-width-absorb)
+       (new happend-inline-diagram%
+            [diags (reverse (map reverse-diagram diag-diags))]
+            [align-items diag-align-items]
+            [justify-content diag-justify-content]
+            [min-gap diag-min-gap]
+            [extra-width-absorb diag-extra-width-absorb]))]
+    [(is-a? diag vappend-block-diagram%)
+     (with-destruct-object-as diag
+       (diag-top diag-bot align-items gap)
+       (new vappend-block-diagram%
+            [diag-top (reverse-diagram diag-diag-top)]
+            [diag-bot (reverse-diagram diag-diag-bot)]
+            [align-items diag-align-items]
+            [gap diag-gap]))]
+    [else diag]))
 
 (define my-svg-dc
   (new svg-dc% [width 500] [height 100] [output "trial.svg"] [exists 'truncate]))
 (send my-svg-dc start-doc "")
 (send my-svg-dc start-page)
 
-(define my-target (make-bitmap 1000 200))
+(define my-target (make-bitmap 1000 500))
 (define my-bitmap-dc
   (new bitmap-dc% [bitmap my-target]))
 (send my-bitmap-dc scale 2 2)
@@ -393,8 +409,8 @@
 (define diag-seqseqseq (diagram expr-seqseqseq))
 (define layout-seqseqseq (send diag-seqseqseq lay-out 'default 'default 400))
 
-(define expr-short `(<> - (term "a") (term "b")))
-(define layout-short (send (diagram expr-short) lay-out 'default 'default 300))
+(define expr-short '(<> - (<> + (term "c1") (term "c2")) (<> - (seq (<> + (term "a") (term "b")) (term "d")) (term "e"))))
+(define layout-short (send (diagram expr-short) lay-out 'default 'default 80))
 
 (define my-layout layout-short)
 (displayln (get-field width my-layout))
