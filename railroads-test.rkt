@@ -92,8 +92,12 @@
 
 
 (draw-rrd
- "regex-style-without-backloop"
+ "regex-style-without-backloop.svg"
  '((mu (+ epsilon ("[CTE]" "," rec))) "[CTE]"))
+
+(draw-rrd
+ "rec-from-choice.svg"
+ '(mu (+ "a" ("b" (+ epsilon rec)) ("c" (+ epsilon ("rb1" "rb2" "rb3" "rb4" rec))) "d")))
 
 (draw-rrd
  "els-1.svg"
