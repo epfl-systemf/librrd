@@ -1,5 +1,5 @@
 #lang racket
-(require racket/draw)
+(require racket/draw racket/help)
 (require (for-syntax racket/syntax))
 
 (define-syntax (with-destruct-object-as stx)
@@ -80,6 +80,11 @@
 (define (set-random-color! dc)
   (send dc set-pen (make-color (random 256) (random 256) (random 256)) 1 'solid))
 
+(define (linear-interpolate xstart ystart xend yend x)
+  (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
+
+(define (in-range? low x high) (and (<= low x) (< x high)))
+
 ;; a type of align-items
 (define (center total-width this-width)
   (/ (- total-width this-width) 2))
@@ -88,6 +93,8 @@
   (class block-diagram%
     (init-field diag-top
                 diag-bot
+                ; TODO: make it a parameter to lay-out instead of a field?
+                ; so that it can be passed along?
                 align-items
                 ;; always packed tightly along vertical axis
                 #;justify-content
@@ -101,29 +108,46 @@
                                   (get-field natural-height diag-bot)
                                   gap)]
                [num-logical-rows
-                (let ([peek (lambda (diag side tip)
-                              (if (send diag tip? side tip)
-                                  (cdr (assoc side (get-field num-logical-rows diag)))
-                                  1))])
-                  (map
-                   (lambda (side)
-                     (cons side (+ (peek diag-top side 'bot) (peek diag-bot side 'top))))
-                   '(left right)))])
-    (inherit-field natural-height)
-
-    #;(define (self-tip-to-child child spec)
-      (case spec
-        [(default 0) spec]
-        [(top bot) 'default]
-        [else 'default]))
+                (let ([rows (lambda (side diag)
+                              (cdr (assoc side (get-field num-logical-rows diag))))])
+                  (list (cons 'left (+ (rows 'left diag-top) (rows 'left diag-bot)))
+                        (cons 'right (+ (rows 'right diag-top) (rows 'right diag-bot)))))])
+    (inherit-field natural-height num-logical-rows)
 
     (define/override (tip? side spec)
-      (case spec
-        [(default 0) (send diag-top tip? side spec)]
-        [(top) (send diag-top tip? side 'default)]
-        [(bot) (+ (get-field natural-height diag-top)
+      (match spec
+        ['top (send diag-top tip? side 'default)]
+        ['bot (+ (get-field natural-height diag-top)
                   gap
                   (send diag-bot tip? side 'default))]
+        [(cons 'logical (? number? height))
+         (let* ([rows (- (cdr (assoc side num-logical-rows)) 1)]
+                [top-rows (- (cdr (assoc side (get-field num-logical-rows diag-top))) 1)]
+                [top-last-row (send diag-top tip? side (cons 'logical top-rows))]
+                [bot-first-row (send diag-bot tip? side (cons 'logical 0))]
+                ;; TODO sus! depends on layout!
+                [top-height (get-field natural-height diag-top)])
+           (cond
+             [(<= 0 height top-rows)
+              (send diag-top tip? side (cons 'logical height))]
+             [(in-range? top-rows height (+ top-rows 0.5))
+              (linear-interpolate top-rows top-last-row
+                                  (+ top-rows 0.5) (+ top-height (/ gap 2))
+                                  height)]
+             [(in-range? (+ top-rows 0.5) height (+ top-rows 1))
+              (linear-interpolate (+ top-rows 0.5) (+ top-height (/ gap 2))
+                                  (+ top-rows 1) (+ top-height gap bot-first-row)
+                                  height)]
+             [(<= (+ top-rows 1) height rows)
+              (+ top-height gap
+                 (send diag-bot tip? side (cons 'logical (- height top-rows 1))))]
+             [else (raise-arguments-error
+                    'vappend-tip?
+                    "requested logical height must be in [0, L-1]"
+                    "height" height "L" (+ rows 1))]))]
+        ['default
+         (tip? side (cons 'logical
+                          (quotient (- (cdr (assoc side num-logical-rows)) 1) 2)))]
         [else #f]))
 
     (define/override (lay-out left-tip right-tip width)
@@ -235,7 +259,7 @@
 
     (define/override (tip? side spec)
       (case spec
-        [(default 0 top bot) (/ natural-height 2)]
+        [(default (logical . 0) top bot) (/ natural-height 2)]
         [else #f]))
 
     (define/override (lay-out left-tip right-tip width)
@@ -276,7 +300,7 @@
     (inherit-field natural-height)
     (define/override (tip? side spec)
       (case spec
-        [(default 0 top bot) 0]
+        [(default (logical . 0) top bot) 0]
         [else #f]))
     (define/override (lay-out left-tip right-tip width)
       (let ([dc (new record-dc%)])
@@ -328,7 +352,8 @@
 
     (define/override (tip? side spec)
       (case spec
-        [(default 0 top bot) (apply max (map (lambda (d) (send d tip? side 'default)) diags))]
+        [(default (logical . 0) top bot)
+         (apply max (map (lambda (d) (send d tip? side 'default)) diags))]
         [else #f]))
 
     (define/override (lay-out left-tip right-tip width)
@@ -351,7 +376,8 @@
              [self-extra-width (- effective-width sub-total-effective-width)]
              [self-extra-width-splits
               (justify-content self-extra-width (length diags) min-gap)]
-             [struts-y (tip? 'dummy 'default)])
+             ; TODO: not always left
+             [struts-y (tip? 'left 'default)])
         (send dc set-pen "black" 1 'solid)
         (set-random-color! dc)
         (foldl
@@ -391,7 +417,7 @@
     [else diag]))
 
 (define my-svg-dc
-  (new svg-dc% [width 500] [height 100] [output "trial.svg"] [exists 'truncate]))
+  (new svg-dc% [width 500] [height 200] [output "trial.svg"] [exists 'truncate]))
 (send my-svg-dc start-doc "")
 (send my-svg-dc start-page)
 
@@ -410,7 +436,8 @@
 (define layout-seqseqseq (send diag-seqseqseq lay-out 'default 'default 400))
 
 (define expr-short '(<> - (<> + (term "c1") (term "c2")) (<> - (seq (<> + (term "a") (term "b")) (term "d")) (term "e"))))
-(define layout-short (send (diagram expr-short) lay-out 'default 'default 80))
+(define layout-short (send (diagram expr-short) lay-out '(logical . 2.25) 'default 80))
+(define layout-short-long (send (diagram expr-short) lay-out '(logical . 2) 'default 200))
 
 (define my-layout layout-short)
 (displayln (get-field width my-layout))
