@@ -32,18 +32,62 @@
      (if (= (length exprs) 0)
          (raise-arguments-error 'diagram "seq must have at least one expression")
          (new happend-inline-diagram%
-              [diags (map diagram exprs)]
-              [align-items 'dum]
-              [justify-content space-evenly]))]
+              [diags (map diagram exprs)]))]
     [(list '<> polarity expr1 expr2)
      (let* ([diag2 (diagram expr2)]
             [maybe-rev-diag2 (if (eq? polarity '-) (reverse-diagram diag2) diag2)])
        (new vappend-block-diagram%
             [diag-top (diagram expr1)]
-            [diag-bot maybe-rev-diag2]
-            [align-items center]))]))
+            [diag-bot maybe-rev-diag2]))]))
 
-(define MIN-STRUT-WIDTH 6)
+
+;; a type of align-items
+(define (center total-width this-width)
+  (/ (- total-width this-width) 2))
+
+;; a type of justify-content
+; contract: must not exceed total-space
+; contract: total-space must be at least (* min-gap num-subs)
+(define (space-evenly total-space num-subs min-gap)
+  (let* ([each-basis (/ total-space (+ num-subs 1))]
+         [each-mid-space (max min-gap each-basis)]
+         [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
+    (append (list each-end-space)
+            (build-list (- num-subs 1) (lambda _ each-mid-space))
+            (list each-end-space))))
+
+;; affect layout
+(define align-items (make-parameter center))
+(define justify-content (make-parameter space-evenly))
+
+(define font
+  (make-parameter (make-font #:font-list the-font-list
+                             #:size 12
+                             #:face "Overpass Mono"
+                             #:family 'modern
+                             #:style 'normal
+                             #:weight 'normal)))
+(define font-size
+  (make-derived-parameter
+   font
+   (lambda (fs) (make-font #:font-list the-font-list
+                           #:size fs
+                           #:face (send (font) get-face)
+                           #:family (send (font) get-family)
+                           #:style (send (font) get-style)
+                           #:weight (send (font) get-weight)))
+   (lambda (f) (send f get-size))))
+(define min-strut-width (make-parameter 6))
+
+;; affect rendering
+(define the-atom-text-pen
+  (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
+(define the-atom-box-pen
+  (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
+(define the-strut-pen
+  (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
+(define the-brush
+  (make-parameter (make-brush #:style 'transparent)))
 
 (define diagram%
   (class object% (super-new)
@@ -85,25 +129,14 @@
 
 (define (in-range? low x high) (and (<= low x) (< x high)))
 
-;; a type of align-items
-(define (center total-width this-width)
-  (/ (- total-width this-width) 2))
-
 (define vappend-block-diagram%
   (class block-diagram%
-    (init-field diag-top
-                diag-bot
-                ; TODO: make it a parameter to lay-out instead of a field?
-                ; so that it can be passed along?
-                align-items
-                ;; always packed tightly along vertical axis
-                #;justify-content
-                [gap 8])
+    (init-field diag-top diag-bot [gap 8])
     
     (super-new [direction (get-field direction diag-top)]
                [natural-width (+ (max (get-field natural-width diag-top)
                                       (get-field natural-width diag-bot))
-                                 (* 2 MIN-STRUT-WIDTH))]
+                                 (* 2 (min-strut-width)))]
                [natural-height (+ (get-field natural-height diag-top)
                                   (get-field natural-height diag-bot)
                                   gap)]
@@ -160,8 +193,8 @@
       ; draw diag2 at (aligned-x diag2.w), y + diag1.h + gap, chosen tips
       ; draw self sides (+ padding if needed) per specified tips
       (let* ([dc (new record-dc%)]
-             [left-tip-width (if (memq left-tip '(top bot)) 0 MIN-STRUT-WIDTH)]
-             [right-tip-width (if (memq right-tip '(top bot)) 0 MIN-STRUT-WIDTH)]
+             [left-tip-width (if (memq left-tip '(top bot)) 0 (min-strut-width))]
+             [right-tip-width (if (memq right-tip '(top bot)) 0 (min-strut-width))]
              ;; TODO: non-default tips per align-items
              [sub-width (- width left-tip-width right-tip-width)]
              [try-layout-top (send diag-top lay-out 'bot 'bot sub-width)]
@@ -176,8 +209,8 @@
              [effective-width-bot (get-field width layout-bot)]
              [sub-x-left left-tip-width]
              [sub-x-right (+ sub-x-left sub-effective-width)]
-             [x-top (+ sub-x-left (align-items sub-effective-width effective-width-top))]
-             [x-bot (+ sub-x-left (align-items sub-effective-width effective-width-bot))]
+             [x-top (+ sub-x-left ((align-items) sub-effective-width effective-width-top))]
+             [x-bot (+ sub-x-left ((align-items) sub-effective-width effective-width-bot))]
              [y-tip-top-left (send diag-top tip? 'left 'bot)]
              [y-tip-top-right (send diag-top tip? 'right 'bot)]
              [effective-height-top (get-field height layout-top)]
@@ -190,6 +223,7 @@
              [y-tip-bot-right (+ y-bot (send diag-bot tip? 'right 'top))]
              [effective-width (+ sub-effective-width left-tip-width right-tip-width)])
 
+        (send dc set-pen (the-strut-pen))
         (set-random-color! dc)
 
         ; top with horizontals
@@ -233,26 +267,26 @@
              [draw-proc (send dc get-recorded-procedure)])))))
 
 (define text-measurement-dc (new bitmap-dc% [bitmap #f]))
-(send text-measurement-dc set-font
-      (send the-font-list find-or-create-font
-            12 "Overpass Mono" 'modern 'normal 'normal))
 
 (define (text-width text)
+  (send text-measurement-dc set-font (font))
   (let-values ([(width height descend extra)
                 (send text-measurement-dc get-text-extent text #f #t)])
     width))
 
 (define (text-height text)
+  (send text-measurement-dc set-font (font))
   (let-values ([(width height descend extra)
                 (send text-measurement-dc get-text-extent text #f #t)])
     height))
 
 (define atomic-block-diagram%
   (class block-diagram%
-    (init-field terminal? label [padding-x 6] [padding-y 4])
-    (field [label-width (text-width label)] [label-height (text-height label)])
+    (init-field terminal? label)
+    (field [label-width (text-width label)] [label-height (text-height label)]
+           [padding-x (/ (font-size) 2)] [padding-y (/ (font-size) 3)])
     (super-new
-     [natural-width (+ label-width (* 2 padding-x) (* 2 MIN-STRUT-WIDTH))]
+     [natural-width (+ label-width (* 2 padding-x) (* 2 (min-strut-width)))]
      [natural-height (+ label-height (* 2 padding-y))]
      [num-logical-rows '((left . 1) (right . 1))])
     (inherit-field natural-width natural-height)
@@ -268,26 +302,25 @@
              ;; these are all relative coördinates!
              [box-width (+ label-width (* 2 padding-x))]
              [box-height natural-height]
-             [box-x MIN-STRUT-WIDTH]
+             [box-x (min-strut-width)]
              [box-y 0]
              [text-x (+ box-x padding-x)]
              [text-y (+ box-y padding-y)]
              [struts-y (/ natural-height 2)]
              [lstrut-lx 0]
-             [lstrut-rx (+ lstrut-lx MIN-STRUT-WIDTH)]
-             [rstrut-lx (+ MIN-STRUT-WIDTH box-width)]
-             [rstrut-rx (+ rstrut-lx MIN-STRUT-WIDTH)])
-        (set-random-color! dc)
-        (send dc set-pen "black" 1 'solid)
-        (send dc set-brush "white" 'transparent)
-        (send dc set-font
-              (send text-measurement-dc get-font))
+             [lstrut-rx (+ lstrut-lx (min-strut-width))]
+             [rstrut-lx (+ (min-strut-width) box-width)]
+             [rstrut-rx (+ rstrut-lx (min-strut-width))])
+        (send dc set-pen (the-atom-text-pen))
+        (send dc set-font (font))
+        (send dc draw-text label text-x text-y #t)
+        (send dc set-pen (the-atom-box-pen))
+        (send dc set-brush (the-brush))
         (if terminal?
             (send dc draw-rounded-rectangle
                   box-x box-y box-width box-height)
             (send dc draw-rectangle
                   box-x box-y box-width box-height))
-        (send dc draw-text label text-x text-y #t)
         (send dc draw-line lstrut-lx struts-y lstrut-rx struts-y)
         (send dc draw-line rstrut-lx struts-y rstrut-rx struts-y)
         ;; does not close over any fields except natural dims
@@ -304,8 +337,7 @@
         [else #f]))
     (define/override (lay-out left-tip right-tip width)
       (let ([dc (new record-dc%)])
-        (send dc set-pen "black" 1 'solid)
-        (set-random-color! dc)
+        (send dc set-pen (the-strut-pen))
         (send dc draw-line 0 0 width 0)
         (new layout% [width width] [height natural-height]
              [draw-proc (send dc get-recorded-procedure)])))))
@@ -315,20 +347,9 @@
 (define inline-diagram%
   (class diagram% (super-new)))
 
-;; a type of justify-content
-; contract: must not exceed total-space
-; contract: total-space must be at least (* min-gap num-subs)
-(define (space-evenly total-space num-subs min-gap)
-  (let* ([each-basis (/ total-space (+ num-subs 1))]
-         [each-mid-space (max min-gap each-basis)]
-         [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
-    (append (list each-end-space)
-            (build-list (- num-subs 1) (lambda _ each-mid-space))
-            (list each-end-space))))
-
 (define happend-inline-diagram%
   (class inline-diagram%
-    (init-field diags align-items justify-content [min-gap 0] [extra-width-absorb 0.2])
+    (init-field diags [min-gap 0] [extra-width-absorb 0.2])
     (unless (> (length diags) 0)
       (raise-arguments-error
        'make-happend-inline-diagram
@@ -375,10 +396,10 @@
              [sub-total-effective-width (apply + sub-effective-widths)]
              [self-extra-width (- effective-width sub-total-effective-width)]
              [self-extra-width-splits
-              (justify-content self-extra-width (length diags) min-gap)]
+              ((justify-content) self-extra-width (length diags) min-gap)]
              ; TODO: not always left
              [struts-y (tip? 'left 'default)])
-        (send dc set-pen "black" 1 'solid)
+        (send dc set-pen (the-strut-pen))
         (set-random-color! dc)
         (foldl
          (lambda (sl extra cum-x)
@@ -399,20 +420,17 @@
   (cond
     [(is-a? diag happend-inline-diagram%)
      (with-destruct-object-as diag
-       (diags align-items justify-content min-gap extra-width-absorb)
+       (diags min-gap extra-width-absorb)
        (new happend-inline-diagram%
             [diags (reverse (map reverse-diagram diag-diags))]
-            [align-items diag-align-items]
-            [justify-content diag-justify-content]
             [min-gap diag-min-gap]
             [extra-width-absorb diag-extra-width-absorb]))]
     [(is-a? diag vappend-block-diagram%)
      (with-destruct-object-as diag
-       (diag-top diag-bot align-items gap)
+       (diag-top diag-bot gap)
        (new vappend-block-diagram%
             [diag-top (reverse-diagram diag-diag-top)]
             [diag-bot (reverse-diagram diag-diag-bot)]
-            [align-items diag-align-items]
             [gap diag-gap]))]
     [else diag]))
 
