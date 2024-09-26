@@ -1,0 +1,84 @@
+diagram
+* can call lay-out on its children possibly multiple times
+* tries to satisfy a requested width and tips
+* lay-out method depends on layout parameters: min-strut-width, align-items, justify-content
+
+layout
+* in terms of physical rows, connections, materialized tips
+* can report physical height and width
+* "trivial" translation into rendering depending on rendering parameters: font, pens
+   + (new rendering% [pen (cur-pen)] ...) etc. and then the rendering will set that pen for itself and every rendering will initialize its pens
+   +
+* hierarchy:
+   + atom
+   + happend
+      - with horizontal strut info
+   + vappend
+      - with brackets, eventually curved joints
+      - sometimes the brackets are only on one side for wrapping
+
+rendering
+* basically a sequence of instructions
+* paths, not segments that happen to join! hence: one rendering for the box of an atom (and maybe its text), and one for the happend layout that contains all the ones in a row
+* (to be sent to a canvas with a given offset, or HTML, or serialized, etc.)
+
+
+OLD
+===
+
+* seqs are turned into inline diagrams, choices and loops into block
+  diagrams, stations into atomic block diagrams, holes into atomics
+  with width as needed to match corresponding recursive component
+  + what if we had left and right coördinates instead of width?
+  + actually, start and end. and width = sgn(direction)*(end - start)
+
+* diagram can be inline or block
+  + both types
+    - have children of any type
+    - expose method (min-width) = (max (map min-width children)) + C
+    - expose method (lay-out max-width) that produces the corresponding
+      layout type or fails
+  + inline
+    - optionally: recursively splices inline children, i.e. treats
+      inline children as own children
+    - lay-out first does lay-out of all children at either:
+      i. (outer squeeze) (- max-width C)
+      ii. (inner squeeze) their own min-widths
+      and then follows a line-breaking strategy (e.g. greedy) to assign
+      them to rows, either boustrophedon or CRLF, with per-row space
+      distribution strategy, connecting sequentially, to build an
+      **inline layout**
+  + block
+    - atomic block diagram (for stations) has pre-specified layout
+    - otherwise, lay-out does lay-out of all children at (- max-width
+      C) and then assigns each to a row to build a **block layout**
+
+* layout can be inline or block
+  + both types
+      - have height (lines), width (pixels), entry & exit line & direction
+      - have children of any type
+      - have rows, each with a height
+      - each child has a row
+      - height of a row = max(height of children on that row)
+      - height = sum(heights of rows)
+      - width of a row = sum(width of children on that row)
+      - width = max(widths of rows)
+      - expose methods (connect-to other), (draw! x y)
+  + inline layout
+      - always enters on (relative) first line and exits on last
+      - entry & exit direction independent
+      - connect-to is a larger inline layout as described on whiteboard
+      - can be converted to block by flushing first and last rows
+  + block layout
+      - entry & exit line independent, but must be respectively the
+        entry/exit line of a child
+        = of a row
+      - entry & exit direction always the same
+      - each row has exactly one child
+      - connect-to block is a larger block layout (intuitive),
+        connect-to inline is inline
+
+* drawing
+  + somehow has to preserve information from way before about nodes so
+    they can be drawn to the dc and connected with lines with curves
+  + set and reset origin
