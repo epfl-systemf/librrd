@@ -20,6 +20,9 @@
       (send dc set-origin orig-x orig-y)
       last-body-val)))
 
+(define (with-translate dx dy instructions)
+  `((translate ,dx ,dy) ,@instructions (translate ,(- dx) ,(- dy))))
+
 ;; TODO: should be reversed in the expr before (diagram), right?
 (define (diagram expr)
   (match expr
@@ -60,24 +63,41 @@
 (define align-items (make-parameter center))
 (define justify-content (make-parameter space-evenly))
 
-(define font
+(define the-font
   (make-parameter (make-font #:font-list the-font-list
                              #:size 12
                              #:face "Overpass Mono"
                              #:family 'modern
                              #:style 'normal
                              #:weight 'normal)))
-(define font-size
+(define the-font-size
   (make-derived-parameter
-   font
+   the-font
    (lambda (fs) (make-font #:font-list the-font-list
                            #:size fs
-                           #:face (send (font) get-face)
-                           #:family (send (font) get-family)
-                           #:style (send (font) get-style)
-                           #:weight (send (font) get-weight)))
+                           #:face (send (the-font) get-face)
+                           #:family (send (the-font) get-family)
+                           #:style (send (the-font) get-style)
+                           #:weight (send (the-font) get-weight)))
    (lambda (f) (send f get-size))))
-(define min-strut-width (make-parameter 6))
+
+(define text-measurement-dc (new bitmap-dc% [bitmap #f]))
+
+(define (text-width text)
+  (send text-measurement-dc set-font (the-font))
+  (let-values ([(width height descend extra)
+                (send text-measurement-dc get-text-extent text #f #t)])
+    width))
+
+(define (text-height text)
+  (send text-measurement-dc set-font (the-font))
+  (let-values ([(width height descend extra)
+                (send text-measurement-dc get-text-extent text #f #t)])
+    height))
+
+; not parameters; global constants
+(define min-strut-width 6)
+(define row-gap 8)
 
 ;; affect rendering
 (define the-atom-text-pen
@@ -86,7 +106,7 @@
   (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
 (define the-strut-pen
   (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
-(define the-brush
+(define the-atom-box-brush
   (make-parameter (make-brush #:style 'transparent)))
 
 (define diagram%
@@ -97,7 +117,7 @@
                 direction)
     ; to SVG? HTML? TiKZ? how to have different backends?
     #;(define/public (lay-out left-tip right-tip width))
-    (abstract lay-out)
+    (abstract render)
     ;; A diagram can provide a tip at height:
     ;;   * 'top             an upwards tip
     ;;   * ([0, lh] 'L)     integers are exactly at logical rows, and
@@ -112,6 +132,129 @@
     (abstract tip? #;(tip? side spec))))
 
 (define layout%
+  (class object% (super-new)
+    (init-field physical-width physical-height
+                ; ((left (spec . y)) (right (spec . y)))
+                tips)
+    (define/public-final (tip-y side) (cddr (assoc side tips)))
+    (abstract render)))
+
+(define vappend-layout%
+  (class layout%
+    (init-field subs connects)
+    (super-new
+     [physical-width
+      (apply max (map (lambda (s) (get-field physical-width s)) subs))]
+     [physical-height
+      (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
+         (* (- (length subs) 1) row-gap))]
+     #;[tips pass-through])))
+
+(define hstrut%
+  (class layout%
+    (super-new [physical-height 0]
+               [tips '((left default . 0) (right default . 0))]
+               #;[physical-width pass-through])
+    (inherit-field physical-width)
+    (define/override (render x y)
+      `((set-pen ,(the-strut-pen))
+        (draw-line ,x ,y ,(+ x physical-width) ,y)))))
+
+(define text-box%
+  (class layout%
+    (init-field terminal? label)
+    (define label-width (text-width label))
+    (define label-height (text-height label))
+    (define padding-x (/ (the-font-size) 2))
+    (define padding-y (/ (the-font-size) 3))
+    (let ([physical-height (+ label-height (* 2 padding-y))])
+      (super-new
+       [physical-width (+ label-width (* 2 padding-x) (* 2 min-strut-width))]
+       [physical-height physical-height]
+       [tips `((left default . ,(/ physical-height 2))
+               (right default . ,(/ physical-height 2)))]))
+    (inherit-field physical-height)
+    (define/override (render x y)
+      (let* ([box-width (+ label-width (* 2 padding-x))]
+             [box-height physical-height]
+             [box-x (+ x min-strut-width)]
+             [box-y y]
+             [text-x (+ box-x padding-x)]
+             [text-y (+ box-y padding-y)]
+             [struts-y (+ y (/ physical-height 2))]
+             [lstrut-lx x]
+             [lstrut-rx (+ lstrut-lx min-strut-width)]
+             [rstrut-lx (+ x min-strut-width box-width)]
+             [rstrut-rx (+ rstrut-lx min-strut-width)])
+        (append
+         `((set-pen ,(the-atom-text-pen))
+           (set-font ,(the-font))
+           (draw-text ,label ,text-x ,text-y #t)
+           (set-pen ,(the-atom-box-pen))
+           (set-brush ,(the-atom-box-brush)))
+         (list (list (if terminal? 'draw-rounded-rectangle 'draw-rectangle)
+                     box-x box-y box-width box-height))
+         `((draw-line ,lstrut-lx ,struts-y ,lstrut-rx ,struts-y)
+           (draw-line ,rstrut-lx ,struts-y ,rstrut-rx ,struts-y)))))))
+
+(define happend-layout%
+  (class layout%
+    (init-field subs)
+    (unless (>= (length subs) 1)
+      (raise-arguments-error
+       'make-happend-layout
+       "happend-layout must have at least one sub layout"))
+    (define-values (right-tip height sub-xs width)
+      (for/fold ([prev-right-tip-y 0]
+                 [prev-height 0]
+                 [prev-widths '(0)]
+                 #:result (values prev-right-tip-y prev-height
+                                  (reverse (cdr prev-widths))
+                                  (car prev-widths)))
+                ([sub subs])
+        (let ([sub-height (get-field physical-height sub)]
+              [sub-width (get-field physical-width sub)]
+              [left-tip-y (send sub tip-y 'left)]
+              [right-tip-y (send sub tip-y 'right)])
+          ;
+          ;                        given           wanted
+          ;                     measurements    measurements
+          ;
+          ; o------o                =  =           =  =
+          ; |      |    o----o      |  |           |  |
+          ; |      r-  -l    |      |  =           |  |
+          ; |      |    |    r-     |              |  =
+          ; o------o    |    |      =              |
+          ;             o----o                     =
+          ;
+          (values (+ right-tip-y
+                     (max 0 (- prev-right-tip-y left-tip-y)))
+                  (+ prev-height
+                     (max 0 (- left-tip-y prev-right-tip-y))
+                     (max 0 (- (- sub-height left-tip-y)
+                               (- prev-height prev-right-tip-y))))
+                  (cons (+ sub-width (car prev-widths)) prev-widths)))))
+    (define-values (left-tip sub-ys)
+      (for/foldr ([prev-left-tip-y right-tip]
+                  [prev-ys '()])
+                 ([sub subs])
+        (let ([left-tip-y (send sub tip-y 'left)]
+              [right-tip-y (send sub tip-y 'right)])
+          (let ([sub-y (- prev-left-tip-y right-tip-y)])
+            (values (+ sub-y left-tip-y) (cons sub-y prev-ys))))))
+    (super-new
+     [physical-width width]
+     [physical-height height]
+     [tips `((left default . ,left-tip) (right default . ,right-tip))])
+    (define/override (render x y)
+      (append-map (lambda (sub sx sy) (send sub render (+ x sx) (+ y sy)))
+                  subs sub-xs sub-ys))))
+
+
+(define mylo1 (new text-box% [terminal? #t] [label "hello"]))
+(define mylo2 (new happend-layout% [subs (list mylo1 mylo1 (new hstrut% [physical-width 20]) mylo1)]))
+
+(define rendering%
   (class object% (super-new)
     (init-field width height draw-proc)
     (define/public-final (draw! dc x y)
@@ -136,7 +279,7 @@
     (super-new [direction (get-field direction diag-top)]
                [natural-width (+ (max (get-field natural-width diag-top)
                                       (get-field natural-width diag-bot))
-                                 (* 2 (min-strut-width)))]
+                                 (* 2 min-strut-width))]
                [natural-height (+ (get-field natural-height diag-top)
                                   (get-field natural-height diag-bot)
                                   gap)]
@@ -158,7 +301,7 @@
                 [top-rows (- (cdr (assoc side (get-field num-logical-rows diag-top))) 1)]
                 [top-last-row (send diag-top tip? side (cons 'logical top-rows))]
                 [bot-first-row (send diag-bot tip? side (cons 'logical 0))]
-                ;; TODO sus! depends on layout!
+                ;; TODO sus! depends on rendering!
                 [top-height (get-field natural-height diag-top)])
            (cond
              [(<= 0 height top-rows)
@@ -183,7 +326,7 @@
                           (quotient (- (cdr (assoc side num-logical-rows)) 1) 2)))]
         [else #f]))
 
-    (define/override (lay-out left-tip right-tip width)
+    (define/override (render left-tip right-tip width)
       ; let W := max(diag1.w, diag2.w)
       ; let aligned-x := w => x + (W - w)/2
       ;   (or other strategy per align-items)
@@ -193,28 +336,28 @@
       ; draw diag2 at (aligned-x diag2.w), y + diag1.h + gap, chosen tips
       ; draw self sides (+ padding if needed) per specified tips
       (let* ([dc (new record-dc%)]
-             [left-tip-width (if (memq left-tip '(top bot)) 0 (min-strut-width))]
-             [right-tip-width (if (memq right-tip '(top bot)) 0 (min-strut-width))]
+             [left-tip-width (if (memq left-tip '(top bot)) 0 min-strut-width)]
+             [right-tip-width (if (memq right-tip '(top bot)) 0 min-strut-width)]
              ;; TODO: non-default tips per align-items
              [sub-width (- width left-tip-width right-tip-width)]
-             [try-layout-top (send diag-top lay-out 'bot 'bot sub-width)]
-             [try-layout-bot (send diag-bot lay-out 'top 'top sub-width)]
-             [try-effective-width-top (get-field width try-layout-top)]
-             [try-effective-width-bot (get-field width try-layout-bot)]
+             [try-rendering-top (send diag-top render 'bot 'bot sub-width)]
+             [try-rendering-bot (send diag-bot render 'top 'top sub-width)]
+             [try-effective-width-top (get-field width try-rendering-top)]
+             [try-effective-width-bot (get-field width try-rendering-bot)]
              [sub-effective-width (max try-effective-width-top try-effective-width-bot
                                        (- width left-tip-width right-tip-width))]
-             [layout-top (send diag-top lay-out 'bot 'bot sub-effective-width)]
-             [layout-bot (send diag-bot lay-out 'top 'top sub-effective-width)]
-             [effective-width-top (get-field width layout-top)]
-             [effective-width-bot (get-field width layout-bot)]
+             [rendering-top (send diag-top render 'bot 'bot sub-effective-width)]
+             [rendering-bot (send diag-bot render 'top 'top sub-effective-width)]
+             [effective-width-top (get-field width rendering-top)]
+             [effective-width-bot (get-field width rendering-bot)]
              [sub-x-left left-tip-width]
              [sub-x-right (+ sub-x-left sub-effective-width)]
              [x-top (+ sub-x-left ((align-items) sub-effective-width effective-width-top))]
              [x-bot (+ sub-x-left ((align-items) sub-effective-width effective-width-bot))]
              [y-tip-top-left (send diag-top tip? 'left 'bot)]
              [y-tip-top-right (send diag-top tip? 'right 'bot)]
-             [effective-height-top (get-field height layout-top)]
-             [effective-height-bot (get-field height layout-bot)]
+             [effective-height-top (get-field height rendering-top)]
+             [effective-height-bot (get-field height rendering-bot)]
              [y-top 0]
              [y-bot (+ y-top effective-height-top gap)]
              #;[effective-height (+ effective-height-top gap effective-height-bot)]
@@ -230,7 +373,7 @@
         (send dc draw-line
               sub-x-left y-tip-top-left
               x-top y-tip-top-left)
-        (send layout-top draw! dc x-top y-top)
+        (send rendering-top draw! dc x-top y-top)
         (send dc draw-line
               (+ x-top effective-width-top) y-tip-top-right
               sub-x-right y-tip-top-right)
@@ -239,7 +382,7 @@
         (send dc draw-line
               sub-x-left y-tip-bot-left
               x-bot y-tip-bot-left)
-        (send layout-bot draw! dc x-bot y-bot)
+        (send rendering-bot draw! dc x-bot y-bot)
         (send dc draw-line
               (+ x-bot effective-width-bot) y-tip-bot-right
               sub-x-right y-tip-bot-right)
@@ -263,30 +406,16 @@
                 sub-x-right (tip? 'right right-tip)
                 effective-width (tip? 'right right-tip)))
 
-        (new layout% [width effective-width] [height effective-height]
+        (new rendering% [width effective-width] [height effective-height]
              [draw-proc (send dc get-recorded-procedure)])))))
-
-(define text-measurement-dc (new bitmap-dc% [bitmap #f]))
-
-(define (text-width text)
-  (send text-measurement-dc set-font (font))
-  (let-values ([(width height descend extra)
-                (send text-measurement-dc get-text-extent text #f #t)])
-    width))
-
-(define (text-height text)
-  (send text-measurement-dc set-font (font))
-  (let-values ([(width height descend extra)
-                (send text-measurement-dc get-text-extent text #f #t)])
-    height))
 
 (define atomic-block-diagram%
   (class block-diagram%
     (init-field terminal? label)
     (field [label-width (text-width label)] [label-height (text-height label)]
-           [padding-x (/ (font-size) 2)] [padding-y (/ (font-size) 3)])
+           [padding-x (/ (the-font-size) 2)] [padding-y (/ (the-font-size) 3)])
     (super-new
-     [natural-width (+ label-width (* 2 padding-x) (* 2 (min-strut-width)))]
+     [natural-width (+ label-width (* 2 padding-x) (* 2 min-strut-width))]
      [natural-height (+ label-height (* 2 padding-y))]
      [num-logical-rows '((left . 1) (right . 1))])
     (inherit-field natural-width natural-height)
@@ -296,26 +425,26 @@
         [(default (logical . 0) top bot) (/ natural-height 2)]
         [else #f]))
 
-    (define/override (lay-out left-tip right-tip width)
+    (define/override (render left-tip right-tip width)
       ;; requested tips and width don't matter
       (let* ([dc (new record-dc%)]
              ;; these are all relative coördinates!
              [box-width (+ label-width (* 2 padding-x))]
              [box-height natural-height]
-             [box-x (min-strut-width)]
+             [box-x min-strut-width]
              [box-y 0]
              [text-x (+ box-x padding-x)]
              [text-y (+ box-y padding-y)]
              [struts-y (/ natural-height 2)]
              [lstrut-lx 0]
-             [lstrut-rx (+ lstrut-lx (min-strut-width))]
-             [rstrut-lx (+ (min-strut-width) box-width)]
-             [rstrut-rx (+ rstrut-lx (min-strut-width))])
+             [lstrut-rx (+ lstrut-lx min-strut-width)]
+             [rstrut-lx (+ min-strut-width box-width)]
+             [rstrut-rx (+ rstrut-lx min-strut-width)])
         (send dc set-pen (the-atom-text-pen))
-        (send dc set-font (font))
+        (send dc set-font (the-font))
         (send dc draw-text label text-x text-y #t)
         (send dc set-pen (the-atom-box-pen))
-        (send dc set-brush (the-brush))
+        (send dc set-brush (the-atom-box-brush))
         (if terminal?
             (send dc draw-rounded-rectangle
                   box-x box-y box-width box-height)
@@ -324,7 +453,7 @@
         (send dc draw-line lstrut-lx struts-y lstrut-rx struts-y)
         (send dc draw-line rstrut-lx struts-y rstrut-rx struts-y)
         ;; does not close over any fields except natural dims
-        (new layout% [width natural-width] [height natural-height]
+        (new rendering% [width natural-width] [height natural-height]
              [draw-proc (send dc get-recorded-procedure)])))))
 
 (define empty-block-diagram%
@@ -335,11 +464,11 @@
       (case spec
         [(default (logical . 0) top bot) 0]
         [else #f]))
-    (define/override (lay-out left-tip right-tip width)
+    (define/override (render left-tip right-tip width)
       (let ([dc (new record-dc%)])
         (send dc set-pen (the-strut-pen))
         (send dc draw-line 0 0 width 0)
-        (new layout% [width width] [height natural-height]
+        (new rendering% [width width] [height natural-height]
              [draw-proc (send dc get-recorded-procedure)])))))
 
 ;; An inline diagram can only provide one horizontal tip at each end
@@ -377,22 +506,22 @@
          (apply max (map (lambda (d) (send d tip? side 'default)) diags))]
         [else #f]))
 
-    (define/override (lay-out left-tip right-tip width)
+    (define/override (render left-tip right-tip width)
       (let* ([dc (new record-dc%)]
              [effective-width (max natural-width width)]
              [extra-width (- effective-width natural-width)]
              [sub-extra-width (* extra-width (- 1 extra-width-absorb))]
              [sub-total-natural-width
               (apply + (map (lambda (d) (get-field natural-width d)) diags))]
-             [sub-layouts (map (lambda (d)
-                                 (send d lay-out
+             [sub-renderings (map (lambda (d)
+                                 (send d render
                                        ;; TODO: get different tips per align-items
                                        'default
                                        'default
                                        (* sub-extra-width (/ (get-field natural-width d)
                                                              sub-total-natural-width))))
                                diags)]
-             [sub-effective-widths (map (lambda (l) (get-field width l)) sub-layouts)]
+             [sub-effective-widths (map (lambda (l) (get-field width l)) sub-renderings)]
              [sub-total-effective-width (apply + sub-effective-widths)]
              [self-extra-width (- effective-width sub-total-effective-width)]
              [self-extra-width-splits
@@ -411,9 +540,9 @@
          (let ([first-extra (car self-extra-width-splits)])
            (send dc draw-line 0 struts-y first-extra struts-y)
            first-extra)
-         sub-layouts
+         sub-renderings
          (cdr self-extra-width-splits))
-        (new layout% [width effective-width] [height natural-height]
+        (new rendering% [width effective-width] [height natural-height]
              [draw-proc (send dc get-recorded-procedure)])))))
 
 (define (reverse-diagram diag)
@@ -447,19 +576,20 @@
 (define expr `(<> - (seq (term "e") (term "a"))
                   (seq (term "ffffffffff") (nonterm "BCD") (term "g"))))
 (define diag (diagram expr))
-(define layout (send diag lay-out 'default 'default 300))
+(define rendering (send diag render 'default 'default 300))
 
 (define expr-seqseqseq '(seq (seq (seq (term "a")))))
 (define diag-seqseqseq (diagram expr-seqseqseq))
-(define layout-seqseqseq (send diag-seqseqseq lay-out 'default 'default 400))
+(define rendering-seqseqseq (send diag-seqseqseq render 'default 'default 400))
 
 (define expr-short '(<> - (<> + (term "c1") (term "c2")) (<> - (seq (<> + (term "a") (term "b")) (term "d")) (term "e"))))
-(define layout-short (send (diagram expr-short) lay-out '(logical . 2.25) 'default 80))
-(define layout-short-long (send (diagram expr-short) lay-out '(logical . 2) 'default 200))
+(define rendering-short (send (diagram expr-short) render '(logical . 2.25) 'default 80))
+(define rendering-short-long (send (diagram expr-short) render '(logical . 2) 'default 200))
 
-(define my-layout layout-short)
-(displayln (get-field width my-layout))
-(send my-layout draw! my-bitmap-dc 10 10)
+(define my-rendering rendering-short)
+;; (displayln (get-field width my-rendering))
+;; (send my-rendering draw! my-bitmap-dc 10 10)
+(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send mylo2 render 20 20))
 my-target
 
 (send my-svg-dc end-page)
