@@ -59,6 +59,13 @@
             (build-list (- num-subs 1) (lambda _ each-mid-space))
             (list each-end-space))))
 
+
+(define (linear-interpolate xstart ystart xend yend x)
+  (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
+
+(define (in-range? low x high) (and (<= low x) (< x high)))
+
+
 ;; affect layout
 (define align-items (make-parameter center))
 (define justify-content (make-parameter space-evenly))
@@ -134,21 +141,61 @@
 (define layout%
   (class object% (super-new)
     (init-field physical-width physical-height
-                ; ((left (spec . y)) (right (spec . y)))
+                ; ((left spec . y) (right spec . y))
                 tips)
     (define/public-final (tip-y side) (cddr (assoc side tips)))
     (abstract render)))
 
-(define vappend-layout%
+(define vappend-block-layout%
   (class layout%
-    (init-field subs connects)
-    (super-new
-     [physical-width
-      (apply max (map (lambda (s) (get-field physical-width s)) subs))]
-     [physical-height
-      (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
-         (* (- (length subs) 1) row-gap))]
-     #;[tips pass-through])))
+    (init-field subs)
+    (init tips)
+    (define side-struts?
+      (for/list ([side '(left right)])
+        (cons side (not (memq (cadr (assoc side tips)) '(top bot))))))
+
+    (let* ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)]
+           [sub-heights (map (lambda (s) (get-field physical-height s)) subs)])
+      (unless (apply = sub-widths)
+        (raise-arguments-error 'vappend-block-layout "subs must be equal widths"
+                               "sub-widths" sub-widths))
+      (super-new
+       [physical-width (+ (first sub-widths)
+                          (for/sum ([side '(left right)]
+                                    #:when (cdr (assoc side side-struts?)))
+                            min-strut-width))]
+       [physical-height
+        (+ (apply + sub-heights) (* (- (length subs) 1) row-gap))]
+       [tips tips]))
+
+    (inherit-field physical-width)
+    (inherit tip-y)
+
+    (define/override (render x y)
+      (let ([cumul-ys
+             (foldl (lambda (sub-height acc) (+ acc sub-height row-gap))
+                    y (map (lambda (s) (get-field physical-height s)) subs))]
+            [sub-x (+ x (if (cdr (assoc 'left side-struts?)) min-strut-width 0))])
+        (let-values
+            ([(last-sub-y sub-renders)
+              (for/fold ([sub-y y]
+                         [sub-renders '()]
+                         #:result (values (- sub-y (get-field physical-height (last subs)) row-gap)
+                                          (apply append sub-renders)))
+                        ([sub subs])
+                (values (+ sub-y (get-field physical-height sub) row-gap)
+                        (cons (send sub render sub-x sub-y) sub-renders)))])
+          (append
+           sub-renders
+           (for/list ([side '(left right)]
+                      [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
+             `(draw-line ,bracket-x ,(+ y (send (first subs) tip-y side))
+                         ,bracket-x ,(+ last-sub-y (send (last subs) tip-y side))))
+           (for/list ([side '(left right)]
+                      [tip-x (list x (+ x physical-width (- min-strut-width)))]
+                      #:when (cdr (assoc side side-struts?)))
+             `(draw-line ,tip-x ,(+ y (tip-y side))
+                         ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))))))))
 
 (define hstrut%
   (class layout%
@@ -251,8 +298,11 @@
                   subs sub-xs sub-ys))))
 
 
-(define mylo1 (new text-box% [terminal? #t] [label "hello"]))
-(define mylo2 (new happend-layout% [subs (list mylo1 mylo1 (new hstrut% [physical-width 20]) mylo1)]))
+(define mylo1 (new text-box% [terminal? #t] [label "hh"]))
+(define mylo2 (new happend-layout% [subs (list mylo1 mylo1 (new hstrut% [physical-width 10]) mylo1)]))
+(define mylo3 (new vappend-block-layout%
+                   [subs (list mylo2 mylo2 mylo2 mylo2)]
+                   [tips '((left default . 12) (right default . 15))]))
 
 (define rendering%
   (class object% (super-new)
@@ -266,11 +316,6 @@
 
 (define (set-random-color! dc)
   (send dc set-pen (make-color (random 256) (random 256) (random 256)) 1 'solid))
-
-(define (linear-interpolate xstart ystart xend yend x)
-  (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
-
-(define (in-range? low x high) (and (<= low x) (< x high)))
 
 (define vappend-block-diagram%
   (class block-diagram%
@@ -589,7 +634,7 @@
 (define my-rendering rendering-short)
 ;; (displayln (get-field width my-rendering))
 ;; (send my-rendering draw! my-bitmap-dc 10 10)
-(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send mylo2 render 20 20))
+(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send mylo3 render 20 20))
 my-target
 
 (send my-svg-dc end-page)
