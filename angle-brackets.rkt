@@ -151,14 +151,45 @@
         [(side spec) (inner #f tip-y side spec)]))
     (abstract render #;(render x y))))
 
-(define vappend-block-layout%
-  (class layout%
-    (init-field subs)
+(define (vappend-common %)
+  (class %
     (init tip-specs)
-    (define side-struts?
-      (for/list ([side '(left right)])
-        (cons side (not (memq (cdr (assoc side tip-specs)) '(top bot))))))
-    (define sub-heights (map (lambda (s) (get-field physical-height s)) subs))
+    (init-field [(subs common-subs)])
+    (field [side-struts?
+            (for/list ([side '(left right)])
+              (cons side (not (memq (cdr (assoc side tip-specs)) '(top bot)))))])
+
+    (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
+      (unless (apply = sub-widths)
+        (raise-arguments-error 'vappend-layout "subs must be equal widths"
+                               "sub-widths" sub-widths))
+      (super-new
+       [physical-width (+ (first sub-widths)
+                          (if (cdr (assoc 'left side-struts?)) min-strut-width 0)
+                          (if (cdr (assoc 'right side-struts?)) min-strut-width 0))]
+       [physical-height
+        (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
+           (* (- (length subs) 1) row-gap))]))
+
+    (define/overment (render x y)
+      (let ([sub-x (+ x (if (cdr (assoc 'left side-struts?)) min-strut-width 0))])
+        (let-values
+            ([(last-sub-y sub-renders)
+              (for/fold
+                  ([sub-y y]
+                   [sub-renders '()]
+                   #:result (values (- sub-y (get-field physical-height (last subs)) row-gap)
+                                    (apply append sub-renders)))
+                  ([sub subs])
+                (values (+ sub-y (get-field physical-height sub) row-gap)
+                        (cons (send sub render sub-x sub-y) sub-renders)))])
+          (append sub-renders (inner '() render x y sub-x last-sub-y)))))))
+
+(define vappend-block-layout%
+  (class (vappend-common layout%)
+    (init tip-specs)
+    (init-field subs)
+    (inherit-field physical-width side-struts?)
     (define num-rows
       (let ([get-rows
              (lambda (side)
@@ -171,7 +202,7 @@
       (match spec
         ['top (send (first subs) tip-y side spec)]
         ['bot (let ([last-sub (last subs)])
-                (+ (apply + sub-heights)
+                (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
                    (* (- (length subs) 1) row-gap)
                    (- (get-field physical-height last-sub))
                    (send last-sub tip-y side spec)))]
@@ -210,47 +241,24 @@
                            (quotient (- (cdr (assoc side num-rows)) 1) 2)))]
         [else #f]))
 
-    (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
-      (unless (apply = sub-widths)
-        (raise-arguments-error 'vappend-block-layout "subs must be equal widths"
-                               "sub-widths" sub-widths))
-      (super-new
-       [physical-width (+ (first sub-widths)
-                          (for/sum ([side '(left right)]
-                                    #:when (cdr (assoc side side-struts?)))
-                            min-strut-width))]
-       [physical-height
-        (+ (apply + sub-heights) (* (- (length subs) 1) row-gap))]
-       [num-rows num-rows]
-       [tips (map (lambda (s)
-                    (let ([side (car s)] [spec (cdr s)])
-                      (cons side (cons spec (tip-y side spec)))))
-                  tip-specs)]))
+    (super-new
+     [tip-specs tip-specs] [common-subs subs] [num-rows num-rows]
+     [tips (map (lambda (s)
+                  (let ([side (car s)] [spec (cdr s)])
+                    (cons side (cons spec (tip-y side spec)))))
+                tip-specs)])
 
-    (inherit-field physical-width)
-
-    (define/override (render x y)
-      (let ([sub-x (+ x (if (cdr (assoc 'left side-struts?)) min-strut-width 0))])
-        (let-values
-            ([(last-sub-y sub-renders)
-              (for/fold ([sub-y y]
-                         [sub-renders '()]
-                         #:result (values (- sub-y (get-field physical-height (last subs)) row-gap)
-                                          (apply append sub-renders)))
-                        ([sub subs])
-                (values (+ sub-y (get-field physical-height sub) row-gap)
-                        (cons (send sub render sub-x sub-y) sub-renders)))])
-          (append
-           sub-renders
-           (for/list ([side '(left right)]
-                      [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
-             `(draw-line ,bracket-x ,(+ y (send (first subs) tip-y side))
-                         ,bracket-x ,(+ last-sub-y (send (last subs) tip-y side))))
-           (for/list ([side '(left right)]
-                      [tip-x (list x (+ x physical-width (- min-strut-width)))]
-                      #:when (cdr (assoc side side-struts?)))
-             `(draw-line ,tip-x ,(+ y (tip-y side))
-                         ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))))))))
+    (define/augride (render x y sub-x last-sub-y)
+      (append
+       (for/list ([side '(left right)]
+                  [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
+         `(draw-line ,bracket-x ,(+ y (send (first subs) tip-y side))
+                     ,bracket-x ,(+ last-sub-y (send (last subs) tip-y side))))
+       (for/list ([side '(left right)]
+                  [tip-x (list x (+ x physical-width (- min-strut-width)))]
+                  #:when (cdr (assoc side side-struts?)))
+         `(draw-line ,tip-x ,(+ y (tip-y side))
+                     ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))))))
 
 (define inline-layout%
   (class layout%
