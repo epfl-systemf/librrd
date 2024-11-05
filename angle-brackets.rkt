@@ -144,7 +144,8 @@
                 ; ((left . n) (right . n))
                 num-rows
                 ; ((left spec . y) (right spec . y))
-                tips)
+                tips
+                [direction 'ltr])
     (define/pubment tip-y
       (case-lambda
         [(side) (cddr (assoc side tips))]
@@ -155,9 +156,9 @@
   (class %
     (init tip-specs)
     (init-field [(subs common-subs)])
-    (field [side-struts?
-            (for/list ([side '(left right)])
-              (cons side (not (memq (cdr (assoc side tip-specs)) '(top bot)))))])
+    (define side-struts?
+      (for/list ([side '(left right)])
+        (cons side (not (memq (cdr (assoc side tip-specs)) '(top bot))))))
 
     (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
       (unless (apply = sub-widths)
@@ -171,6 +172,9 @@
         (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
            (* (- (length subs) 1) row-gap))]))
 
+    (inherit tip-y)
+    (inherit-field physical-width)
+
     (define/overment (render x y)
       (let ([sub-x (+ x (if (cdr (assoc 'left side-struts?)) min-strut-width 0))])
         (let-values
@@ -183,13 +187,19 @@
                   ([sub subs])
                 (values (+ sub-y (get-field physical-height sub) row-gap)
                         (cons (send sub render sub-x sub-y) sub-renders)))])
-          (append sub-renders (inner '() render x y sub-x last-sub-y)))))))
+          (append
+           sub-renders
+           (for/list ([side '(left right)]
+                      [tip-x (list x (+ x physical-width (- min-strut-width)))]
+                      #:when (cdr (assoc side side-struts?)))
+             `(draw-line ,tip-x ,(+ y (tip-y side))
+                         ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))
+           (inner '() render x y sub-x last-sub-y)))))))
 
 (define vappend-block-layout%
   (class (vappend-common layout%)
     (init tip-specs)
     (init-field subs)
-    (inherit-field physical-width side-struts?)
     (define num-rows
       (let ([get-rows
              (lambda (side)
@@ -249,24 +259,38 @@
                 tip-specs)])
 
     (define/augride (render x y sub-x last-sub-y)
-      (append
-       (for/list ([side '(left right)]
-                  [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
-         `(draw-line ,bracket-x ,(+ y (send (first subs) tip-y side))
-                     ,bracket-x ,(+ last-sub-y (send (last subs) tip-y side))))
-       (for/list ([side '(left right)]
-                  [tip-x (list x (+ x physical-width (- min-strut-width)))]
-                  #:when (cdr (assoc side side-struts?)))
-         `(draw-line ,tip-x ,(+ y (tip-y side))
-                     ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))))))
+      (for/list ([side '(left right)]
+                 [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
+        `(draw-line ,bracket-x ,(+ y (send (first subs) tip-y side))
+                    ,bracket-x ,(+ last-sub-y (send (last subs) tip-y side)))))))
 
 (define inline-layout%
   (class layout%
-    (super-new [num-rows '((left . 1) (right . 1))])
+    (init tips)
+    (unless (and (eq? 'default (cadr (assoc 'left tips)))
+                 (eq? 'default (cadr (assoc 'right tips))))
+      (raise-arguments-error 'inline-layout "tip specs must be 'default"
+                             "tips" tips))
+    (super-new [num-rows '((left . 1) (right . 1))] [tips tips])
     (define/augride (tip-y side spec)
       (case spec
         [(default (logical . 0) top bot) (tip-y side)]
         [else #f]))))
+
+(define vappend-inline-layout%
+  (class (vappend-common inline-layout%)
+    (init-field subs)
+    (inherit-field physical-height)
+
+    (super-new
+     [common-subs subs]
+     [tips
+      `((left default . ,(send (first subs) tip-y 'left))
+        (right default . ,(let-values ([(nonlast-subs last-sub) (split-at-right subs 1)])
+                            (+ (send (first last-sub) tip-y 'right)
+                               (apply + (map (lambda (s) (get-field physical-height s))
+                                             nonlast-subs))
+                               (* (length nonlast-subs) row-gap)))))])))
 
 (define hstrut%
   (class inline-layout%
@@ -372,7 +396,7 @@
 (define mylo1 (new text-box% [terminal? #t] [label "hh"]))
 (define mylo2 (new happend-layout% [subs (list mylo1 mylo1 (new hstrut% [physical-width 10]) mylo1)]))
 (define mylo3
-  (new vappend-block-layout%
+  (new vappend-inline-layout%
        [subs
         (list (new vappend-block-layout%
                    [subs (list (new happend-layout%
@@ -383,10 +407,10 @@
                                     [subs (list (new hstrut% [physical-width 10])
                                                 (new text-box% [terminal? #t] [label "xy"])
                                                 (new text-box% [terminal? #f] [label "abc"]))]))]
-                   [tip-specs '((left . bot) (right . bot))])
+                   [tip-specs '((left . default) (right . bot))])
               (new happend-layout%
                    [subs (list (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 10])
+                               (new hstrut% [physical-width 16])
                                (new text-box% [terminal? #f] [label "xy"]))]))]
        [tip-specs '((left logical . 0.5) (right logical . 1.5))]))
 
