@@ -172,7 +172,7 @@
         ['top (send (first subs) tip-y side spec)]
         ['bot (let ([last-sub (last subs)])
                 (+ (apply + sub-heights)
-                   (* (- (length subs 1)) row-gap)
+                   (* (- (length subs) 1) row-gap)
                    (- (get-field physical-height last-sub))
                    (send last-sub tip-y side spec)))]
         [(cons 'logical (? number? row-num))
@@ -363,9 +363,24 @@
 
 (define mylo1 (new text-box% [terminal? #t] [label "hh"]))
 (define mylo2 (new happend-layout% [subs (list mylo1 mylo1 (new hstrut% [physical-width 10]) mylo1)]))
-(define mylo3 (new vappend-block-layout%
-                   [subs (list mylo2 mylo2 mylo2 mylo2)]
-                   [tip-specs '((left logical . 1.5) (right . default))]))
+(define mylo3
+  (new vappend-block-layout%
+       [subs
+        (list (new vappend-block-layout%
+                   [subs (list (new happend-layout%
+                                    [subs (list (new text-box% [terminal? #t] [label "abc"])
+                                                (new text-box% [terminal? #f] [label "xy"])
+                                                (new hstrut% [physical-width 10]))])
+                               (new happend-layout%
+                                    [subs (list (new hstrut% [physical-width 10])
+                                                (new text-box% [terminal? #t] [label "xy"])
+                                                (new text-box% [terminal? #f] [label "abc"]))]))]
+                   [tip-specs '((left . bot) (right . bot))])
+              (new happend-layout%
+                   [subs (list (new text-box% [terminal? #t] [label "abc"])
+                               (new hstrut% [physical-width 10])
+                               (new text-box% [terminal? #f] [label "xy"]))]))]
+       [tip-specs '((left logical . 0.5) (right logical . 1.5))]))
 
 (define rendering%
   (class object% (super-new)
