@@ -178,35 +178,43 @@
     (define/overment (render x y)
       (let ([sub-x (+ x (if (cdr (assoc 'left side-struts?)) min-strut-width 0))])
         (let-values
-            ([(last-sub-y sub-renders)
+            ([(sub-renders sub-ys)
               (for/fold
                   ([sub-y y]
                    [sub-renders '()]
-                   #:result (values (- sub-y (get-field physical-height (last subs)) row-gap)
-                                    (apply append sub-renders)))
+                   [sub-ys '()]
+                   #:result (values (apply append sub-renders)
+                                    (reverse sub-ys)))
                   ([sub subs])
                 (values (+ sub-y (get-field physical-height sub) row-gap)
-                        (cons (send sub render sub-x sub-y) sub-renders)))])
+                        (cons (send sub render sub-x sub-y) sub-renders)
+                        (cons sub-y sub-ys)))])
           (append
            sub-renders
+           `((set-pen ,(the-strut-pen)))
            (for/list ([side '(left right)]
                       [tip-x (list x (+ x physical-width (- min-strut-width)))]
                       #:when (cdr (assoc side side-struts?)))
              `(draw-line ,tip-x ,(+ y (tip-y side))
                          ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))
-           (inner '() render x y sub-x last-sub-y)))))))
+           (inner
+            '()
+            render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
 
 (define vappend-block-layout%
   (class (vappend-common layout%)
     (init tip-specs)
     (init-field subs)
+
+    (define ((get-rows side) sub)
+      (if (and (is-a? sub vappend-block-layout%)
+               (not (memq (cadr (assoc side (get-field tips sub)))
+                          '(top bot))))
+          1
+          (cdr (assoc side (get-field num-rows sub)))))
     (define num-rows
-      (let ([get-rows
-             (lambda (side)
-               (lambda (sub)
-                 (cdr (assoc side (get-field num-rows sub)))))])
-        (for/list ([side '(left right)])
-          (cons side (apply + (map (get-rows side) subs))))))
+      (for/list ([side '(left right)])
+        (cons side (apply + (map (get-rows side) subs)))))
 
     (define/augride (tip-y side spec)
       (match spec
@@ -217,10 +225,7 @@
                    (- (get-field physical-height last-sub))
                    (send last-sub tip-y side spec)))]
         [(cons 'logical (? number? row-num))
-         (let* ([get-rows
-                 (lambda (side sub)
-                   (cdr (assoc side (get-field num-rows sub))))]
-                [num-rows (- (cdr (assoc side num-rows)) 1)])
+         (let* ([num-rows (- (cdr (assoc side num-rows)) 1)])
            (unless (<= 0 row-num num-rows)
              (raise-arguments-error
               'vappend-block-layout-tip-y
@@ -228,7 +233,7 @@
               "height" row-num "L" num-rows))
            (let loop ([n row-num] [cumul-y (- (/ row-gap 2))] [subs subs])
              (let* ([sub (first subs)]
-                    [sub-rows (- (get-rows side sub) 1)]
+                    [sub-rows (- ((get-rows side) sub) 1)]
                     [sub-top-y (+ cumul-y (/ row-gap 2))]
                     [next-cumul-y
                      (+ sub-top-y (get-field physical-height sub) (/ row-gap 2))])
@@ -258,11 +263,25 @@
                     (cons side (cons spec (tip-y side spec)))))
                 tip-specs)])
 
-    (define/augride (render x y sub-x last-sub-y)
-      (for/list ([side '(left right)]
-                 [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
-        `(draw-line ,bracket-x ,(+ y (send (first subs) tip-y side))
-                    ,bracket-x ,(+ last-sub-y (send (last subs) tip-y side)))))))
+    (inherit-field direction)
+    (unless (andmap (lambda (s) (eq? (get-field direction s) direction)) subs)
+      (raise-arguments-error
+       'vappend-block-layout
+       "subs must all have same direction as this layout"
+       "subs" subs "direction" direction))
+
+    (define/augride (render x y sub-x sub-width sub-ys)
+      (cons
+       `(set-pen ,(the-strut-pen))
+       (for/list ([top-sub subs]
+                  [top-y sub-ys]
+                  [bot-sub (rest subs)]
+                  [bot-y (rest sub-ys)]
+                  #:when #t
+                  [side '(left right)]
+                  [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
+         `(draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side))
+                     ,bracket-x ,(+ bot-y (send bot-sub tip-y side))))))))
 
 (define inline-layout%
   (class layout%
@@ -279,18 +298,82 @@
 
 (define vappend-inline-layout%
   (class (vappend-common inline-layout%)
-    (init-field subs)
-    (inherit-field physical-height)
+    (init-field subs style [marker #f])
+
+    (case style
+      [(marker)
+       (unless (is-a? marker inline-layout%)
+         (raise-arguments-error
+          'vappend-inline-layout
+          "when style is 'marker, marker must be an inline-layout%"
+          "marker" marker))
+       (let*-values ([(first-subs rest-subs) (split-at subs 1)]
+                     [(mid-subs last-subs) (split-at-right rest-subs 1)])
+         (let* ([last-sub (first last-subs)]
+                [first-sub (first first-subs)]
+                [marker-width (get-field physical-width marker)]
+                [start-end-struct (new hstrut% [physical-width marker-width])])
+           (set!
+            subs
+            (append
+             (cons
+              (new happend-layout% [subs (list start-end-struct first-sub marker)])
+              (map (lambda (s) (new happend-layout% [subs (list marker s marker)])) mid-subs))
+             (list (new happend-layout% [subs (list marker last-sub start-end-struct)]))))))]
+
+      [(boustrophedon)
+       (unless (odd? (length subs))
+         (raise-arguments-error
+          'vappend-inline-layout
+          "when style is 'boustrophedon, must have odd number of subs"
+          "subs" subs))
+       (let* ([directions (map (lambda (s) (get-field direction s)) subs)]
+              [first-direction (first directions)])
+         (unless (andmap (lambda (d i) (xor (odd? i) (eq? d first-direction)))
+                         directions (range (length directions)))
+           (raise-arguments-error
+            'vappend-inline-layout
+            "when style is 'boustrophedon, subs must have alternating directions"
+            "subs" subs
+            "directions" directions)))]
+
+      [(bare) 'pass]
+
+      [else
+       (raise-arguments-error
+        'vappend-inline-layout "style must be 'bare, 'marker, or 'boustrophedon"
+        "style" style)])
 
     (super-new
      [common-subs subs]
+     [tip-specs '((left . default) (right . default))]
      [tips
       `((left default . ,(send (first subs) tip-y 'left))
         (right default . ,(let-values ([(nonlast-subs last-sub) (split-at-right subs 1)])
                             (+ (send (first last-sub) tip-y 'right)
                                (apply + (map (lambda (s) (get-field physical-height s))
                                              nonlast-subs))
-                               (* (length nonlast-subs) row-gap)))))])))
+                               (* (length nonlast-subs) row-gap)))))])
+
+    (define/augride (render x y sub-x sub-width sub-ys)
+      (if (eq? style 'boustrophedon)
+          (for/fold ([brackets '()]
+                     [end-right? (eq? (get-field direction (first subs)) 'ltr)]
+                     #:result (cons `(set-pen ,(the-strut-pen)) brackets))
+                    ([sub subs]
+                     [sub-y sub-ys]
+                     [next-sub (rest subs)]
+                     [next-y (rest sub-ys)])
+            (values
+             (cons
+              (if end-right?
+                  `(draw-line ,(+ sub-x sub-width) ,(+ sub-y (send sub tip-y 'right))
+                              ,(+ sub-x sub-width) ,(+ next-y (send next-sub tip-y 'right)))
+                  `(draw-line ,sub-x ,(+ sub-y (send sub tip-y 'left))
+                              ,sub-x ,(+ next-y (send next-sub tip-y 'left))))
+              brackets)
+             (not end-right?)))
+          '()))))
 
 (define hstrut%
   (class inline-layout%
@@ -304,11 +387,10 @@
 
 (define text-box%
   (class inline-layout%
-    (init-field terminal? label)
+    (init-field terminal? label [padding-x (/ (the-font-size) 2)]
+                [padding-y (/ (the-font-size) 3)])
     (define label-width (text-width label))
     (define label-height (text-height label))
-    (define padding-x (/ (the-font-size) 2))
-    (define padding-y (/ (the-font-size) 3))
     (let ([physical-height (+ label-height (* 2 padding-y))])
       (super-new
        [physical-width (+ label-width (* 2 padding-x) (* 2 min-strut-width))]
@@ -339,13 +421,29 @@
          `((draw-line ,lstrut-lx ,struts-y ,lstrut-rx ,struts-y)
            (draw-line ,rstrut-lx ,struts-y ,rstrut-rx ,struts-y)))))))
 
+(define ellipsis-marker%
+  (class text-box%
+    (super-new [label "…"] [terminal? #f] [padding-x 0])
+    (define y-alignment-magic (* (the-font-size) 0.12))
+    (inherit-field label padding-x)
+    (define/override (render x y)
+      (let* ([box-x (+ x min-strut-width)]
+             [box-y y]
+             [text-x (+ box-x padding-x)]
+             [text-y (+ box-y y-alignment-magic)])
+        `((set-pen ,(the-atom-text-pen))
+          (set-font ,(the-font))
+          (draw-text ,label ,text-x ,text-y #t))))))
+
 (define happend-layout%
   (class inline-layout%
     (init-field subs)
+
     (unless (>= (length subs) 1)
       (raise-arguments-error
-       'make-happend-layout
+       'happend-layout
        "happend-layout must have at least one sub layout"))
+
     (define-values (right-tip height sub-xs width)
       (for/fold ([prev-right-tip-y 0]
                  [prev-height 0]
@@ -388,6 +486,14 @@
      [physical-width width]
      [physical-height height]
      [tips `((left default . ,left-tip) (right default . ,right-tip))])
+
+    (inherit-field direction)
+    (unless (andmap (lambda (s) (eq? (get-field direction s) direction)) subs)
+      (raise-arguments-error
+       'happend-layout
+       "subs must all have same direction as this layout"
+       "subs" subs "direction" direction))
+
     (define/override (render x y)
       (append-map (lambda (sub sx sy) (send sub render (+ x sx) (+ y sy)))
                   subs sub-xs sub-ys))))
@@ -395,6 +501,35 @@
 
 (define mylo1 (new text-box% [terminal? #t] [label "hh"]))
 (define mylo2 (new happend-layout% [subs (list mylo1 mylo1 (new hstrut% [physical-width 10]) mylo1)]))
+(define mylo3-cont
+  (new vappend-inline-layout%
+       [subs
+        (list (new vappend-block-layout%
+                   [subs (list (new happend-layout%
+                                    [subs (list (new text-box% [terminal? #t] [label "abc"])
+                                                (new text-box% [terminal? #f] [label "xy"])
+                                                (new hstrut% [physical-width 10]))])
+                               (new happend-layout%
+                                    [subs (list (new hstrut% [physical-width 10])
+                                                (new text-box% [terminal? #t] [label "xy"])
+                                                (new text-box% [terminal? #f] [label "abc"]))]))]
+                   [tip-specs '((left . default) (right logical . 0.5))])
+              (new happend-layout%
+                   [subs (list (new text-box% [terminal? #t] [label "abc"])
+                               (new hstrut% [physical-width 22])
+                               (new text-box% [terminal? #f] [label "xy"]))])
+              (new happend-layout%
+                   [subs (list (new hstrut% [physical-width 22])
+                               (new text-box% [terminal? #t] [label "abc"])
+                               (new text-box% [terminal? #f] [label "xy"]))])
+              (new happend-layout%
+                   [subs (list (new hstrut% [physical-width 11])
+                               (new text-box% [terminal? #t] [label "abc"])
+                               (new hstrut% [physical-width 11])
+                               (new text-box% [terminal? #f] [label "xy"]))]))]
+       [style 'marker]
+       [marker (new ellipsis-marker%)]))
+
 (define mylo3
   (new vappend-inline-layout%
        [subs
@@ -407,12 +542,28 @@
                                     [subs (list (new hstrut% [physical-width 10])
                                                 (new text-box% [terminal? #t] [label "xy"])
                                                 (new text-box% [terminal? #f] [label "abc"]))]))]
-                   [tip-specs '((left . default) (right . bot))])
+                   [tip-specs '((left . default) (right logical . 0.5))])
               (new happend-layout%
-                   [subs (list (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 16])
+                   [subs (list (new text-box% [terminal? #t] [label "abc"] [direction 'rtl])
+                               (new hstrut% [physical-width 22] [direction 'rtl])
+                               (new text-box% [terminal? #f] [label "xy"] [direction 'rtl]))]
+                   [direction 'rtl])
+              (new happend-layout%
+                   [subs (list (new hstrut% [physical-width 11])
+                               (new text-box% [terminal? #t] [label "abc"])
+                               (new hstrut% [physical-width 11])
+                               (new text-box% [terminal? #f] [label "xy"]))])
+              (new happend-layout%
+                   [subs (list (new text-box% [terminal? #t] [label "abc"] [direction 'rtl])
+                               (new hstrut% [physical-width 22] [direction 'rtl])
+                               (new text-box% [terminal? #f] [label "xy"] [direction 'rtl]))]
+                   [direction 'rtl])
+              (new happend-layout%
+                   [subs (list (new hstrut% [physical-width 11])
+                               (new text-box% [terminal? #t] [label "abc"])
+                               (new hstrut% [physical-width 11])
                                (new text-box% [terminal? #f] [label "xy"]))]))]
-       [tip-specs '((left logical . 0.5) (right logical . 1.5))]))
+       [style 'boustrophedon]))
 
 (define rendering%
   (class object% (super-new)
