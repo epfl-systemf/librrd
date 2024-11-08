@@ -173,7 +173,15 @@
            (* (- (length subs) 1) row-gap))]))
 
     (inherit tip-y)
-    (inherit-field physical-width)
+    (inherit-field physical-width direction)
+
+    (define/public (check-directions)
+      (unless (andmap (lambda (s) (eq? (get-field direction s) direction)) subs)
+        (raise-arguments-error
+         'vappend-layout
+         "subs must all have same direction as this layout"
+         "subs" subs "direction" direction)))
+    (check-directions)
 
     (define/overment (render x y)
       (let ([sub-x (+ x (if (cdr (assoc 'left side-struts?)) min-strut-width 0))])
@@ -264,11 +272,7 @@
                 tip-specs)])
 
     (inherit-field direction)
-    (unless (andmap (lambda (s) (eq? (get-field direction s) direction)) subs)
-      (raise-arguments-error
-       'vappend-block-layout
-       "subs must all have same direction as this layout"
-       "subs" subs "direction" direction))
+
 
     (define/augride (render x y sub-x sub-width sub-ys)
       (cons
@@ -299,6 +303,9 @@
 (define vappend-inline-layout%
   (class (vappend-common inline-layout%)
     (init-field subs style [marker #f])
+    ; needed for modifying subs if style is marker below, before super-new.
+    ; renamed internally so that after super-new we can inherit "direction".
+    (init [(init-direction direction) 'ltr])
 
     (case style
       [(marker)
@@ -312,30 +319,29 @@
          (let* ([last-sub (first last-subs)]
                 [first-sub (first first-subs)]
                 [marker-width (get-field physical-width marker)]
-                [start-end-struct (new hstrut% [physical-width marker-width])])
+                [start-end-struct (new hstrut% [physical-width marker-width])]
+                [directional-reverse (if (eq? init-direction 'rtl) reverse identity)])
            (set!
             subs
             (append
              (cons
-              (new happend-layout% [subs (list start-end-struct first-sub marker)])
-              (map (lambda (s) (new happend-layout% [subs (list marker s marker)])) mid-subs))
-             (list (new happend-layout% [subs (list marker last-sub start-end-struct)]))))))]
+              (new happend-layout%
+                   [direction init-direction]
+                   [subs (directional-reverse (list start-end-struct first-sub marker))])
+              (map (lambda (s) (new happend-layout%
+                                    [direction init-direction]
+                                    [subs (list marker s marker)])) mid-subs))
+             (list
+              (new happend-layout%
+                   [direction init-direction]
+                   [subs (directional-reverse (list marker last-sub start-end-struct))]))))))]
 
       [(boustrophedon)
        (unless (odd? (length subs))
          (raise-arguments-error
           'vappend-inline-layout
           "when style is 'boustrophedon, must have odd number of subs"
-          "subs" subs))
-       (let* ([directions (map (lambda (s) (get-field direction s)) subs)]
-              [first-direction (first directions)])
-         (unless (andmap (lambda (d i) (xor (odd? i) (eq? d first-direction)))
-                         directions (range (length directions)))
-           (raise-arguments-error
-            'vappend-inline-layout
-            "when style is 'boustrophedon, subs must have alternating directions"
-            "subs" subs
-            "directions" directions)))]
+          "subs" subs))]
 
       [(bare) 'pass]
 
@@ -345,7 +351,7 @@
         "style" style)])
 
     (super-new
-     [common-subs subs]
+     [common-subs subs] [direction init-direction]
      [tip-specs '((left . default) (right . default))]
      [tips
       `((left default . ,(send (first subs) tip-y 'left))
@@ -354,6 +360,27 @@
                                (apply + (map (lambda (s) (get-field physical-height s))
                                              nonlast-subs))
                                (* (length nonlast-subs) row-gap)))))])
+
+    (inherit-field direction)
+
+    (define/override (check-directions)
+      (if (eq? style 'boustrophedon)
+          (let* ([directions (map (lambda (s) (get-field direction s)) subs)]
+                 [first-direction (first directions)])
+            (unless (andmap (lambda (d i) (xor (odd? i) (eq? d first-direction)))
+                            directions (range (length directions)))
+              (raise-arguments-error
+               'vappend-inline-layout
+               "when style is 'boustrophedon, subs must have alternating directions"
+               "subs" subs
+               "directions" directions))
+            (unless (eq? first-direction direction)
+              (raise-arguments-error
+               'vappend-inline-layout
+               "when style is 'boustrophedon, first sub must have same direction as this layout"
+               "first direction" first-direction
+               "this direction" direction)))
+          (super check-directions)))
 
     (define/augride (render x y sub-x sub-width sub-ys)
       (if (eq? style 'boustrophedon)
