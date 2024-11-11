@@ -24,7 +24,7 @@
   `((translate ,dx ,dy) ,@instructions (translate ,(- dx) ,(- dy))))
 
 ;; TODO: should be reversed in the expr before (diagram), right?
-(define (diagram expr)
+#;(define (diagram expr)
   (match expr
     ['(epsilon) #f]
     [(list 'term label)
@@ -51,13 +51,17 @@
 ;; a type of justify-content
 ; contract: must not exceed total-space
 ; contract: total-space must be at least (* min-gap num-subs)
-(define (space-evenly total-space num-subs min-gap)
+(define (space-evenly total-space num-subs [min-gap 0])
   (let* ([each-basis (/ total-space (+ num-subs 1))]
          [each-mid-space (max min-gap each-basis)]
          [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
     (append (list each-end-space)
             (build-list (- num-subs 1) (lambda _ each-mid-space))
             (list each-end-space))))
+
+;; a type of justify-content
+(define (flex-end total-space num-subs)
+  (append (list total-space) (build-list num-subs (λ _ 0))))
 
 
 (define (linear-interpolate xstart ystart xend yend x)
@@ -116,28 +120,17 @@
 (define the-atom-box-brush
   (make-parameter (make-brush #:style 'transparent)))
 
-(define diagram%
-  (class object% (super-new)
-    (init-field natural-width
-                natural-height
-                num-logical-rows ; (('left . X) ('right . X))
-                direction)
-    ; to SVG? HTML? TiKZ? how to have different backends?
-    #;(define/public (lay-out left-tip right-tip width))
-    (abstract render)
-    ;; A diagram can provide a tip at height:
-    ;;   * 'top             an upwards tip
-    ;;   * ([0, lh] 'L)     integers are exactly at logical rows, and
-    ;;                      other numbers are logically interpolated such that
-    ;;                      0.5 is halfway between the subdiagrams on rows 0 and 1
-    ;;                      (always a horizontal tip)
-    ;;   * ([0, ph] 'P)     as above but physical
-    ;;   * 'bot             a downwards tip
-    ;;   * 'default         the default among the above
-    ;;
-    ;; These are provided at both sides (left and right) of the diagram.
-    (abstract tip? #;(tip? side spec))))
 
+;; A layout can have a tip at height:
+;;   * 'top                 an upwards tip
+;;   * (logical . [0,H])    integers are exactly at logical rows, and other
+;;                          numbers are logically interpolated such that 0.5
+;;                          is halfway between the sublayouts on rows 0 and 1
+;;                          (always a horizontal tip)
+;;   * 'bot                 a downwards tip
+;;   * 'default             the default among the above
+;;
+;; These are on both sides (left and right) of the layout.
 (define layout%
   (class object% (super-new)
     (init-field physical-width physical-height
@@ -151,6 +144,9 @@
         [(side) (cddr (assoc side tips))]
         [(side spec) (inner #f tip-y side spec)]))
     (abstract render #;(render x y))))
+
+(define (direction-toggle d)
+  (case d [(ltr) 'rtl] [(rtl) 'ltr] [else (raise-argument-error 'd "direction?" d)]))
 
 (define (vappend-common %)
   (class %
@@ -273,7 +269,6 @@
 
     (inherit-field direction)
 
-
     (define/augride (render x y sub-x sub-width sub-ys)
       (cons
        `(set-pen ,(the-strut-pen))
@@ -286,6 +281,35 @@
                   [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
          `(draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side))
                      ,bracket-x ,(+ bot-y (send bot-sub tip-y side))))))))
+
+(define vappend-forward-backward-layout%
+  (class vappend-block-layout%
+    (init ([internal-subs subs]))
+    (unless (= (length internal-subs) 2)
+      (raise-arguments-error
+       'vappend-forward-backward-layout
+       "vappend-forward-backward must have exactly 2 subs"
+       "subs" internal-subs))
+
+    (define/override (tip-y side spec)
+      (match spec
+        ['default (super tip-y side '(logical . 0))]
+        [else (super tip-y side spec)]))
+
+    (super-new [subs internal-subs])
+
+    (inherit-field direction subs)
+    (define/override (check-directions)
+      (unless (eq? direction (get-field direction (first subs)))
+        (raise-arguments-error
+         'vappend-forward-backward-layout
+         "first sub must have same direction as this layout"
+         "first sub" (first subs) "direction" direction))
+      (unless (eq? (direction-toggle direction) (get-field direction (second subs)))
+        (raise-arguments-error
+         'vappend-forward-backward-layout
+         "second sub must have opposite direction as this layout"
+         "second sub" (second subs) "direction" direction)))))
 
 (define inline-layout%
   (class layout%
@@ -592,12 +616,20 @@
                                (new text-box% [terminal? #f] [label "xy"]))]))]
        [style 'boustrophedon]))
 
-(define rendering%
+
+(define diagram%
   (class object% (super-new)
-    (init-field width height draw-proc)
-    (define/public-final (draw! dc x y)
-      (with-origin-delta dc x y
-        (draw-proc dc)))))
+    ; used for horizontal space distribution,
+    ; relative heuristic for natural width
+    (init-field weight)
+
+    ;; Attempt to lay out the diagram with the requested tips and width. Will
+    ;; always succeed, but the resulting tips and widths may not be what were
+    ;; requested, even if it would have been possible.
+    ;
+    ; to SVG? HTML? TiKZ? how to have different backends?
+    (#;(lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+     abstract lay-out)))
 
 (define block-diagram%
   (class diagram% (super-new)))
@@ -605,211 +637,73 @@
 (define (set-random-color! dc)
   (send dc set-pen (make-color (random 256) (random 256) (random 256)) 1 'solid))
 
-(define vappend-block-diagram%
+(define stack%
   (class block-diagram%
-    (init-field diag-top diag-bot [gap 8])
+    (init-field diag-top diag-bot polarity)
+    (unless (memq polarity '(+ -))
+      (raise-arguments-error 'stack "polarity must be '+ or '-"
+                             "polarity" polarity))
     
-    (super-new [direction (get-field direction diag-top)]
-               [natural-width (+ (max (get-field natural-width diag-top)
-                                      (get-field natural-width diag-bot))
-                                 (* 2 min-strut-width))]
-               [natural-height (+ (get-field natural-height diag-top)
-                                  (get-field natural-height diag-bot)
-                                  gap)]
-               [num-logical-rows
-                (let ([rows (lambda (side diag)
-                              (cdr (assoc side (get-field num-logical-rows diag))))])
-                  (list (cons 'left (+ (rows 'left diag-top) (rows 'left diag-bot)))
-                        (cons 'right (+ (rows 'right diag-top) (rows 'right diag-bot)))))])
-    (inherit-field natural-height num-logical-rows)
+    (super-new [weight (+ (max (get-field weight diag-top) (get-field weight diag-bot))
+                          (* 4 min-strut-width))])
 
-    (define/override (tip? side spec)
-      (match spec
-        ['top (send diag-top tip? side 'default)]
-        ['bot (+ (get-field natural-height diag-top)
-                  gap
-                  (send diag-bot tip? side 'default))]
-        [(cons 'logical (? number? height))
-         (let* ([rows (- (cdr (assoc side num-logical-rows)) 1)]
-                [top-rows (- (cdr (assoc side (get-field num-logical-rows diag-top))) 1)]
-                [top-last-row (send diag-top tip? side (cons 'logical top-rows))]
-                [bot-first-row (send diag-bot tip? side (cons 'logical 0))]
-                ;; TODO sus! depends on rendering!
-                [top-height (get-field natural-height diag-top)])
-           (cond
-             [(<= 0 height top-rows)
-              (send diag-top tip? side (cons 'logical height))]
-             [(in-range? top-rows height (+ top-rows 0.5))
-              (linear-interpolate top-rows top-last-row
-                                  (+ top-rows 0.5) (+ top-height (/ gap 2))
-                                  height)]
-             [(in-range? (+ top-rows 0.5) height (+ top-rows 1))
-              (linear-interpolate (+ top-rows 0.5) (+ top-height (/ gap 2))
-                                  (+ top-rows 1) (+ top-height gap bot-first-row)
-                                  height)]
-             [(<= (+ top-rows 1) height rows)
-              (+ top-height gap
-                 (send diag-bot tip? side (cons 'logical (- height top-rows 1))))]
-             [else (raise-arguments-error
-                    'vappend-tip?
-                    "requested logical height must be in [0, L-1]"
-                    "height" height "L" (+ rows 1))]))]
-        ['default
-         (tip? side (cons 'logical
-                          (quotient (- (cdr (assoc side num-logical-rows)) 1) 2)))]
-        [else #f]))
-
-    (define/override (render left-tip right-tip width)
-      ; let W := max(diag1.w, diag2.w)
-      ; let aligned-x := w => x + (W - w)/2
-      ;   (or other strategy per align-items)
-      ;
-      ; use vtips if possible, else htips (choose per default) + a little padding
-      ; draw diag1 at (aligned-x diag1.w), y, chosen tips
-      ; draw diag2 at (aligned-x diag2.w), y + diag1.h + gap, chosen tips
-      ; draw self sides (+ padding if needed) per specified tips
-      (let* ([dc (new record-dc%)]
-             [left-tip-width (if (memq left-tip '(top bot)) 0 min-strut-width)]
+    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+      (let* ([left-tip-width (if (memq left-tip '(top bot)) 0 min-strut-width)]
              [right-tip-width (if (memq right-tip '(top bot)) 0 min-strut-width)]
-             ;; TODO: non-default tips per align-items
              [sub-width (- width left-tip-width right-tip-width)]
-             [try-rendering-top (send diag-top render 'bot 'bot sub-width)]
-             [try-rendering-bot (send diag-bot render 'top 'top sub-width)]
-             [try-effective-width-top (get-field width try-rendering-top)]
-             [try-effective-width-bot (get-field width try-rendering-bot)]
-             [sub-effective-width (max try-effective-width-top try-effective-width-bot
-                                       (- width left-tip-width right-tip-width))]
-             [rendering-top (send diag-top render 'bot 'bot sub-effective-width)]
-             [rendering-bot (send diag-bot render 'top 'top sub-effective-width)]
-             [effective-width-top (get-field width rendering-top)]
-             [effective-width-bot (get-field width rendering-bot)]
-             [sub-x-left left-tip-width]
-             [sub-x-right (+ sub-x-left sub-effective-width)]
-             [x-top (+ sub-x-left ((align-items) sub-effective-width effective-width-top))]
-             [x-bot (+ sub-x-left ((align-items) sub-effective-width effective-width-bot))]
-             [y-tip-top-left (send diag-top tip? 'left 'bot)]
-             [y-tip-top-right (send diag-top tip? 'right 'bot)]
-             [effective-height-top (get-field height rendering-top)]
-             [effective-height-bot (get-field height rendering-bot)]
-             [y-top 0]
-             [y-bot (+ y-top effective-height-top gap)]
-             #;[effective-height (+ effective-height-top gap effective-height-bot)]
-             [effective-height (+ y-bot effective-height-bot (- y-top))]
-             [y-tip-bot-left (+ y-bot (send diag-bot tip? 'left 'top))]
-             [y-tip-bot-right (+ y-bot (send diag-bot tip? 'right 'top))]
-             [effective-width (+ sub-effective-width left-tip-width right-tip-width)])
+             [prelim-layout-top (send diag-top lay-out sub-width 'bot 'bot direction)]
+             [direction-bot
+              (if (eq? polarity '+) direction (direction-toggle direction))]
+             [prelim-layout-bot (send diag-bot lay-out sub-width 'top 'top direction-bot)]
+             [effective-width-top (get-field physical-width prelim-layout-top)]
+             [effective-width-bot (get-field physical-width prelim-layout-bot)]
+             [effective-sub-width (max effective-width-top effective-width-bot)]
+             [layout-top
+              (send diag-top lay-out effective-sub-width 'bot 'bot direction)]
+             [layout-bot
+              (send diag-bot lay-out effective-sub-width 'top 'top direction-bot)]
+             [justify-space (max sub-width effective-sub-width)]
+             [justify-layout
+              (λ (layout)
+                (let ([direction (get-field direction layout)]
+                      [justify ((justify-content)
+                                (- justify-space (get-field physical-width layout)) 1)])
+                  (if (andmap zero? justify)
+                      ; so that rows are visible outside, unlike if padded with struts
+                      layout
+                      (let ([struts (map (λ (w) (new hstrut%
+                                                     [direction direction]
+                                                     [physical-width w]))
+                                         justify)])
+                        (new happend-layout%
+                             [subs (list (first struts) layout (second struts))]
+                             [direction direction])))))]
+             [justified-layout-top (justify-layout layout-top)]
+             [justified-layout-bot (justify-layout layout-bot)])
+        (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
+             [subs (list justified-layout-top justified-layout-bot)]
+             [tip-specs `((left . ,left-tip) (right . ,right-tip))]
+             [direction direction])))))
 
-        (send dc set-pen (the-strut-pen))
-        (set-random-color! dc)
-
-        ; top with horizontals
-        (send dc draw-line
-              sub-x-left y-tip-top-left
-              x-top y-tip-top-left)
-        (send rendering-top draw! dc x-top y-top)
-        (send dc draw-line
-              (+ x-top effective-width-top) y-tip-top-right
-              sub-x-right y-tip-top-right)
-
-        ; bot with horizontals
-        (send dc draw-line
-              sub-x-left y-tip-bot-left
-              x-bot y-tip-bot-left)
-        (send rendering-bot draw! dc x-bot y-bot)
-        (send dc draw-line
-              (+ x-bot effective-width-bot) y-tip-bot-right
-              sub-x-right y-tip-bot-right)
-        
-        ; left vertical
-        (send dc draw-line
-              sub-x-left y-tip-top-left
-              sub-x-left y-tip-bot-left)
-        ; right vertical
-        (send dc draw-line
-              sub-x-right y-tip-top-right
-              sub-x-right y-tip-bot-right)
-        ; left tip
-        (unless (memq left-tip '(top bot))
-          (send dc draw-line
-                0 (tip? 'left left-tip)
-                sub-x-left (tip? 'left left-tip)))
-        ; right tip
-        (unless (memq right-tip '(top bot))
-          (send dc draw-line
-                sub-x-right (tip? 'right right-tip)
-                effective-width (tip? 'right right-tip)))
-
-        (new rendering% [width effective-width] [height effective-height]
-             [draw-proc (send dc get-recorded-procedure)])))))
-
-(define atomic-block-diagram%
+(define station%
   (class block-diagram%
     (init-field terminal? label)
-    (field [label-width (text-width label)] [label-height (text-height label)]
-           [padding-x (/ (the-font-size) 2)] [padding-y (/ (the-font-size) 3)])
-    (super-new
-     [natural-width (+ label-width (* 2 padding-x) (* 2 min-strut-width))]
-     [natural-height (+ label-height (* 2 padding-y))]
-     [num-logical-rows '((left . 1) (right . 1))])
-    (inherit-field natural-width natural-height)
+    (super-new [weight (text-width label)])
 
-    (define/override (tip? side spec)
-      (case spec
-        [(default (logical . 0) top bot) (/ natural-height 2)]
-        [else #f]))
-
-    (define/override (render left-tip right-tip width)
+    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
       ;; requested tips and width don't matter
-      (let* ([dc (new record-dc%)]
-             ;; these are all relative coördinates!
-             [box-width (+ label-width (* 2 padding-x))]
-             [box-height natural-height]
-             [box-x min-strut-width]
-             [box-y 0]
-             [text-x (+ box-x padding-x)]
-             [text-y (+ box-y padding-y)]
-             [struts-y (/ natural-height 2)]
-             [lstrut-lx 0]
-             [lstrut-rx (+ lstrut-lx min-strut-width)]
-             [rstrut-lx (+ min-strut-width box-width)]
-             [rstrut-rx (+ rstrut-lx min-strut-width)])
-        (send dc set-pen (the-atom-text-pen))
-        (send dc set-font (the-font))
-        (send dc draw-text label text-x text-y #t)
-        (send dc set-pen (the-atom-box-pen))
-        (send dc set-brush (the-atom-box-brush))
-        (if terminal?
-            (send dc draw-rounded-rectangle
-                  box-x box-y box-width box-height)
-            (send dc draw-rectangle
-                  box-x box-y box-width box-height))
-        (send dc draw-line lstrut-lx struts-y lstrut-rx struts-y)
-        (send dc draw-line rstrut-lx struts-y rstrut-rx struts-y)
-        ;; does not close over any fields except natural dims
-        (new rendering% [width natural-width] [height natural-height]
-             [draw-proc (send dc get-recorded-procedure)])))))
+      (new text-box% [terminal? terminal?] [label label] [direction direction]))))
 
-(define empty-block-diagram%
+(define epsilon%
   (class block-diagram%
-    (super-new [natural-width 0] [natural-height 1] [num-logical-rows '((left . 1) (right . 1))])
-    (inherit-field natural-height)
-    (define/override (tip? side spec)
-      (case spec
-        [(default (logical . 0) top bot) 0]
-        [else #f]))
-    (define/override (render left-tip right-tip width)
-      (let ([dc (new record-dc%)])
-        (send dc set-pen (the-strut-pen))
-        (send dc draw-line 0 0 width 0)
-        (new rendering% [width width] [height natural-height]
-             [draw-proc (send dc get-recorded-procedure)])))))
+    (super-new [weight 0])
+    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+      (new hstrut% [physical-width width] [direction direction]))))
 
-;; An inline diagram can only provide one horizontal tip at each end
-;; of the diagram (left and right), aligned with the single row.
 (define inline-diagram%
   (class diagram% (super-new)))
 
-(define happend-inline-diagram%
+#;(define happend-inline-diagram%
   (class inline-diagram%
     (init-field diags [min-gap 0] [extra-width-absorb 0.2])
     (unless (> (length diags) 0)
@@ -878,7 +772,7 @@
         (new rendering% [width effective-width] [height natural-height]
              [draw-proc (send dc get-recorded-procedure)])))))
 
-(define (reverse-diagram diag)
+#;(define (reverse-diagram diag)
   (cond
     [(is-a? diag happend-inline-diagram%)
      (with-destruct-object-as diag
@@ -908,21 +802,35 @@
 
 (define expr `(<> - (seq (term "e") (term "a"))
                   (seq (term "ffffffffff") (nonterm "BCD") (term "g"))))
-(define diag (diagram expr))
-(define rendering (send diag render 'default 'default 300))
+;(define diag (diagram expr))
+;(define rendering (send diag render 'default 'default 300))
 
 (define expr-seqseqseq '(seq (seq (seq (term "a")))))
-(define diag-seqseqseq (diagram expr-seqseqseq))
-(define rendering-seqseqseq (send diag-seqseqseq render 'default 'default 400))
+;(define diag-seqseqseq (diagram expr-seqseqseq))
+;(define rendering-seqseqseq (send diag-seqseqseq render 'default 'default 400))
 
 (define expr-short '(<> - (<> + (term "c1") (term "c2")) (<> - (seq (<> + (term "a") (term "b")) (term "d")) (term "e"))))
-(define rendering-short (send (diagram expr-short) render '(logical . 2.25) 'default 80))
-(define rendering-short-long (send (diagram expr-short) render '(logical . 2) 'default 200))
+;(define rendering-short (send (diagram expr-short) render '(logical . 2.25) 'default 80))
+;(define rendering-short-long (send (diagram expr-short) render '(logical . 2) 'default 200))
 
-(define my-rendering rendering-short)
+;(define my-rendering rendering-short)
 ;; (displayln (get-field width my-rendering))
 ;; (send my-rendering draw! my-bitmap-dc 10 10)
-(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send mylo3 render 20 20))
+
+(define diag1 (new station% [terminal? #t] [label "hello"]))
+(define diag2 (new station% [terminal? #f] [label "bye"]))
+(define diag3 (new stack% [diag-top diag1] [diag-bot diag2] [polarity '-]))
+
+(define diag4 (new station% [terminal? #t] [label "Vermont"]))
+(define diag5 (new station% [terminal? #f] [label "parametricity"]))
+(define diag6 (new stack% [diag-top diag4] [diag-bot diag5] [polarity '+]))
+
+(define diag7 (new stack% [diag-top diag3] [diag-bot diag6] [polarity '+]))
+(define layout7 (parameterize ([justify-content space-evenly])
+                  (send diag7 lay-out 200 '(logical . 1) '(logical . 0) 'rtl)))
+
+(println (get-field physical-width layout7))
+(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send layout7 render 20 20))
 my-target
 
 (send my-svg-dc end-page)
