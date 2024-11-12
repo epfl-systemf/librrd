@@ -313,16 +313,17 @@
 
 (define inline-layout%
   (class layout%
-    (init tips)
+    (init tips [num-rows '((left . 1) (right . 1))])
     (unless (and (eq? 'default (cadr (assoc 'left tips)))
                  (eq? 'default (cadr (assoc 'right tips))))
       (raise-arguments-error 'inline-layout "tip specs must be 'default"
                              "tips" tips))
-    (super-new [num-rows '((left . 1) (right . 1))] [tips tips])
-    (define/augride (tip-y side spec)
-      (case spec
-        [(default (logical . 0) top bot) (tip-y side)]
-        [else #f]))))
+    (super-new [num-rows num-rows] [tips tips])
+    (define/augment (tip-y side spec)
+      (or (inner #f tip-y side spec)
+          (case spec
+            [(default (logical . 0) top bot) (tip-y side)]
+            [else #f])))))
 
 (define vappend-inline-layout%
   (class (vappend-common inline-layout%)
@@ -489,11 +490,26 @@
 (define happend-layout%
   (class inline-layout%
     (init-field subs)
+    (define expose-first-left-tips?
+      (memq (cadr (assoc 'left (get-field tips (first subs)))) '(top bot)))
+    (define expose-last-right-tips?
+      (memq (cadr (assoc 'right (get-field tips (last subs)))) '(top bot)))
 
     (unless (>= (length subs) 1)
       (raise-arguments-error
        'happend-layout
        "happend-layout must have at least one sub layout"))
+
+    (define/augride (tip-y side spec)
+      (match spec
+        [(cons 'logical _)
+         (cond
+           [(and (eq? side 'left) expose-first-left-tips?)
+            (send (first subs) tip-y side spec)]
+           [(and (eq? side 'right) expose-last-right-tips?)
+            (send (last subs) tip-y side spec)]
+           [else #f])]
+        [else #f]))
 
     (define-values (right-tip height sub-xs width)
       (for/fold ([prev-right-tip-y 0]
@@ -536,7 +552,13 @@
     (super-new
      [physical-width width]
      [physical-height height]
-     [tips `((left default . ,left-tip) (right default . ,right-tip))])
+     [tips `((left default . ,left-tip) (right default . ,right-tip))]
+     [num-rows `((left . ,(if expose-first-left-tips?
+                              (cdr (assoc 'left (get-field num-rows (first subs))))
+                              1))
+                 (right . ,(if expose-last-right-tips?
+                               (cdr (assoc 'right (get-field num-rows (last subs))))
+                               1)))])
 
     (inherit-field direction)
     (unless (andmap (lambda (s) (eq? (get-field direction s) direction)) subs)
@@ -665,25 +687,25 @@
              [justify-space (max sub-width effective-sub-width)]
              [justify-layout
               (λ (layout)
-                (let ([direction (get-field direction layout)]
-                      [justify ((justify-content)
-                                (- justify-space (get-field physical-width layout)) 1)])
-                  (if (andmap zero? justify)
-                      ; so that rows are visible outside, unlike if padded with struts
-                      layout
-                      (let ([struts (map (λ (w) (new hstrut%
-                                                     [direction direction]
-                                                     [physical-width w]))
-                                         justify)])
-                        (new happend-layout%
-                             [subs (list (first struts) layout (second struts))]
-                             [direction direction])))))]
-             [justified-layout-top (justify-layout layout-top)]
-             [justified-layout-bot (justify-layout layout-bot)])
+                (let* ([d (get-field direction layout)]
+                       [justify ((justify-content)
+                                 (- justify-space (get-field physical-width layout)) 1)]
+                       [justify-left (first justify)]
+                       [justify-right (second justify)]
+                       [strut-left (new hstrut% [direction d] [physical-width justify-left])]
+                       [strut-right (new hstrut% [direction d] [physical-width justify-right])])
+                  (if (zero? justify-left)
+                      (if (zero? justify-right)
+                          layout
+                          (new happend-layout% [subs (list layout strut-right)] [direction d]))
+                      (if (zero? justify-right)
+                          (new happend-layout% [subs (list strut-left layout)] [direction d])
+                          (new happend-layout% [subs (list strut-left layout strut-right)]
+                               [direction d])))))]
+             [justified-layouts (map justify-layout (list layout-top layout-bot))])
         (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
-             [subs (list justified-layout-top justified-layout-bot)]
-             [tip-specs `((left . ,left-tip) (right . ,right-tip))]
-             [direction direction])))))
+             [subs justified-layouts] [direction direction]
+             [tip-specs `((left . ,left-tip) (right . ,right-tip))])))))
 
 (define station%
   (class block-diagram%
