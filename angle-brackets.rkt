@@ -60,8 +60,11 @@
             (list each-end-space))))
 
 ;; a type of justify-content
-(define (flex-end total-space num-subs)
-  (append (list total-space) (build-list num-subs (λ _ 0))))
+(define (flex-end total-space num-subs [min-gap 0])
+  (append
+   (list (- total-space (* min-gap (- num-subs 1))))
+   (build-list (- num-subs 1) (λ _ min-gap))
+   (list 0)))
 
 
 (define (linear-interpolate xstart ystart xend yend x)
@@ -77,7 +80,7 @@
 (define the-font
   (make-parameter (make-font #:font-list the-font-list
                              #:size 12
-                             #:face "Overpass Mono"
+                             #:face "Ubuntu Mono"
                              #:family 'modern
                              #:style 'normal
                              #:weight 'normal)))
@@ -154,7 +157,7 @@
     (init-field [(subs common-subs)])
     (define side-struts?
       (for/list ([side '(left right)])
-        (cons side (not (memq (cdr (assoc side tip-specs)) '(top bot))))))
+        (cons side (not (memq (cdr (assoc side tip-specs)) '(top bot none))))))
 
     (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
       (unless (apply = sub-widths)
@@ -339,27 +342,31 @@
           'vappend-inline-layout
           "when style is 'marker, marker must be an inline-layout%"
           "marker" marker))
-       (let*-values ([(first-subs rest-subs) (split-at subs 1)]
-                     [(mid-subs last-subs) (split-at-right rest-subs 1)])
-         (let* ([last-sub (first last-subs)]
-                [first-sub (first first-subs)]
-                [marker-width (get-field physical-width marker)]
-                [start-end-struct (new hstrut% [physical-width marker-width])]
-                [directional-reverse (if (eq? init-direction 'rtl) reverse identity)])
-           (set!
-            subs
-            (append
-             (cons
-              (new happend-layout%
-                   [direction init-direction]
-                   [subs (directional-reverse (list start-end-struct first-sub marker))])
-              (map (lambda (s) (new happend-layout%
-                                    [direction init-direction]
-                                    [subs (list marker s marker)])) mid-subs))
-             (list
-              (new happend-layout%
-                   [direction init-direction]
-                   [subs (directional-reverse (list marker last-sub start-end-struct))]))))))]
+       (unless (= (length subs) 1)
+         (let*-values ([(first-subs rest-subs) (split-at subs 1)]
+                       [(mid-subs last-subs) (split-at-right rest-subs 1)])
+           (let* ([last-sub (first last-subs)]
+                  [first-sub (first first-subs)]
+                  [start-end-struct
+                   (new hstrut% [physical-width (get-field physical-width marker)]
+                        [direction init-direction])]
+                  [directional-reverse (if (eq? init-direction 'rtl) reverse identity)])
+             (set!
+              subs
+              (append
+               (cons
+                (new happend-layout%
+                     [direction init-direction]
+                     [subs (directional-reverse
+                            (list start-end-struct first-sub marker))])
+                (map (lambda (s) (new happend-layout%
+                                      [direction init-direction]
+                                      [subs (list marker s marker)])) mid-subs))
+               (list
+                (new happend-layout%
+                     [direction init-direction]
+                     [subs (directional-reverse
+                            (list marker last-sub start-end-struct))])))))))]
 
       [(boustrophedon)
        (unless (odd? (length subs))
@@ -377,7 +384,8 @@
 
     (super-new
      [common-subs subs] [direction init-direction]
-     [tip-specs '((left . default) (right . default))]
+     ;; so that vappend-common doesn't draw tips
+     [tip-specs '((left . none) (right . none))]
      [tips
       `((left default . ,(send (first subs) tip-y 'left))
         (right default . ,(let-values ([(nonlast-subs last-sub) (split-at-right subs 1)])
@@ -725,6 +733,106 @@
 (define inline-diagram%
   (class diagram% (super-new)))
 
+(define (break-at-helper lst didxs)
+  (match didxs
+    ['() (list lst)]
+    [(cons idx rests) (cons (take lst idx) (break-at-helper (drop lst idx) rests))]))
+
+(define (break-at lst idxs)
+  (if (empty? idxs) (list lst)
+      (break-at-helper
+       lst
+       (map (lambda (i prev-i) (- i prev-i)) idxs (cons -1 (drop-right idxs 1))))))
+
+(define sequence%
+  (class inline-diagram%
+    (init-field subs [min-gap 0] [extra-width-absorb 0.2])
+    (unless (> (length subs) 0)
+      (raise-arguments-error 'sequence "must sequence at least one diagram"))
+    (super-new [weight (+ (apply + (map (λ (s) (get-field weight s)) subs))
+                          (* (- (length subs) 1) min-gap))])
+
+    (define/public (enumerate-wraps)
+      ;; '((wrap-spec ))
+      (let ([sub-wraps (map (lambda (s) (send s enumerate-wraps)) subs)]
+            [self-wrap-specs (combinations (range (length subs)))])
+        (map
+         (lambda (ws) (break-at sub-wraps ws))
+         self-wrap-specs)
+        #f))
+
+    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+      ;; requested tips don't matter
+      #f)))
+
+(define (+map f l) (apply + (map f l)))
+(define (display-expr k) (begin (displayln k) k))
+
+(define wrapped-sequence%
+  (class sequence% (super-new)
+    (init-field wrap-spec)
+    (inherit-field subs min-gap extra-width-absorb)
+    (define wrapped-subs (break-at subs wrap-spec))
+
+    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+      ;; requested tips don't matter
+      ;; TODO: account for extra-width-absorb (0)
+      (let*
+          ([marker (new ellipsis-marker% [direction direction])]
+           [available-width
+            (- width (if (empty? wrap-spec) 0 (* 2 (get-field physical-width marker))))]
+           [prelim-row-layout-widths
+            (map
+             (λ (row)
+               (let ([total-weight (+map (λ (s) (get-field weight s)) row)]
+                     [available-width (- available-width (* min-gap (- (length row) 1)))])
+                 (+map (λ (s) (get-field
+                               physical-width
+                               (send s lay-out
+                                     (* available-width (get-field weight s) (/ total-weight))
+                                     'default 'default #;TODO direction)))
+                       row)))
+             wrapped-subs)]
+           ; assumption: if (lay-out w1) produces pw1 <= w1,
+           ;   then (lay-out w2) for w2 > w1 will produce pw2 <= w2
+           ;
+           ; maybe also: pw1 <= pw2 (monotonic)
+           ; maybe also: (lay-out w) if w <= min-content produces pw = min-content,
+           ;   else min-content <= pw <= w
+           [effective-width
+            (max available-width (apply max prelim-row-layout-widths))]
+           [row-layouts
+            (map
+             (λ (row)
+               (let*
+                   ([total-weight (+map (λ (s) (get-field weight s)) row)]
+                    [available-width (- effective-width (* min-gap (- (length row) 1)))]
+                    [sub-layouts
+                     ((if (eq? direction 'rtl) reverse identity)
+                      (map
+                       (λ (s)
+                         (send s lay-out
+                               (* available-width (get-field weight s) (/ total-weight))
+                               'default 'default #;TODO direction))
+                       row))]
+                    [justify-space
+                     (- effective-width (+map (λ (sl) (get-field physical-width sl)) sub-layouts))]
+                    [justify-lengths ((justify-content) justify-space (length row) min-gap)]
+                    [sub-layouts-and-struts
+                     (let loop ([sls sub-layouts] [jls justify-lengths])
+                       (if (empty? jls) '()
+                           (let ([rests (if (empty? sls) '()
+                                            (cons (car sls) (loop (cdr sls) (cdr jls))))])
+                             (if (zero? (car jls)) rests
+                                 (cons (new hstrut%
+                                            [physical-width (car jls)]
+                                            [direction direction])
+                                       rests)))))])
+                 (new happend-layout% [subs sub-layouts-and-struts] [direction direction])))
+             wrapped-subs)])
+        (new vappend-inline-layout% [subs row-layouts] [direction direction]
+             [style 'marker] [marker marker])))))
+
 #;(define happend-inline-diagram%
   (class inline-diagram%
     (init-field diags [min-gap 0] [extra-width-absorb 0.2])
@@ -848,11 +956,15 @@
 (define diag6 (new stack% [diag-top diag4] [diag-bot diag5] [polarity '+]))
 
 (define diag7 (new stack% [diag-top diag3] [diag-bot diag6] [polarity '+]))
-(define layout7 (parameterize ([justify-content space-evenly])
-                  (send diag7 lay-out 200 '(logical . 1) '(logical . 0) 'rtl)))
+(define layout7 (parameterize ([justify-content flex-end])
+                  (send diag7 lay-out 150 '(logical . 1.6) '(logical . 0) 'rtl)))
 
-(println (get-field physical-width layout7))
-(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send layout7 render 20 20))
+(define diag8 (new wrapped-sequence% [subs (list diag1 diag2 diag1 diag4 diag5)] [wrap-spec '(0 2)] [min-gap 10]))
+(define layout8 (parameterize ([justify-content flex-end])
+                  (send diag8 lay-out 300 'default 'default 'rtl)))
+
+(println (get-field physical-width layout8))
+(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send layout8 render 20 20))
 my-target
 
 (send my-svg-dc end-page)

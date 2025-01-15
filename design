@@ -1,3 +1,59 @@
+2025-01-14
+==========
+
+Trying to load all this back into working memory. The problem I was working on was about sequences and wrapping decisions. I don’t remember all the details of the discussions I had with Clément, but a few key points:
+
+* A sequence has a plain list of subs; a sequence that has made a wrapping decision has a list of lists of subs, each outer list corresponding to one row, such that the concatenation of all the lists is the original list of subs.
+  + Equivalently, a wrapping decision is a list of indices in the subs list after which to break. The number of possible wraps is thus 2**(n-1).
+
+* A wrapped sequence has a min-content width below which it cannot be laid out. It also has a max-content width above which it can be laid out, but a lower-cost wrap of the same sequence could also be laid out. (Cost depends on number of rows and total height (which depends also on the chosen tips for the subdiagrams). Cost does not depend on any widths. Rather, you choose the lowest-cost wrap whose min-content width is less than the desired width.)
+  + This isn’t right. The max-content width shouldn’t depend on other wraps.
+  + Should it depend on the energy of the subdiagams that may have also wrapped?
+
+local decisions. don’t go up and down the structure for every layout.
+the way flex does this is with flex-basis, defaulting to the max-content.
+but flex can only achieve the two extremes: inner wraps first and outer wraps first. can’t do a mix? what about with percentage widths? -> you’ll always get the same *number* of subs on each row!
+
+want to minimize jumping around i.e. rewrapping. so when forced to wrap, choose one that will be good for as long as possible.
+  can I encode that in the cost?
+  not just "minimize height while staying under requested width" but also ?
+
+assume you had perfect information and no computational constraints. how do you find the optimum?
+  what is perfect information?
+    for every sequence (all the way down), list of all break points and corresponding min-content widths ("min-width: auto;" for a flex item is min-content) and heights
+    to calculate min-content width, start from leaves and just add (right?)
+  then some function of (width difference to next relayout, height)
+    equivalently (min-content width, height)
+    Pareto frontier of non-dominating options
+
+there’s no good reason to not prioritize height, i.e. to jump to a narrower layout when not needed. how often are we going to progressively shrink and grow these diagrams anyway?
+
+
+2024-11-12
+==========
+
+(Refresher.      At the diagram level, we have the following constructors:
+* Atomic
+  + Station = box with text
+  + Epsilon = nothing, but can be drawn as a horizontal line if needed
+* Composite
+  + Stack = place one diagram on top of another; "polarity" indicates whether they go in the same or opposite directions
+  + Sequence = string one or more diagrams together horizontally
+
+Diagrams do not have an inherent direction, width, etc.; those are parameters for laying out a diagram. A composite diagram is responsible for laying out its subdiagrams and composing those layouts according to layout policies. The only policy that matters for a stack is "justify-content": how to distribute extra horizontal space in each row. A sequence additionally depends on "align-items", i.e. how to vertically align its subdiagrams, and a policy that I cannot succinctly name/describe, which is the subject of this update.)
+
+Sequences can wrap to fit in narrower widths than if their subdiagrams were simply laid out side-by-side. This week, I am trying to precisely characterize the wrapping decisions that a sequence (containing diagrams that may also be sequences or contain sequences, and so on at all levels of nesting) has to make. Some initial observations/questions follow.
+
+For any sequence, there is always a width *W* such that the sequence can be laid out at any width >= W without wrapping itself or any of its nested sequence subdiagrams. At each level of nesting, some of the extra space will be absorbed by the sequence by spacing out its subdiagrams, and the rest will be taken up by the subdiagrams. But how do we avoid absorbing too much space and forcing a subdiagram to wrap when that could have been avoided?
+
+Why should RRDs be any different from CSS flexbox?
+
+
+
+
+LESS OLD
+========
+
 diagram
 * can call lay-out on its children possibly multiple times
 * tries to satisfy a requested width and tips
