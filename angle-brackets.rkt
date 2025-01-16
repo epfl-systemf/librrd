@@ -766,7 +766,35 @@
       #f)))
 
 (define (+map f l) (apply + (map f l)))
+(define (sum-weight subs) (+map (λ (s) (get-field weight s)) subs))
+(define (sum-width layouts) (+map (λ (l) (get-field physical-width l)) layouts))
 (define (display-expr k) (begin (displayln k) k))
+
+(define (lay-out-until-width-fixpoint init-subs init-params total-width)
+  (let* ([init-weights (map (λ (s) (get-field weight s)) init-subs)]
+         [subs-layouts
+          (let loop ([available-width total-width]
+                     [subs init-subs] [params init-params] [weights init-weights]
+                     [done-subs '()])
+            (let* ([total-weight (apply + weights)]
+                   [weighted-widths (map (λ (w) (* available-width w (/ total-weight))) weights)]
+                   [subs-layouts
+                    (map (λ (s p w ww) (list s p w ww (send/apply s lay-out ww p)))
+                         subs params weights weighted-widths)]
+                   [overflow? (λ (spwwwl) (> (get-field physical-width (fifth spwwwl)) (fourth spwwwl)))])
+              (let-values
+                  ([(overflowed not-overflowed) (partition overflow? subs-layouts)])
+                (let ([overflowed-width
+                       (+map (λ (spwwwl) (get-field physical-width (fifth spwwwl))) overflowed)]
+                      [append-to-done (λ (l) (append (map list (map first l) (map fifth l)) done-subs))])
+                  (cond
+                    [(empty? overflowed) (append-to-done not-overflowed)]
+                    [(empty? not-overflowed) (append-to-done overflowed)]
+                    [else
+                     (loop (- available-width overflowed-width)
+                           (map first not-overflowed) (map second not-overflowed) (map third not-overflowed)
+                           (append-to-done overflowed))])))))])
+    (map (λ (s) (cadr (assoc s subs-layouts))) init-subs)))
 
 (define wrapped-sequence%
   (class sequence% (super-new)
@@ -784,14 +812,13 @@
            [prelim-row-layout-widths
             (map
              (λ (row)
-               (let ([total-weight (+map (λ (s) (get-field weight s)) row)]
-                     [available-width (- available-width (* min-gap (- (length row) 1)))])
-                 (+map (λ (s) (get-field
-                               physical-width
-                               (send s lay-out
-                                     (* available-width (get-field weight s) (/ total-weight))
-                                     'default 'default #;TODO direction)))
-                       row)))
+               (let ([total-gap (* min-gap (- (length row) 1))])
+                 (+ total-gap
+                    (sum-width
+                     (lay-out-until-width-fixpoint
+                      row                       ; TODO nondefault tips
+                      (make-list (length row) (list 'default 'default direction))
+                      (- available-width total-gap))))))
              wrapped-subs)]
            ; assumption: if (lay-out w1) produces pw1 <= w1,
            ;   then (lay-out w2) for w2 > w1 will produce pw2 <= w2
@@ -805,18 +832,14 @@
             (map
              (λ (row)
                (let*
-                   ([total-weight (+map (λ (s) (get-field weight s)) row)]
-                    [available-width (- effective-width (* min-gap (- (length row) 1)))]
-                    [sub-layouts
+                   ([sub-layouts
                      ((if (eq? direction 'rtl) reverse identity)
-                      (map
-                       (λ (s)
-                         (send s lay-out
-                               (* available-width (get-field weight s) (/ total-weight))
-                               'default 'default #;TODO direction))
-                       row))]
+                      (lay-out-until-width-fixpoint
+                       row                      ; TODO nondefault tips
+                       (make-list (length row) (list 'default 'default direction))
+                       (- effective-width (* min-gap (- (length row) 1)))))]
                     [justify-space
-                     (- effective-width (+map (λ (sl) (get-field physical-width sl)) sub-layouts))]
+                     (- effective-width (sum-width sub-layouts))]
                     [justify-lengths ((justify-content) justify-space (length row) min-gap)]
                     [sub-layouts-and-struts
                      (let loop ([sls sub-layouts] [jls justify-lengths])

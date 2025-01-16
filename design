@@ -28,6 +28,13 @@ assume you had perfect information and no computational constraints. how do you 
 
 there’s no good reason to not prioritize height, i.e. to jump to a narrower layout when not needed. how often are we going to progressively shrink and grow these diagrams anyway?
 
+scenario:
+  given width 100
+  attempt to lay out subs at 50, 20, 30
+  50 and 20 manage; 30 reports 35
+  --> should ask 50 and 20 to compensate! proportional to weight again?
+  repeat until either everyone has hit limit or achieve goal
+
 
 2024-11-12
 ==========
