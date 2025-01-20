@@ -160,7 +160,8 @@
         (cons side (not (memq (cdr (assoc side tip-specs)) '(top bot none))))))
 
     (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
-      (unless (apply = sub-widths)
+      ; inexact equality
+      (unless (> 0.0001 (- (apply max sub-widths) (apply min sub-widths)))
         (raise-arguments-error 'vappend-layout "subs must be equal widths"
                                "sub-widths" sub-widths))
       (super-new
