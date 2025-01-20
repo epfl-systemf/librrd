@@ -1,3 +1,26 @@
+2025-01-20
+==========
+
+why is flex-grow not proportional to the item's size?
+* and instead, is relative
+* the closest you can get is "flex-basis: auto; flex-grow: 1;"
+
+assumption: if (lay-out w1) produces pw1 <= w1,
+  then (lay-out w2) for w2 > w1 will produce pw2 <= w2
+maybe also: pw1 <= pw2 (monotonic)
+maybe also: (lay-out w) if w <= min-content produces pw = min-content,
+  else min-content <= pw <= w
+
+for compiling an n-ary choice expression to binary stacks,
+the outer one has to be non-flex, inners flex
+
+2025-01-16
+==========
+
+things that are similar to flex:
+
+is it concerning that I am reimplementing some of flex and other CSS?
+
 2025-01-14
 ==========
 
