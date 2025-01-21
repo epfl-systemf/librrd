@@ -1,3 +1,20 @@
+2025-01-21
+==========
+
+a "fully wrapped" diagram is one where min-content == max-content,
+i.e. there are no wrapping decisions remaining.
+
+should a wrapped sequence contain regular components with their own min- and max-contents,
+  and thus itself have a range?
+  and thus itself allocate space per the algorithm below while the original sequence only
+    picks between different self wraps based on the min- and max-contents?
+or should a wrapped sequence only contain fully wrapped components,
+  and thus itself be fully wrapped?
+  and thus the original sequence picks between different self wraps as well as different
+    sub wraps?
+
+"local is better"!
+
 2025-01-20
 ==========
 

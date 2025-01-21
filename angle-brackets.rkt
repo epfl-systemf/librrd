@@ -754,41 +754,52 @@
     (init-field subs [min-gap 0] [extra-width-absorb 0.2])
     (unless (> (length subs) 0)
       (raise-arguments-error 'sequence "must sequence at least one diagram"))
-    (super-new)
 
-    (define/public (enumerate-wraps)
-      ;; '((wrap-spec ))
-      (let ([sub-wraps (map (lambda (s) (send s enumerate-wraps)) subs)]
-            [self-wrap-specs (combinations (range (length subs)))])
-        (map
-         (lambda (ws) (break-at sub-wraps ws))
-         self-wrap-specs)
-        #f))
+    (define init-wraps-measures
+      (map
+       (λ (wrap-spec)
+         (let ([wrapped
+                (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec]
+                     [min-gap min-gap] [extra-width-absorb extra-width-absorb])])
+           (list (get-field min-content wrapped) (get-field max-content wrapped) wrapped)))
+       (combinations (range (- (length subs) 1)))))
+    (field [temp init-wraps-measures])
+
+    (super-new [min-content (apply min (map first init-wraps-measures))]
+               [max-content (apply max (map second init-wraps-measures))]
+               [flex #t])
 
     (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
-      #f)))
+      (send (third
+             (let ([fitting (filter (λ (wm) (<= (second wm) width)) init-wraps-measures)])
+               (if (empty? fitting)
+                   (argmin first init-wraps-measures)
+                   (argmax second fitting))))
+            lay-out width left-tip right-tip direction))))
 
 (define (+map f . ls) (apply + (apply map f ls)))
 (define (display-expr k) (begin (displayln k) k))
 
 (define wrapped-sequence%
-  (class sequence%
-    (init [(init-subs subs)])
-    (init-field wrap-spec)
-    (init [(init-min-gap min-gap) 0])
-    (define wrapped-subs (break-at init-subs wrap-spec))
+  (class inline-diagram%
+    (init-field subs wrap-spec [min-gap 0] [extra-width-absorb 0])
+    (unless (andmap (λ (break) (< break (- (length subs) 1))) wrap-spec)
+      (raise-arguments-error
+       'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
+
+    (define wrapped-subs (break-at subs wrap-spec))
     (define init-marker-width (get-field physical-width (new ellipsis-marker%)))
     (define (sum-content field-name)
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-get-field field-name s)) row)
-                                     (* (- (length row) 1) init-min-gap)
+                                     (* (- (length row) 1) min-gap)
                                      (* 2 (count (is-a?/c stack%) row) min-strut-width)))
                          wrapped-subs))
          (if (empty? wrap-spec) 0 (* 2 init-marker-width))))
-    (super-new
-     [subs init-subs] [min-gap init-min-gap]
-     [min-content (sum-content 'min-content)] [max-content (sum-content 'max-content)] [flex #t])
-    (inherit-field subs min-gap extra-width-absorb min-content)
+    (super-new [min-content (sum-content 'min-content)]
+               [max-content (sum-content 'max-content)]
+               [flex #t])
+    (inherit-field min-content)
 
     (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
@@ -842,7 +853,7 @@
 (define my-target (make-bitmap 1100 500))
 (define my-bitmap-dc
   (new bitmap-dc% [bitmap my-target]))
-(send my-bitmap-dc scale 2 2)
+;; (send my-bitmap-dc scale 2 2)
 
 (define expr `(<> - (seq (term "e") (term "a"))
                   (seq (term "ffffffffff") (nonterm "BCD") (term "g"))))
@@ -862,10 +873,10 @@
 ;; (send my-rendering draw! my-bitmap-dc 10 10)
 
 (define diag1 (new station% [terminal? #t] [label "hello"]))
-(define diag2 (new wrapped-sequence%
+(define diag2 (new sequence%
                    [subs (list (new station% [terminal? #f] [label "good"])
-                               (new station% [terminal? #f] [label "bye"]))]
-                   [wrap-spec '()]))
+                               (new station% [terminal? #f] [label "bye"])
+                               (new station% [terminal? #t] [label "!!!"]))]))
 (define diag2-5 (new station% [terminal? #f] [label "foreschmack"]))
 (define diag3 (new stack% [diag-top diag1] [diag-bot diag2] [polarity '-]))
 
@@ -877,9 +888,10 @@
 (define layout7 (parameterize ([justify-content flex-end])
                   (send diag7 lay-out 150 '(logical . 1.6) '(logical . 0) 'rtl)))
 
-(define diag8 (new wrapped-sequence% [subs (list diag1 diag2-5 diag7 diag4 diag5)] [wrap-spec '(2 3)] [min-gap 0]))
+(define diag8 (new sequence% [subs (list diag1 diag2-5 diag7 diag4 diag5)] [min-gap 0]))
 (define layout8 (parameterize ([justify-content space-evenly])
-                  (send diag8 lay-out 400 'default 'default 'ltr)))
+                  (send diag8 lay-out 450 'default 'default 'ltr)))
+
 
 (println "width")
 (println (get-field physical-width layout8))
