@@ -1,48 +1,18 @@
 #lang racket
 (require racket/draw racket/help)
 (require (for-syntax racket/syntax))
+(provide
+ align-items center
+ justify-content space-evenly flex-end
+ the-font the-font-size
+ the-atom-text-pen the-atom-box-pen the-strut-pen the-atom-box-brush
+ layout% text-box% hstrut% happend-layout% ellipsis-marker%
+ vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
+ diagram% block-diagram% stack%
+ inline-diagram% sequence% wrapped-sequence% station% epsilon%)
 
-(define-syntax (with-destruct-object-as stx)
-  (syntax-case stx ()
-    [(_ obj (fields ...) body ...)
-     (and (identifier? #'obj) (andmap identifier? (syntax->list #'(fields ...))))
-     (let* ([prefixer (lambda (id) (format-id id "~a-~a" #'obj id))]
-            [prefixed (map prefixer (syntax->list #'(fields ...)))])
-       (with-syntax ([(names ...) prefixed])
-         #'(let ([names (get-field fields obj)] ...)
-             body ...)))]))
 
-(define-syntax-rule (with-origin-delta dc dx dy body ... last-body)
-  (let-values ([(orig-x orig-y) (send dc get-origin)])
-    (send dc set-origin (+ orig-x dx) (+ orig-y dy))
-    body ...
-    (let ([last-body-val last-body])
-      (send dc set-origin orig-x orig-y)
-      last-body-val)))
-
-(define (with-translate dx dy instructions)
-  `((translate ,dx ,dy) ,@instructions (translate ,(- dx) ,(- dy))))
-
-;; TODO: should be reversed in the expr before (diagram), right?
-#;(define (diagram expr)
-  (match expr
-    ['(epsilon) #f]
-    [(list 'term label)
-     (new atomic-block-diagram% [terminal? #t] [label label] [direction 'ltr])]
-    [(list 'nonterm label)
-     (new atomic-block-diagram% [terminal? #f] [label label] [direction 'ltr])]
-    [(list* 'seq exprs)
-     (if (= (length exprs) 0)
-         (raise-arguments-error 'diagram "seq must have at least one expression")
-         (new happend-inline-diagram%
-              [diags (map diagram exprs)]))]
-    [(list '<> polarity expr1 expr2)
-     (let* ([diag2 (diagram expr2)]
-            [maybe-rev-diag2 (if (eq? polarity '-) (reverse-diagram diag2) diag2)])
-       (new vappend-block-diagram%
-            [diag-top (diagram expr1)]
-            [diag-bot maybe-rev-diag2]))]))
-
+(define (display-expr k) (begin (displayln k) k))
 
 ;; a type of align-items
 (define (center total-width this-width)
@@ -65,12 +35,6 @@
    (list (- total-space (* min-gap (- num-subs 1))))
    (build-list (- num-subs 1) (λ _ min-gap))
    (list 0)))
-
-
-(define (linear-interpolate xstart ystart xend yend x)
-  (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
-
-(define (in-range? low x high) (and (<= low x) (< x high)))
 
 
 ;; affect layout
@@ -208,6 +172,9 @@
            (inner
             '()
             render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
+
+(define (linear-interpolate xstart ystart xend yend x)
+  (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
 
 (define vappend-block-layout%
   (class (vappend-common layout%)
@@ -585,77 +552,9 @@
                   subs sub-xs sub-ys))))
 
 
-(define mylo1 (new text-box% [terminal? #t] [label "hh"]))
-(define mylo2 (new happend-layout% [subs (list mylo1 mylo1 (new hstrut% [physical-width 10]) mylo1)]))
-(define mylo3-cont
-  (new vappend-inline-layout%
-       [subs
-        (list (new vappend-block-layout%
-                   [subs (list (new happend-layout%
-                                    [subs (list (new text-box% [terminal? #t] [label "abc"])
-                                                (new text-box% [terminal? #f] [label "xy"])
-                                                (new hstrut% [physical-width 10]))])
-                               (new happend-layout%
-                                    [subs (list (new hstrut% [physical-width 10])
-                                                (new text-box% [terminal? #t] [label "xy"])
-                                                (new text-box% [terminal? #f] [label "abc"]))]))]
-                   [tip-specs '((left . default) (right logical . 0.5))])
-              (new happend-layout%
-                   [subs (list (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 22])
-                               (new text-box% [terminal? #f] [label "xy"]))])
-              (new happend-layout%
-                   [subs (list (new hstrut% [physical-width 22])
-                               (new text-box% [terminal? #t] [label "abc"])
-                               (new text-box% [terminal? #f] [label "xy"]))])
-              (new happend-layout%
-                   [subs (list (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #f] [label "xy"]))]))]
-       [style 'marker]
-       [marker (new ellipsis-marker%)]))
-
-(define mylo3
-  (new vappend-inline-layout%
-       [subs
-        (list (new vappend-block-layout%
-                   [subs (list (new happend-layout%
-                                    [subs (list (new text-box% [terminal? #t] [label "abc"])
-                                                (new text-box% [terminal? #f] [label "xy"])
-                                                (new hstrut% [physical-width 10]))])
-                               (new happend-layout%
-                                    [subs (list (new hstrut% [physical-width 10])
-                                                (new text-box% [terminal? #t] [label "xy"])
-                                                (new text-box% [terminal? #f] [label "abc"]))]))]
-                   [tip-specs '((left . default) (right logical . 0.5))])
-              (new happend-layout%
-                   [subs (list (new text-box% [terminal? #t] [label "abc"] [direction 'rtl])
-                               (new hstrut% [physical-width 22] [direction 'rtl])
-                               (new text-box% [terminal? #f] [label "xy"] [direction 'rtl]))]
-                   [direction 'rtl])
-              (new happend-layout%
-                   [subs (list (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #f] [label "xy"]))])
-              (new happend-layout%
-                   [subs (list (new text-box% [terminal? #t] [label "abc"] [direction 'rtl])
-                               (new hstrut% [physical-width 22] [direction 'rtl])
-                               (new text-box% [terminal? #f] [label "xy"] [direction 'rtl]))]
-                   [direction 'rtl])
-              (new happend-layout%
-                   [subs (list (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #f] [label "xy"]))]))]
-       [style 'boustrophedon]))
-
 
 (define diagram%
   (class object% (super-new)
-    ; used for horizontal space distribution,
-    ; relative heuristic for natural width
     (init-field min-content max-content flex)
 
     ;; Attempt to lay out the diagram with the requested tips and width. Will
@@ -668,12 +567,6 @@
 
 (define block-diagram%
   (class diagram% (super-new)))
-
-(define (set-random-color! dc)
-  (send dc set-pen (make-color (random 256) (random 256) (random 256)) 1 'solid))
-
-(define (max-field field-name . args)
-  (apply max (map (λ (a) (dynamic-get-field field-name a)) args)))
 
 (define (justify-layouts-without-zero-hstruts justify-space layouts direction [min-gap 0])
   (let* ([justify-lengths ((justify-content) justify-space (length layouts) min-gap)]
@@ -692,12 +585,11 @@
     (init-field diag-top diag-bot polarity)
     (init [(init-flex flex) #t])
     (unless (memq polarity '(+ -))
-      (raise-arguments-error 'stack "polarity must be '+ or '-"
-                             "polarity" polarity))
+      (raise-arguments-error 'stack "polarity must be '+ or '-" "polarity" polarity))
 
     (super-new
-     [min-content (max-field 'min-content diag-top diag-bot)]
-     [max-content (max-field 'max-content diag-top diag-bot)]
+     [min-content (max (get-field min-content diag-top) (get-field min-content diag-bot))]
+     [max-content (max (get-field max-content diag-top) (get-field max-content diag-bot))]
      [flex init-flex])
     (inherit-field min-content max-content flex)
 
@@ -742,16 +634,14 @@
 (define inline-diagram%
   (class diagram% (super-new)))
 
-(define (break-at-helper lst didxs)
-  (match didxs
-    ['() (list lst)]
-    [(cons idx rests) (cons (take lst idx) (break-at-helper (drop lst idx) rests))]))
-
 (define (break-at lst idxs)
-  (if (empty? idxs) (list lst)
-      (break-at-helper
-       lst
-       (map (lambda (i prev-i) (- i prev-i)) idxs (cons -1 (drop-right idxs 1))))))
+  (if (empty? idxs)
+      (list lst)
+      (let helper ([lst lst]
+                   [didxs (map (λ (i prev-i) (- i prev-i)) idxs (cons -1 (drop-right idxs 1)))])
+        (match didxs
+          ['() (list lst)]
+          [(cons idx rests) (cons (take lst idx) (helper (drop lst idx) rests))]))))
 
 (define sequence%
   (class inline-diagram%
@@ -759,7 +649,7 @@
     (unless (> (length subs) 0)
       (raise-arguments-error 'sequence "must sequence at least one diagram"))
 
-    (define init-wraps-measures
+    (define wraps-measures
       (map
        (λ (wrap-spec)
          (let ([wrapped
@@ -767,39 +657,36 @@
                      [min-gap min-gap] [extra-width-absorb extra-width-absorb])])
            (list (get-field min-content wrapped) (get-field max-content wrapped) wrapped)))
        (combinations (range (- (length subs) 1)))))
-    (field [temp init-wraps-measures])
 
-    (super-new [min-content (apply min (map first init-wraps-measures))]
-               [max-content (apply max (map second init-wraps-measures))]
+    (super-new [min-content (apply min (map first wraps-measures))]
+               [max-content (apply max (map second wraps-measures))]
                [flex #t])
 
     (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
-      (send (third
-             (let ([fitting (filter (λ (wm) (<= (second wm) width)) init-wraps-measures)])
-               (if (empty? fitting)
-                   (argmin first init-wraps-measures)
-                   (argmax second fitting))))
+      (send (let ([fitting (filter (λ (wm) (<= (second wm) width)) wraps-measures)])
+              (third
+               (if (empty? fitting) (argmin first wraps-measures) (argmax second fitting))))
             lay-out width left-tip right-tip direction))))
 
 (define (+map f . ls) (apply + (apply map f ls)))
-(define (display-expr k) (begin (displayln k) k))
 
 (define wrapped-sequence%
   (class inline-diagram%
-    (init-field subs wrap-spec [min-gap 0] [extra-width-absorb 0])
+    (init-field subs wrap-spec [min-gap 0] [extra-width-absorb 0.2])
     (unless (andmap (λ (break) (< break (- (length subs) 1))) wrap-spec)
       (raise-arguments-error
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
-
     (define wrapped-subs (break-at subs wrap-spec))
-    (define init-marker-width (get-field physical-width (new ellipsis-marker%)))
+
+    (define maybe-marker-width
+      (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new ellipsis-marker%)))))
     (define (sum-content field-name)
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-get-field field-name s)) row)
                                      (* (- (length row) 1) min-gap)
                                      (* 2 (count (is-a?/c stack%) row) min-strut-width)))
                          wrapped-subs))
-         (if (empty? wrap-spec) 0 (* 2 init-marker-width))))
+         maybe-marker-width))
     (super-new [min-content (sum-content 'min-content)]
                [max-content (sum-content 'max-content)]
                [flex #t])
@@ -807,9 +694,8 @@
 
     (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
-      (let* ([maybe-marker-width (if (empty? wrap-spec) 0 (* 2 init-marker-width))]
-             [available-width
-              (max (- width maybe-marker-width) (- min-content maybe-marker-width))])
+      (let ([available-width (max (- width maybe-marker-width)
+                                  (- min-content maybe-marker-width))])
         (new
          vappend-inline-layout% [direction direction]
          [subs
@@ -850,59 +736,3 @@
                 direction min-gap)))
            wrapped-subs)]
          [style 'marker] [marker (new ellipsis-marker% [direction direction])])))))
-
-(define my-svg-dc
-  (new svg-dc% [width 500] [height 200] [output "trial.svg"] [exists 'truncate]))
-(send my-svg-dc start-doc "")
-(send my-svg-dc start-page)
-
-(define my-target (make-bitmap 1100 500))
-(define my-bitmap-dc
-  (new bitmap-dc% [bitmap my-target]))
-;; (send my-bitmap-dc scale 2 2)
-
-(define expr `(<> - (seq (term "e") (term "a"))
-                  (seq (term "ffffffffff") (nonterm "BCD") (term "g"))))
-;(define diag (diagram expr))
-;(define rendering (send diag render 'default 'default 300))
-
-(define expr-seqseqseq '(seq (seq (seq (term "a")))))
-;(define diag-seqseqseq (diagram expr-seqseqseq))
-;(define rendering-seqseqseq (send diag-seqseqseq render 'default 'default 400))
-
-(define expr-short '(<> - (<> + (term "c1") (term "c2")) (<> - (seq (<> + (term "a") (term "b")) (term "d")) (term "e"))))
-;(define rendering-short (send (diagram expr-short) render '(logical . 2.25) 'default 80))
-;(define rendering-short-long (send (diagram expr-short) render '(logical . 2) 'default 200))
-
-;(define my-rendering rendering-short)
-;; (displayln (get-field width my-rendering))
-;; (send my-rendering draw! my-bitmap-dc 10 10)
-
-(define diag1 (new station% [terminal? #t] [label "hello"]))
-(define diag2 (new sequence%
-                   [subs (list (new station% [terminal? #f] [label "good"])
-                               (new station% [terminal? #f] [label "bye"])
-                               (new station% [terminal? #t] [label "!!!"]))]))
-(define diag2-5 (new station% [terminal? #f] [label "foreschmack"]))
-(define diag3 (new stack% [diag-top diag1] [diag-bot diag2] [polarity '-]))
-
-(define diag4 (new station% [terminal? #t] [label "Vermont"]))
-(define diag5 (new station% [terminal? #f] [label "parametricity"]))
-(define diag6 (new stack% [diag-top diag4] [diag-bot diag5] [polarity '+]))
-
-(define diag7 (new stack% [diag-top diag3] [diag-bot diag6] [polarity '+] [flex #f]))
-(define layout7 (parameterize ([justify-content flex-end])
-                  (send diag7 lay-out 150 '(logical . 1.6) '(logical . 0) 'rtl)))
-
-(define diag8 (new sequence% [subs (list diag1 diag2-5 diag7 diag4 diag5)] [min-gap 0]))
-(define layout8 (parameterize ([justify-content space-evenly])
-                  (send diag8 lay-out 450 'default 'default 'ltr)))
-
-
-(println "width")
-(println (get-field physical-width layout8))
-(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send layout8 render 20 20))
-my-target
-
-(send my-svg-dc end-page)
-(send my-svg-dc end-doc)
