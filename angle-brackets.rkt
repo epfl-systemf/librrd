@@ -845,7 +845,9 @@
                     [sub-layouts
                      (map (λ (s w) (send s lay-out w 'default 'default direction)) row w-total)])
                (justify-layouts-without-zero-hstruts
-                (+ x-initial x-post-flex) sub-layouts direction min-gap)))
+                (+ x-initial x-post-flex)
+                ((if (eq? direction 'rtl) reverse identity) sub-layouts)
+                direction min-gap)))
            wrapped-subs)]
          [style 'marker] [marker (new ellipsis-marker% [direction direction])])))))
 
