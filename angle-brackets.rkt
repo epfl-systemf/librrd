@@ -700,19 +700,20 @@
     (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
       (let* ([left-tip-width (if (memq left-tip '(top bot)) 0 min-strut-width)]
              [right-tip-width (if (memq right-tip '(top bot)) 0 min-strut-width)]
-             [available-sub-width (- width left-tip-width right-tip-width)]
-             [effective-sub-width
-              ((if flex (λ (a b) b) min) max-content (max min-content available-sub-width))]
-             [direction-bot (if (eq? polarity '+) direction (direction-toggle direction))]
-             [layout-top (send diag-top lay-out effective-sub-width 'bot 'bot direction)]
-             [layout-bot (send diag-bot lay-out effective-sub-width 'top 'top direction-bot)]
-             [justify-layout
-              (λ (layout)
+             [available-width (- width left-tip-width right-tip-width)]
+             [clamped-available-width
+              ((if flex (λ (a b) b) min) max-content (max min-content available-width))]
+             [layout-top (send diag-top lay-out clamped-available-width 'bot 'bot direction)]
+             [layout-bot (send diag-bot lay-out clamped-available-width 'top 'top
+                               (if (eq? polarity '+) direction (direction-toggle direction)))]
+             [justified-layouts
+              (map
+               (λ (layout)
                 (justify-layouts-without-zero-hstruts
-                 (- effective-sub-width (get-field physical-width layout))
+                 (- clamped-available-width (get-field physical-width layout))
                  (list layout)
-                 (get-field direction layout)))]
-             [justified-layouts (map justify-layout (list layout-top layout-bot))])
+                 (get-field direction layout)))
+               (list layout-top layout-bot))])
         (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
              [subs justified-layouts] [direction direction]
              [tip-specs `((left . ,left-tip) (right . ,right-tip))])))))
@@ -768,35 +769,8 @@
       ;; requested tips don't matter
       #f)))
 
-(define (+map f l) (apply + (map f l)))
-(define (sum-width layouts) (+map (λ (l) (get-field physical-width l)) layouts))
+(define (+map f . ls) (apply + (apply map f ls)))
 (define (display-expr k) (begin (displayln k) k))
-
-(define (lay-out-until-width-fixpoint init-subs init-params total-width)
-  (let* ([init-min-contents (map (λ (s) (get-field min-content s)) init-subs)]
-         [subs-layouts
-          (let loop ([available-width total-width]
-                     [subs init-subs] [params init-params] [min-contents init-min-contents]
-                     [done-subs '()])
-            (let* ([total-min-content (apply + min-contents)]
-                   [weighted-widths (map (λ (w) (* available-width w (/ total-min-content))) min-contents)]
-                   [subs-layouts
-                    (map (λ (s p w ww) (list s p w ww (send/apply s lay-out ww p)))
-                         subs params min-contents weighted-widths)]
-                   [overflow? (λ (spwwwl) (> (get-field physical-width (fifth spwwwl)) (fourth spwwwl)))])
-              (let-values
-                  ([(overflowed not-overflowed) (partition overflow? subs-layouts)])
-                (let ([overflowed-width
-                       (+map (λ (spwwwl) (get-field physical-width (fifth spwwwl))) overflowed)]
-                      [append-to-done (λ (l) (append (map list (map first l) (map fifth l)) done-subs))])
-                  (cond
-                    [(empty? overflowed) (append-to-done not-overflowed)]
-                    [(empty? not-overflowed) (append-to-done overflowed)]
-                    [else
-                     (loop (- available-width overflowed-width)
-                           (map first not-overflowed) (map second not-overflowed) (map third not-overflowed)
-                           (append-to-done overflowed))])))))])
-    (map (λ (s) (cadr (assoc s subs-layouts))) init-subs)))
 
 (define wrapped-sequence%
   (class sequence%
@@ -818,55 +792,54 @@
 
     (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
-      (let*
-          ([available-width (- width (if (empty? wrap-spec) 0 (* 2 init-marker-width)))]
-           [sub-min-content (- min-content (if (empty? wrap-spec) 0 (* 2 init-marker-width)))]
-           [effective-width (max available-width sub-min-content)]
-           [available-sub-width
-            (+ sub-min-content
-               (* (- 1 extra-width-absorb) (max 0 (- effective-width sub-min-content))))]
-           [row-layouts
-            (map
-             (λ (row)
-               (let*
-                   ([sub-layouts
-                     ((if (eq? direction 'rtl) reverse identity)
-                      (lay-out-until-width-fixpoint
-                       row                      ; TODO nondefault tips
-                       (make-list (length row) (list 'default 'default direction))
-                       (- available-sub-width (* min-gap (- (length row) 1)))))]
-                    [justify-space
-                     (max 0 (- effective-width (sum-width sub-layouts)))])
-                 (justify-layouts-without-zero-hstruts
-                  justify-space sub-layouts direction min-gap)))
-             wrapped-subs)])
-        (new vappend-inline-layout% [subs row-layouts] [direction direction]
-             [style 'marker] [marker (new ellipsis-marker% [direction direction])])))))
-
-#;(define (reverse-diagram diag)
-  (cond
-    [(is-a? diag happend-inline-diagram%)
-     (with-destruct-object-as diag
-       (diags min-gap extra-width-absorb)
-       (new happend-inline-diagram%
-            [diags (reverse (map reverse-diagram diag-diags))]
-            [min-gap diag-min-gap]
-            [extra-width-absorb diag-extra-width-absorb]))]
-    [(is-a? diag vappend-block-diagram%)
-     (with-destruct-object-as diag
-       (diag-top diag-bot gap)
-       (new vappend-block-diagram%
-            [diag-top (reverse-diagram diag-diag-top)]
-            [diag-bot (reverse-diagram diag-diag-bot)]
-            [gap diag-gap]))]
-    [else diag]))
+      (let* ([maybe-marker-width (if (empty? wrap-spec) 0 (* 2 init-marker-width))]
+             [available-width
+              (max (- width maybe-marker-width) (- min-content maybe-marker-width))])
+        (new
+         vappend-inline-layout% [direction direction]
+         [subs
+          (map
+           (λ (row)
+             (let* (; available-width will be rebound at every step
+                    [available-width (- available-width (* min-gap (- (length row) 1)))]
+                    ; w- bindings will add up to the width for each sub
+                    [w-min-contents (map (λ (s) (get-field min-content s)) row)]
+                    [w-stack-struts
+                     (map (λ (s) (if ((is-a?/c stack%) s) (* 2 min-strut-width) 0)) row)]
+                    [available-width
+                     (- available-width (apply + w-min-contents) (apply + w-stack-struts))]
+                    ; x- bindings will add up to the absorbed space
+                    [x-initial (* extra-width-absorb available-width)]
+                    [available-width (- available-width x-initial)]
+                    [max-contents (map (λ (s) (get-field max-content s)) row)]
+                    [total-max-contents (apply + max-contents)]
+                    [flexs (map (λ (s) (get-field flex s)) row)]
+                    [w-nonflex-subs
+                     (map (λ (f maxc minc)
+                            (if f 0 (min (- maxc minc) ; "top up" to at most maxc
+                                         (* available-width maxc (/ total-max-contents)))))
+                          flexs max-contents w-min-contents)]
+                    [available-width (- available-width (apply + w-nonflex-subs))]
+                    [flex-max-contents (+map (λ (f mc) (if f mc 0)) flexs max-contents)]
+                    [w-flex-subs
+                     (map (λ (f mc) (if f (* available-width mc (/ flex-max-contents)) 0))
+                          flexs max-contents)]
+                    [x-post-flex (- available-width (apply + w-flex-subs))]
+                    [w-total (map + w-min-contents w-stack-struts w-nonflex-subs w-flex-subs)]
+                    ; TODO tips
+                    [sub-layouts
+                     (map (λ (s w) (send s lay-out w 'default 'default direction)) row w-total)])
+               (justify-layouts-without-zero-hstruts
+                (+ x-initial x-post-flex) sub-layouts direction min-gap)))
+           wrapped-subs)]
+         [style 'marker] [marker (new ellipsis-marker% [direction direction])])))))
 
 (define my-svg-dc
   (new svg-dc% [width 500] [height 200] [output "trial.svg"] [exists 'truncate]))
 (send my-svg-dc start-doc "")
 (send my-svg-dc start-page)
 
-(define my-target (make-bitmap 1000 500))
+(define my-target (make-bitmap 1100 500))
 (define my-bitmap-dc
   (new bitmap-dc% [bitmap my-target]))
 (send my-bitmap-dc scale 2 2)
@@ -904,7 +877,7 @@
 (define layout7 (parameterize ([justify-content flex-end])
                   (send diag7 lay-out 150 '(logical . 1.6) '(logical . 0) 'rtl)))
 
-(define diag8 (new wrapped-sequence% [subs (list diag1 diag2-5 diag7 diag4 diag5)] [wrap-spec '(2 3)] [min-gap 0] [extra-width-absorb 0]))
+(define diag8 (new wrapped-sequence% [subs (list diag1 diag2-5 diag7 diag4 diag5)] [wrap-spec '(2 3)] [min-gap 0]))
 (define layout8 (parameterize ([justify-content space-evenly])
                   (send diag8 lay-out 400 'default 'default 'ltr)))
 

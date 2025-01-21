@@ -14,6 +14,24 @@ maybe also: (lay-out w) if w <= min-content produces pw = min-content,
 for compiling an n-ary choice expression to binary stacks,
 the outer one has to be non-flex, inners flex
 
+wrapped sequence given a width
+available width for EACH ROW is
+  (max (given width - markers?) (self min-content - markers?))
+   - gaps (depends on length of row)
+for EACH ROW:
+  give each sub its min-content (+ struts for stacks)
+  left over space = available - sum of above
+  absorb per extra-space-absorb
+  left over space = (1-esa) * ...
+  distribute weighted by ALL max-contents to only NONFLEX subs
+    clamp nonflex subs to max-content
+  left over space = + excess
+  distribute weighted by FLEX max-contents to FLEX subs
+  justify left over space
+    (exactly what was extra-space-absorbed, unless there are no flex subs)
+
+is the above the only algorithm that makes sense?
+
 2025-01-16
 ==========
 
