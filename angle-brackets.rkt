@@ -388,12 +388,16 @@
      ;; so that vappend-common doesn't draw tips
      [tip-specs '((left . none) (right . none))]
      [tips
-      `((left default . ,(send (first subs) tip-y 'left))
-        (right default . ,(let-values ([(nonlast-subs last-sub) (split-at-right subs 1)])
-                            (+ (send (first last-sub) tip-y 'right)
-                               (apply + (map (lambda (s) (get-field physical-height s))
-                                             nonlast-subs))
-                               (* (length nonlast-subs) row-gap)))))])
+      (let ([start-tip (λ (side) (send (first subs) tip-y side))]
+            [end-tip (λ (side)
+                       (let-values ([(nonlast-subs last-sub) (split-at-right subs 1)])
+                         (+ (send (first last-sub) tip-y side)
+                            (apply + (map (lambda (s) (get-field physical-height s))
+                                          nonlast-subs))
+                            (* (length nonlast-subs) row-gap))))])
+        (if (eq? init-direction 'ltr)
+            `((left default . ,(start-tip 'left)) (right default . ,(end-tip 'right)))
+            `((left default . ,(end-tip 'left)) (right default . ,(start-tip 'right)))))])
 
     (inherit-field direction)
 
