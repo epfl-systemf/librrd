@@ -484,7 +484,7 @@
 
 (define random-marker%
   (class text-marker%
-    (super-new [label (list-ref '("⁕" "※" "◉" "▣") (random 4))])))
+    (super-new [label (list-ref '("†" "‡" "◊" "¤" "*") (random 5))])))
 
 (define happend-layout%
   (class inline-layout%

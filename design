@@ -2,6 +2,11 @@
 ==========
 
 drew arrows today
+text-box does not have its own tips; rather, station lays out as an happend with hstruts
+  also fixes horizontal alignment of arrows
+but! vappend has its own tips because the shape depends on internals
+  (cannot attach later)
+  plus, arrows would not be out of alignment if the tips are curved and hence "off-limits"
 
 2025-01-21
 ==========
