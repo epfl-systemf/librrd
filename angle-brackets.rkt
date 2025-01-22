@@ -313,28 +313,43 @@
        (unless (= (length subs) 1)
          (let*-values ([(first-subs rest-subs) (split-at subs 1)]
                        [(mid-subs last-subs) (split-at-right rest-subs 1)])
-           (let* ([last-sub (first last-subs)]
-                  [first-sub (first first-subs)]
-                  [start-end-struct
-                   (new hstrut% [physical-width (get-field physical-width marker)]
-                        [direction init-direction])]
-                  [directional-reverse (if (eq? init-direction 'rtl) reverse identity)])
+           (let* ([marker-width (get-field physical-width marker)]
+                  [struct-sub-markers
+                   (for/list ([sub (list (first first-subs) (first last-subs))]
+                              [maybe-reverse (if (eq? init-direction 'rtl)
+                                                 (list reverse identity)
+                                                 (list identity reverse))])
+                     (new
+                      happend-layout%
+                      [subs
+                       (maybe-reverse
+                        (let ([default (list (new hstrut% [physical-width marker-width]
+                                                  [direction init-direction] [always-arrow #t])
+                                             sub marker)])
+                          (if (is-a? sub happend-layout%)
+                              (let ([sub-subs (maybe-reverse (get-field subs sub))])
+                                (let-values ([(sub-first sub-rest) (split-at sub-subs 1)])
+                                  (if (is-a? (first sub-first) hstrut%)
+                                      (list
+                                       (new hstrut%
+                                            [physical-width
+                                             (+ marker-width
+                                                (get-field physical-width (first sub-first)))]
+                                            [direction init-direction] [always-arrow #t])
+                                       (new happend-layout% [subs (maybe-reverse sub-rest)]
+                                            [direction init-direction])
+                                       marker)
+                                      default)))
+                              default)))]
+                      [direction init-direction]))])
              (set!
               subs
               (append
-               (cons
-                (new happend-layout%
-                     [direction init-direction]
-                     [subs (directional-reverse
-                            (list start-end-struct first-sub marker))])
-                (map (lambda (s) (new happend-layout%
-                                      [direction init-direction]
-                                      [subs (list marker s marker)])) mid-subs))
-               (list
-                (new happend-layout%
-                     [direction init-direction]
-                     [subs (directional-reverse
-                            (list marker last-sub start-end-struct))])))))))]
+               (list (first struct-sub-markers))
+               (map (λ (s) (new happend-layout% [direction init-direction]
+                                [subs (list marker s marker)]))
+                    mid-subs)
+               (list (second struct-sub-markers)))))))]
 
       [(boustrophedon)
        (unless (odd? (length subs))
@@ -409,13 +424,24 @@
 
 (define hstrut%
   (class inline-layout%
+    (init-field [always-arrow #f])
     (super-new [physical-height 0]
                [tips '((left default . 0) (right default . 0))]
                #;[physical-width pass-through])
-    (inherit-field physical-width)
+    (inherit-field physical-width direction)
     (define/override (render x y)
-      `((set-pen ,(the-strut-pen))
-        (draw-line ,x ,y ,(+ x physical-width) ,y)))))
+      (append
+       `((set-pen ,(the-strut-pen))
+         (draw-line ,x ,y ,(+ x physical-width) ,y))
+       (if (or always-arrow (>= physical-width (* min-strut-width 6)))
+           (let* ([base-diff (* (the-font-size) 0.125)]
+                  [x-diff ((if (eq? direction 'ltr) + -) (* base-diff 3))]
+                  [y-diff (* base-diff 2)])
+             `((draw-lines
+                ((,(- x-diff) . ,(- y-diff)) (,x-diff . 0) (,(- x-diff) . ,y-diff))
+                                           ; optical correction
+                ,(+ x (/ physical-width 2) (- base-diff)) ,y)))
+           '())))))
 
 (define text-box%
   (class inline-layout%
