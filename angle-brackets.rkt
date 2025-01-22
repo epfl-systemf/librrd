@@ -319,37 +319,17 @@
                               [maybe-reverse (if (eq? init-direction 'rtl)
                                                  (list reverse identity)
                                                  (list identity reverse))])
-                     (new
-                      happend-layout%
-                      [subs
-                       (maybe-reverse
-                        (let ([default (list (new hstrut% [physical-width marker-width]
-                                                  [direction init-direction] [always-arrow #t])
-                                             sub marker)])
-                          (if (is-a? sub happend-layout%)
-                              (let ([sub-subs (maybe-reverse (get-field subs sub))])
-                                (let-values ([(sub-first sub-rest) (split-at sub-subs 1)])
-                                  (if (is-a? (first sub-first) hstrut%)
-                                      (list
-                                       (new hstrut%
-                                            [physical-width
-                                             (+ marker-width
-                                                (get-field physical-width (first sub-first)))]
+                     (new happend-layout% [fuse? #t] [direction init-direction]
+                          [subs (maybe-reverse
+                                 (list (new hstrut% [physical-width marker-width]
                                             [direction init-direction] [always-arrow #t])
-                                       (new happend-layout% [subs (maybe-reverse sub-rest)]
-                                            [direction init-direction])
-                                       marker)
-                                      default)))
-                              default)))]
-                      [direction init-direction]))])
-             (set!
-              subs
-              (append
-               (list (first struct-sub-markers))
-               (map (λ (s) (new happend-layout% [direction init-direction]
-                                [subs (list marker s marker)]))
-                    mid-subs)
-               (list (second struct-sub-markers)))))))]
+                                       sub marker))]))])
+             (set! subs (append
+                         (list (first struct-sub-markers))
+                         (map (λ (s) (new happend-layout% [direction init-direction]
+                                          [subs (list marker s marker)]))
+                              mid-subs)
+                         (list (second struct-sub-markers)))))))]
 
       [(boustrophedon)
        (unless (odd? (length subs))
@@ -440,8 +420,16 @@
              `((draw-lines
                 ((,(- x-diff) . ,(- y-diff)) (,x-diff . 0) (,(- x-diff) . ,y-diff))
                                            ; optical correction
-                ,(+ x (/ physical-width 2) (- base-diff)) ,y)))
-           '())))))
+                ,(+ x (/ physical-width 2) (* x-diff 0.3)) ,y)))
+           '())))
+    (define/public (fuse other)
+      (unless (is-a? other hstrut%)
+        (raise-arguments-error 'hstrut "can only fuse with another hstrut" "other" other))
+      (unless (eq? direction (get-field direction other))
+        (raise-arguments-error 'hstrut "can only fuse with hstrut in same direction"))
+      (new hstrut% [direction direction]
+           [physical-width (+ physical-width (get-field physical-width other))]
+           [always-arrow (or always-arrow (get-field always-arrow other))]))))
 
 (define text-box%
   (class inline-layout%
@@ -451,7 +439,7 @@
     (define label-height (text-height label))
     (let ([physical-height (+ label-height (* 2 padding-y))])
       (super-new
-       [physical-width (+ label-width (* 2 padding-x) (* 2 min-strut-width))]
+       [physical-width (+ label-width (* 2 padding-x))]
        [physical-height physical-height]
        [tips `((left default . ,(/ physical-height 2))
                (right default . ,(/ physical-height 2)))]))
@@ -459,7 +447,7 @@
     (define/override (render x y)
       (let* ([box-width (+ label-width (* 2 padding-x))]
              [box-height physical-height]
-             [box-x (+ x min-strut-width)]
+             [box-x x]
              [box-y y]
              [text-x (+ box-x padding-x)]
              [text-y (+ box-y padding-y)]
@@ -468,24 +456,21 @@
              [lstrut-rx (+ lstrut-lx min-strut-width)]
              [rstrut-lx (+ x min-strut-width box-width)]
              [rstrut-rx (+ rstrut-lx min-strut-width)])
-        (append
-         `((set-pen ,(the-atom-text-pen))
-           (set-font ,(the-font))
-           (draw-text ,label ,text-x ,text-y #t)
-           (set-pen ,(the-atom-box-pen))
-           (set-brush ,(the-atom-box-brush)))
-         (list (list (if terminal? 'draw-rounded-rectangle 'draw-rectangle)
-                     box-x box-y box-width box-height))
-         `((draw-line ,lstrut-lx ,struts-y ,lstrut-rx ,struts-y)
-           (draw-line ,rstrut-lx ,struts-y ,rstrut-rx ,struts-y)))))))
+        `((set-pen ,(the-atom-text-pen))
+          (set-font ,(the-font))
+          (draw-text ,label ,text-x ,text-y #t)
+          (set-pen ,(the-atom-box-pen))
+          (set-brush ,(the-atom-box-brush))
+          (,(if terminal? 'draw-rounded-rectangle 'draw-rectangle)
+           ,box-x ,box-y ,box-width ,box-height))))))
 
 (define text-marker%
   (class text-box%
-    (super-new [terminal? #f] [padding-x 0])
-    (define y-alignment-magic (* (the-font-size) 0.12))
+    (super-new [terminal? #f] [padding-x min-strut-width])
+    (define y-alignment-magic (* (the-font-size) 0.2))
     (inherit-field label padding-x)
     (define/override (render x y)
-      (let* ([box-x (+ x min-strut-width)]
+      (let* ([box-x x]
              [box-y y]
              [text-x (+ box-x padding-x)]
              [text-y (+ box-y y-alignment-magic)])
@@ -503,7 +488,27 @@
 
 (define happend-layout%
   (class inline-layout%
-    (init-field subs)
+    (init [(init-subs subs)] [fuse? #f])
+    (field
+     [subs
+      (if fuse?
+          (let ([spliced-subs
+                 (apply append
+                        (map (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
+                             init-subs))])
+            (for/fold ([cur-hstrut #f]
+                       [subs '()]
+                       #:result (reverse (if cur-hstrut (cons cur-hstrut subs) subs)))
+                      ([cur-sub spliced-subs])
+              (if cur-hstrut
+                  (if (is-a? cur-sub hstrut%)
+                      (values (send cur-hstrut fuse cur-sub) subs)
+                      (values #f (cons cur-sub (cons cur-hstrut subs))))
+                  (if (is-a? cur-sub hstrut%)
+                      (values cur-sub subs)
+                      (values #f (cons cur-sub subs))))))
+          init-subs)])
+
     (define expose-first-left-tips?
       (memq (cadr (assoc 'left (get-field tips (first subs)))) '(top bot)))
     (define expose-last-right-tips?
@@ -612,7 +617,7 @@
                   (if (zero? (car jls)) rests
                       (cons (new hstrut% [physical-width (car jls)] [direction direction])
                             rests)))))])
-    (new happend-layout% [subs layouts-and-struts] [direction direction])))
+    (new happend-layout% [subs layouts-and-struts] [fuse? #t] [direction direction])))
 
 (define stack%
   (class block-diagram%
@@ -652,12 +657,15 @@
   (class block-diagram%
     (init-field terminal? label)
     (define init-label-width
-      (get-field physical-width (new text-box% [terminal? terminal?] [label label])))
+      (+ (* 2 min-strut-width)
+         (get-field physical-width (new text-box% [terminal? terminal?] [label label]))))
     (super-new [min-content init-label-width] [max-content init-label-width] [flex #f])
 
     (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
       ;; requested tips and width don't matter
-      (new text-box% [terminal? terminal?] [label label] [direction direction]))))
+      (let ([tip-strut (new hstrut% [physical-width min-strut-width] [direction direction])]
+            [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])])
+        (new happend-layout% [subs (list tip-strut text-box tip-strut)] [direction direction])))))
 
 (define epsilon%
   (class block-diagram%
