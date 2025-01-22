@@ -479,9 +479,9 @@
          `((draw-line ,lstrut-lx ,struts-y ,lstrut-rx ,struts-y)
            (draw-line ,rstrut-lx ,struts-y ,rstrut-rx ,struts-y)))))))
 
-(define ellipsis-marker%
+(define text-marker%
   (class text-box%
-    (super-new [label "…"] [terminal? #f] [padding-x 0])
+    (super-new [terminal? #f] [padding-x 0])
     (define y-alignment-magic (* (the-font-size) 0.12))
     (inherit-field label padding-x)
     (define/override (render x y)
@@ -492,6 +492,14 @@
         `((set-pen ,(the-atom-text-pen))
           (set-font ,(the-font))
           (draw-text ,label ,text-x ,text-y #t))))))
+
+(define ellipsis-marker%
+  (class text-marker%
+    (super-new [label "…"])))
+
+(define random-marker%
+  (class text-marker%
+    (super-new [label (list-ref '("⁕" "※" "◉" "▣") (random 4))])))
 
 (define happend-layout%
   (class inline-layout%
@@ -706,7 +714,7 @@
     (define wrapped-subs (break-at subs wrap-spec))
 
     (define maybe-marker-width
-      (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new ellipsis-marker%)))))
+      (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new random-marker%)))))
     (define (sum-content field-name)
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-get-field field-name s)) row)
                                      (* (- (length row) 1) min-gap)
@@ -761,4 +769,4 @@
                 ((if (eq? direction 'rtl) reverse identity) sub-layouts)
                 direction min-gap)))
            wrapped-subs)]
-         [style 'marker] [marker (new ellipsis-marker% [direction direction])])))))
+         [style 'marker] [marker (new random-marker% [direction direction])])))))
