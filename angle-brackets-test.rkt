@@ -1,83 +1,15 @@
 #lang racket
 (require racket/draw "angle-brackets.rkt")
 
-(define mylo1 (new text-box% [terminal? #t] [label "hh"]))
-(define mylo2 (new happend-layout% [subs (list mylo1 mylo1 (new hstrut% [physical-width 10]) mylo1)]))
-(define mylo3-cont
-  (new vappend-inline-layout%
-       [subs
-        (list (new vappend-block-layout%
-                   [subs (list (new happend-layout%
-                                    [subs (list (new text-box% [terminal? #t] [label "abc"])
-                                                (new text-box% [terminal? #f] [label "xy"])
-                                                (new hstrut% [physical-width 10]))])
-                               (new happend-layout%
-                                    [subs (list (new hstrut% [physical-width 10])
-                                                (new text-box% [terminal? #t] [label "xy"])
-                                                (new text-box% [terminal? #f] [label "abc"]))]))]
-                   [tip-specs '((left . default) (right logical . 0.5))])
-              (new happend-layout%
-                   [subs (list (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 22])
-                               (new text-box% [terminal? #f] [label "xy"]))])
-              (new happend-layout%
-                   [subs (list (new hstrut% [physical-width 22])
-                               (new text-box% [terminal? #t] [label "abc"])
-                               (new text-box% [terminal? #f] [label "xy"]))])
-              (new happend-layout%
-                   [subs (list (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #f] [label "xy"]))]))]
-       [style 'marker]
-       [marker (new ellipsis-marker%)]))
-
-(define mylo3
-  (new vappend-inline-layout%
-       [subs
-        (list (new vappend-block-layout%
-                   [subs (list (new happend-layout%
-                                    [subs (list (new text-box% [terminal? #t] [label "abc"])
-                                                (new text-box% [terminal? #f] [label "xy"])
-                                                (new hstrut% [physical-width 10]))])
-                               (new happend-layout%
-                                    [subs (list (new hstrut% [physical-width 10])
-                                                (new text-box% [terminal? #t] [label "xy"])
-                                                (new text-box% [terminal? #f] [label "abc"]))]))]
-                   [tip-specs '((left . default) (right logical . 0.5))])
-              (new happend-layout%
-                   [subs (list (new text-box% [terminal? #t] [label "abc"] [direction 'rtl])
-                               (new hstrut% [physical-width 22] [direction 'rtl])
-                               (new text-box% [terminal? #f] [label "xy"] [direction 'rtl]))]
-                   [direction 'rtl])
-              (new happend-layout%
-                   [subs (list (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #f] [label "xy"]))])
-              (new happend-layout%
-                   [subs (list (new text-box% [terminal? #t] [label "abc"] [direction 'rtl])
-                               (new hstrut% [physical-width 22] [direction 'rtl])
-                               (new text-box% [terminal? #f] [label "xy"] [direction 'rtl]))]
-                   [direction 'rtl])
-              (new happend-layout%
-                   [subs (list (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #t] [label "abc"])
-                               (new hstrut% [physical-width 11])
-                               (new text-box% [terminal? #f] [label "xy"]))]))]
-       [style 'boustrophedon]))
-
-
-
 (define my-svg-dc
-  (new svg-dc% [width 500] [height 200] [output "trial.svg"] [exists 'truncate]))
+  (new svg-dc% [width 1000] [height 500] [output "trial.svg"] [exists 'truncate]))
 (send my-svg-dc start-doc "")
 (send my-svg-dc start-page)
 
-(define my-target (make-bitmap 1100 500))
+(define my-target (make-bitmap 1500 700))
 (define my-bitmap-dc
   (new bitmap-dc% [bitmap my-target]))
-;; (send my-bitmap-dc scale 2 2)
+(send my-bitmap-dc scale 2 2)
 
 (define expr `(<> - (seq (term "e") (term "a"))
                   (seq (term "ffffffffff") (nonterm "BCD") (term "g"))))
@@ -114,7 +46,7 @@
 
 (define diag8 (new sequence% [subs (list diag1 diag2-5 diag7 diag4 diag5)] [min-gap 0]))
 (define layout8 (parameterize ([justify-content space-evenly])
-                  (send diag8 lay-out 450 'default 'default 'ltr)))
+                  (send diag8 lay-out 300 'default 'default 'ltr)))
 
 
 (println "width")
