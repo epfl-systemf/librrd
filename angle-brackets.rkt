@@ -169,9 +169,7 @@
                       #:when (cdr (assoc side side-struts?)))
              `(draw-line ,tip-x ,(+ y (tip-y side))
                          ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))
-           (inner
-            '()
-            render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
+           (inner '() render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
 
 (define (linear-interpolate xstart ystart xend yend x)
   (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
@@ -402,18 +400,24 @@
              (not end-right?)))
           '()))))
 
-(define hstrut%
+(define hspace%
   (class inline-layout%
-    (init-field [always-arrow #f])
+    (init [(init-width physical-width) min-strut-width])
     (super-new [physical-height 0]
                [tips '((left default . 0) (right default . 0))]
-               #;[physical-width pass-through])
+               [physical-width init-width] #;[direction pass-through])
+    (define/override (render x y) '())))
+
+(define hstrut%
+  (class hspace%
+    (init-field [always-arrow #f])
+    (super-new #;[physical-width pass-through] #;[direction pass-through])
     (inherit-field physical-width direction)
     (define/override (render x y)
       (append
        `((set-pen ,(the-strut-pen))
          (draw-line ,x ,y ,(+ x physical-width) ,y))
-       (if (or always-arrow (>= physical-width (* min-strut-width 6)))
+       (if (or always-arrow (>= physical-width (* min-strut-width 7)))
            (let* ([base-diff (* (the-font-size) 0.125)]
                   [x-diff ((if (eq? direction 'ltr) + -) (* base-diff 3))]
                   [y-diff (* base-diff 2)])
@@ -467,7 +471,7 @@
 (define text-marker%
   (class text-box%
     (super-new [terminal? #f] [padding-x min-strut-width])
-    (define y-alignment-magic (* (the-font-size) 0.2))
+    (define y-alignment-magic (* (the-font-size) 0.23))
     (inherit-field label padding-x)
     (define/override (render x y)
       (let* ([box-x x]
@@ -720,13 +724,13 @@
 (define wrapped-sequence%
   (class inline-diagram%
     (init-field subs wrap-spec [min-gap 0] [extra-width-absorb 0.2])
-    (unless (andmap (λ (break) (< break (- (length subs) 1))) wrap-spec)
+    (unless (andmap (λ (break) (<= 0 break (- (length subs) 2))) wrap-spec)
       (raise-arguments-error
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
     (define wrapped-subs (break-at subs wrap-spec))
 
     (define maybe-marker-width
-      (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new random-marker%)))))
+      (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new ellipsis-marker%)))))
     (define (sum-content field-name)
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-get-field field-name s)) row)
                                      (* (- (length row) 1) min-gap)
@@ -740,8 +744,7 @@
 
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
-      (let ([available-width (max (- width maybe-marker-width)
-                                  (- min-content maybe-marker-width))])
+      (let ([available-width (- (max width min-content) maybe-marker-width)])
         (new
          vappend-inline-layout% [direction direction]
          [subs
@@ -781,4 +784,4 @@
                 (directional-reverse direction sub-layouts)
                 direction min-gap)))
            wrapped-subs)]
-         [style 'marker] [marker (new random-marker% [direction direction])])))))
+         [style 'marker] [marker (new ellipsis-marker% [direction direction])])))))
