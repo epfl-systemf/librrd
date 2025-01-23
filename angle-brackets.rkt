@@ -619,6 +619,9 @@
                             rests)))))])
     (new happend-layout% [subs layouts-and-struts] [fuse? #t] [direction direction])))
 
+(define (directional-reverse direction l)
+  ((if (eq? direction 'rtl) reverse identity) l))
+
 (define stack%
   (class block-diagram%
     (init-field diag-top diag-bot polarity)
@@ -632,10 +635,10 @@
      [flex init-flex])
     (inherit-field min-content max-content flex)
 
-    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
-      (let* ([left-tip-width (if (memq left-tip '(top bot)) 0 min-strut-width)]
-             [right-tip-width (if (memq right-tip '(top bot)) 0 min-strut-width)]
-             [available-width (- width left-tip-width right-tip-width)]
+    (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
+      (let* ([start-tip-width (if (memq start-tip '(top bot)) 0 min-strut-width)]
+             [end-tip-width (if (memq end-tip '(top bot)) 0 min-strut-width)]
+             [available-width (- width start-tip-width end-tip-width)]
              [clamped-available-width
               ((if flex (λ (a b) b) min) max-content (max min-content available-width))]
              [layout-top (send diag-top lay-out clamped-available-width 'bot 'bot direction)]
@@ -651,7 +654,8 @@
                (list layout-top layout-bot))])
         (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
              [subs justified-layouts] [direction direction]
-             [tip-specs `((left . ,left-tip) (right . ,right-tip))])))))
+             [tip-specs
+              (map cons '(left right) (directional-reverse direction `(,start-tip ,end-tip)))])))))
 
 (define station%
   (class block-diagram%
@@ -661,7 +665,7 @@
          (get-field physical-width (new text-box% [terminal? terminal?] [label label]))))
     (super-new [min-content init-label-width] [max-content init-label-width] [flex #f])
 
-    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+    (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested tips and width don't matter
       (let ([tip-strut (new hstrut% [physical-width min-strut-width] [direction direction])]
             [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])])
@@ -670,7 +674,7 @@
 (define epsilon%
   (class block-diagram%
     (super-new [min-content 0] [max-content 0] [flex #t])
-    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+    (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       (new hstrut% [physical-width width] [direction direction]))))
 
 (define inline-diagram%
@@ -704,12 +708,12 @@
                [max-content (apply max (map second wraps-measures))]
                [flex #t])
 
-    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+    (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
       (send (let ([fitting (filter (λ (wm) (<= (second wm) width)) wraps-measures)])
               (third
                (if (empty? fitting) (argmin first wraps-measures) (argmax second fitting))))
-            lay-out width left-tip right-tip direction))))
+            lay-out width start-tip end-tip direction))))
 
 (define (+map f . ls) (apply + (apply map f ls)))
 
@@ -734,7 +738,7 @@
                [flex #t])
     (inherit-field min-content)
 
-    (define/override (lay-out width [left-tip 'default] [right-tip 'default] [direction 'ltr])
+    (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
       (let ([available-width (max (- width maybe-marker-width)
                                   (- min-content maybe-marker-width))])
@@ -774,7 +778,7 @@
                      (map (λ (s w) (send s lay-out w 'default 'default direction)) row w-total)])
                (justify-layouts-without-zero-hstruts
                 (+ x-initial x-post-flex)
-                ((if (eq? direction 'rtl) reverse identity) sub-layouts)
+                (directional-reverse direction sub-layouts)
                 direction min-gap)))
            wrapped-subs)]
          [style 'marker] [marker (new random-marker% [direction direction])])))))
