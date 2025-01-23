@@ -236,20 +236,32 @@
                     (cons side (cons spec (tip-y side spec)))))
                 tip-specs)])
 
-    (inherit-field direction)
+    (inherit-field direction tips)
 
     (define/augride (render x y sub-x sub-width sub-ys)
       (cons
        `(set-pen ,(the-strut-pen))
-       (for/list ([top-sub subs]
-                  [top-y sub-ys]
-                  [bot-sub (rest subs)]
-                  [bot-y (rest sub-ys)]
-                  #:when #t
-                  [side '(left right)]
-                  [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))])
-         `(draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side))
-                     ,bracket-x ,(+ bot-y (send bot-sub tip-y side))))))))
+       (let ([top-sub (first subs)]
+             [top-y (first sub-ys)]
+             [bot-sub (last subs)]
+             [bot-y (last sub-ys)]
+             [arc-size (* 2 min-strut-width)])
+         (apply
+          append
+          (for/list ([side '(left right)]
+                     [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))]
+                     [arc-x (list 0 (- arc-size))]
+                     [arc-theta (list (/ pi 2) 0)])
+            `((draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side) (/ arc-size 2))
+                         ,bracket-x ,(+ bot-y (send bot-sub tip-y side) (- (/ arc-size 2))))
+              #;(draw-arc
+               ,(+ bracket-x arc-x) ,(+ top-y (send top-sub tip-y side))
+               ,arc-size ,arc-size
+               ,arc-theta ,(+ arc-theta (/ pi 2)))
+              #;(draw-arc
+               ,(+ bracket-x arc-x) ,(+ bot-y (send bot-sub tip-y side) (- arc-size))
+               ,arc-size ,arc-size
+               ,(- (- arc-theta) (/ pi 2)) ,(- arc-theta))))))))))
 
 (define vappend-forward-backward-layout%
   (class vappend-block-layout%
