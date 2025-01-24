@@ -4,6 +4,7 @@
 (provide
  align-items center
  justify-content space-evenly flex-end
+ min-strut-width row-gap
  the-font the-font-size
  the-atom-text-pen the-atom-box-pen the-strut-pen the-atom-box-brush
  layout% text-box% hstrut% happend-layout% ellipsis-marker%
@@ -707,7 +708,7 @@
 
 (define sequence%
   (class inline-diagram%
-    (init-field subs [min-gap 0] [extra-width-absorb 0.2])
+    (init-field subs [min-gap 0] [flex-absorb 0.2])
     (unless (> (length subs) 0)
       (raise-arguments-error 'sequence "must sequence at least one diagram"))
 
@@ -716,26 +717,31 @@
        (λ (wrap-spec)
          (let ([wrapped
                 (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec]
-                     [min-gap min-gap] [extra-width-absorb extra-width-absorb])])
+                     [min-gap min-gap] [flex-absorb flex-absorb])])
            (list (get-field min-content wrapped) (get-field max-content wrapped) wrapped)))
        (combinations (range (- (length subs) 1)))))
 
-    (super-new [min-content (apply min (map first wraps-measures))]
-               [max-content (apply max (map second wraps-measures))]
+    (super-new [min-content (first (last wraps-measures))]
+               [max-content (second (first wraps-measures))]
                [flex #t])
+    (inherit-field min-content max-content)
 
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested tips don't matter
-      (send (let ([fitting (filter (λ (wm) (<= (second wm) width)) wraps-measures)])
-              (third
-               (if (empty? fitting) (argmin first wraps-measures) (argmax second fitting))))
+      (send (cond
+              [(= width min-content) (third (last wraps-measures))]
+              [(= width max-content) (third (first wraps-measures))]
+              [else
+               (let ([fitting (filter (λ (wm) (<= (second wm) width)) wraps-measures)])
+                 (third
+                  (if (empty? fitting) (argmin first wraps-measures) (argmax second fitting))))])
             lay-out width start-tip end-tip direction))))
 
 (define (+map f . ls) (apply + (apply map f ls)))
 
 (define wrapped-sequence%
   (class inline-diagram%
-    (init-field subs wrap-spec [min-gap 0] [extra-width-absorb 0.2])
+    (init-field subs wrap-spec [min-gap 0] [flex-absorb 0.2])
     (unless (andmap (λ (break) (<= 0 break (- (length subs) 2))) wrap-spec)
       (raise-arguments-error
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
@@ -767,27 +773,30 @@
                     ; w- bindings will add up to the width for each sub
                     [w-min-contents (map (λ (s) (get-field min-content s)) row)]
                     [w-stack-struts
-                     (map (λ (s) (if ((is-a?/c stack%) s) (* 2 min-strut-width) 0)) row)]
+                     (map (λ (s) (if (is-a? s stack%) (* 2 min-strut-width) 0)) row)]
                     [available-width
                      (- available-width (apply + w-min-contents) (apply + w-stack-struts))]
+                    [remaining-contents (map (λ (s mc) (- (get-field max-content s) mc))
+                                             row w-min-contents)]
+                    [total-remaining-contents (apply + remaining-contents)]
+                    [w-grow-content
+                     (if (= total-remaining-contents 0) (make-list (length row) 0)
+                         (map (λ (remc)
+                                (min remc (* available-width (/ remc total-remaining-contents))))
+                              remaining-contents))]
+                    [available-width (- available-width (apply + w-grow-content))]
                     ; x- bindings will add up to the absorbed space
-                    [x-initial (* extra-width-absorb available-width)]
+                    [x-initial (* flex-absorb available-width)]
                     [available-width (- available-width x-initial)]
-                    [max-contents (map (λ (s) (get-field max-content s)) row)]
-                    [total-max-contents (apply + max-contents)]
-                    [flexs (map (λ (s) (get-field flex s)) row)]
-                    [w-nonflex-subs
-                     (map (λ (f maxc minc)
-                            (if f 0 (min (- maxc minc) ; "top up" to at most maxc
-                                         (* available-width maxc (/ total-max-contents)))))
-                          flexs max-contents w-min-contents)]
-                    [available-width (- available-width (apply + w-nonflex-subs))]
-                    [flex-max-contents (+map (λ (f mc) (if f mc 0)) flexs max-contents)]
-                    [w-flex-subs
-                     (map (λ (f mc) (if f (* available-width mc (/ flex-max-contents)) 0))
-                          flexs max-contents)]
-                    [x-post-flex (- available-width (apply + w-flex-subs))]
-                    [w-total (map + w-min-contents w-stack-struts w-nonflex-subs w-flex-subs)]
+                    [flex-max-contents
+                     (map (λ (s) (if (get-field flex s) (get-field max-content s) 0)) row)]
+                    [total-flex-max-contents (apply + flex-max-contents)]
+                    [w-grow-flex
+                     (if (= total-flex-max-contents 0) (make-list (length row) 0)
+                         (map (λ (fmc) (* available-width (/ fmc total-flex-max-contents)))
+                              flex-max-contents))]
+                    [x-post-flex (- available-width (apply + w-grow-flex))]
+                    [w-total (map + w-min-contents w-stack-struts w-grow-content w-grow-flex)]
                     ; TODO tips
                     [sub-layouts
                      (map (λ (s w) (send s lay-out w 'default 'default direction)) row w-total)])
