@@ -659,8 +659,17 @@
              [clamped-available-width
               ((if flex (λ (a b) b) min) max-content (max min-content available-width))]
              [layout-top (send diag-top lay-out clamped-available-width 'bot 'bot direction)]
-             [layout-bot (send diag-bot lay-out clamped-available-width 'top 'top
-                               (if (eq? polarity '+) direction (direction-toggle direction)))]
+             [layout-bot
+              (if (eq? polarity '+)
+                  (send diag-bot lay-out clamped-available-width 'top 'top direction)
+                  (let ([arrow (new hstrut% [physical-width 0] [always-arrow #t]
+                                    [direction (direction-toggle direction)])])
+                    (new happend-layout%
+                         [subs (list arrow
+                                     (send diag-bot lay-out clamped-available-width 'top 'top
+                                           (direction-toggle direction))
+                                     arrow)]
+                         [fuse? #t] [direction (direction-toggle direction)])))]
              [justified-layouts
               (map
                (λ (layout)
