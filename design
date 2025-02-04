@@ -1,3 +1,14 @@
+2025-01-29
+==========
+
+among equal heights, smallest max-content ?
+
+choosing between wraps, some function of max-content and height, not separable
+
+min(h, mcw)
+
+TODO: is there a situation in which h-w curve is not monotonic
+
 2025-01-22
 ==========
 
@@ -7,6 +18,10 @@ text-box does not have its own tips; rather, station lays out as an happend with
 but! vappend has its own tips because the shape depends on internals
   (cannot attach later)
   plus, arrows would not be out of alignment if the tips are curved and hence "off-limits"
+
+every diagram needs a -content-v and a -content-h for whether you request v or h tips
+is too much layout computation happening at the diagram level?
+all layouts make a tip distinction and need to know their tips
 
 2025-01-21
 ==========
