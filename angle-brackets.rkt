@@ -484,7 +484,7 @@
 (define text-marker%
   (class text-box%
     (super-new [terminal? #f] [padding-x min-strut-width])
-    (define y-alignment-magic (* (the-font-size) 0.23))
+    (init-field [y-alignment-magic (* (the-font-size) 0.23)])
     (inherit-field label padding-x)
     (define/override (render x y)
       (let* ([box-x x]
@@ -497,7 +497,7 @@
 
 (define ellipsis-marker%
   (class text-marker%
-    (super-new [label "…"])))
+    (super-new [label "…"] [y-alignment-magic (* (the-font-size) 0.12)])))
 
 (define random-marker%
   (class text-marker%
