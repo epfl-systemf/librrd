@@ -109,7 +109,7 @@
                 [direction 'ltr])
     (define/pubment tip-y
       (case-lambda
-        [(side) (cddr (assoc side tips))]
+        [(side) (cddr (assq side tips))]
         [(side spec) (inner #f tip-y side spec)]))
     (abstract render #;(render x y))))
 
@@ -122,7 +122,7 @@
     (init-field [(subs common-subs)])
     (define side-struts?
       (for/list ([side '(left right)])
-        (cons side (not (memq (cdr (assoc side tip-specs)) '(top bot none))))))
+        (cons side (not (memq (cdr (assq side tip-specs)) '(top bot none))))))
 
     (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
       ; inexact equality
@@ -131,8 +131,8 @@
                                "sub-widths" sub-widths))
       (super-new
        [physical-width (+ (first sub-widths)
-                          (if (cdr (assoc 'left side-struts?)) min-strut-width 0)
-                          (if (cdr (assoc 'right side-struts?)) min-strut-width 0))]
+                          (if (cdr (assq 'left side-struts?)) min-strut-width 0)
+                          (if (cdr (assq 'right side-struts?)) min-strut-width 0))]
        [physical-height
         (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
            (* (- (length subs) 1) row-gap))]))
@@ -149,7 +149,7 @@
     (check-directions)
 
     (define/overment (render x y)
-      (let ([sub-x (+ x (if (cdr (assoc 'left side-struts?)) min-strut-width 0))])
+      (let ([sub-x (+ x (if (cdr (assq 'left side-struts?)) min-strut-width 0))])
         (let-values
             ([(sub-renders sub-ys)
               (for/fold
@@ -167,7 +167,7 @@
            `((set-pen ,(the-strut-pen)))
            (for/list ([side '(left right)]
                       [tip-x (list x (+ x physical-width (- min-strut-width)))]
-                      #:when (cdr (assoc side side-struts?)))
+                      #:when (cdr (assq side side-struts?)))
              `(draw-line ,tip-x ,(+ y (tip-y side))
                          ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))
            (inner '() render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
@@ -182,10 +182,10 @@
 
     (define ((get-rows side) sub)
       (if (and (is-a? sub vappend-block-layout%)
-               (not (memq (cadr (assoc side (get-field tips sub)))
+               (not (memq (cadr (assq side (get-field tips sub)))
                           '(top bot))))
           1
-          (cdr (assoc side (get-field num-rows sub)))))
+          (cdr (assq side (get-field num-rows sub)))))
     (define num-rows
       (for/list ([side '(left right)])
         (cons side (apply + (map (get-rows side) subs)))))
@@ -199,7 +199,7 @@
                    (- (get-field physical-height last-sub))
                    (send last-sub tip-y side spec)))]
         [(cons 'logical (? number? row-num))
-         (let* ([num-rows (- (cdr (assoc side num-rows)) 1)])
+         (let* ([num-rows (- (cdr (assq side num-rows)) 1)])
            (unless (<= 0 row-num num-rows)
              (raise-arguments-error
               'vappend-block-layout-tip-y
@@ -227,7 +227,7 @@
                  [else (loop (- n sub-rows 1) next-cumul-y (rest subs))]))))]
         ['default
          (tip-y side (cons 'logical
-                           (quotient (- (cdr (assoc side num-rows)) 1) 2)))]
+                           (quotient (- (cdr (assq side num-rows)) 1) 2)))]
         [else #f]))
 
     (super-new
@@ -296,8 +296,8 @@
 (define inline-layout%
   (class layout%
     (init tips [num-rows '((left . 1) (right . 1))])
-    (unless (and (eq? 'default (cadr (assoc 'left tips)))
-                 (eq? 'default (cadr (assoc 'right tips))))
+    (unless (and (eq? 'default (cadr (assq 'left tips)))
+                 (eq? 'default (cadr (assq 'right tips))))
       (raise-arguments-error 'inline-layout "tip specs must be 'default"
                              "tips" tips))
     (super-new [num-rows num-rows] [tips tips])
@@ -527,9 +527,9 @@
           init-subs)])
 
     (define expose-first-left-tips?
-      (memq (cadr (assoc 'left (get-field tips (first subs)))) '(top bot)))
+      (memq (cadr (assq 'left (get-field tips (first subs)))) '(top bot)))
     (define expose-last-right-tips?
-      (memq (cadr (assoc 'right (get-field tips (last subs)))) '(top bot)))
+      (memq (cadr (assq 'right (get-field tips (last subs)))) '(top bot)))
 
     (unless (>= (length subs) 1)
       (raise-arguments-error
@@ -590,10 +590,10 @@
      [physical-height height]
      [tips `((left default . ,left-tip) (right default . ,right-tip))]
      [num-rows `((left . ,(if expose-first-left-tips?
-                              (cdr (assoc 'left (get-field num-rows (first subs))))
+                              (cdr (assq 'left (get-field num-rows (first subs))))
                               1))
                  (right . ,(if expose-last-right-tips?
-                               (cdr (assoc 'right (get-field num-rows (last subs))))
+                               (cdr (assq 'right (get-field num-rows (last subs))))
                                1)))])
 
     (inherit-field direction)
