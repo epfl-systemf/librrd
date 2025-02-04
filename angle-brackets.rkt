@@ -10,7 +10,8 @@
  layout% text-box% hstrut% happend-layout% ellipsis-marker%
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
  diagram% block-diagram% stack%
- inline-diagram% sequence% wrapped-sequence% station% epsilon%)
+ inline-diagram% sequence% wrapped-sequence% station% epsilon%
+ desugar diagram)
 
 
 (define (display-expr k) (begin (displayln k) k))
@@ -899,3 +900,37 @@
                 direction min-gap)))
            wrapped-subs)]
          [style 'marker] [marker (new ellipsis-marker% [direction direction])])))))
+
+(define (desugar expr)
+  (match expr
+    [(? string?) (if (and (string-prefix? expr "[") (string-suffix? expr "]"))
+                       (list 'nonterm (substring expr 1 (- (string-length expr) 1)))
+                       (list 'term expr))]
+    ['epsilon '(epsilon)]
+    [(or (list* '<> '+ exprs) (list* '+ exprs))
+     (case (length exprs)
+       [(0) '(epsilon)]
+       [(1) (desugar (first exprs))]
+       [(2) `(<> + ,(desugar (first exprs)) ,(desugar (second exprs)))]
+       [else `(<> + ,(desugar (first exprs)) ,(desugar `(<> + ,@(rest exprs))))])]
+    [(list* '<> '- exprs)
+     (case (length exprs)
+       [(2) `(<> - ,(desugar (first exprs)) ,(desugar (second exprs)))]
+       [else (raise-arguments-error
+              'desugar "negative polarity stack takes exactly two arguments"
+              "exprs" exprs)])]
+    [(list* 'seq exprs) (cons 'seq (map desugar exprs))]
+    [(? list?) (cons 'seq (map desugar expr))]
+    [_ expr]))
+
+(define (diagram expr)
+  (let rec ([expr (desugar expr)] [in-stack? #f])
+    (match expr
+      ['(epsilon) (new epsilon%)]
+      [(list 'term label) (new station% [terminal? #t] [label label])]
+      [(list 'nonterm label) (new station% [terminal? #f] [label label])]
+      [(list '<> polarity expr-top expr-bot)
+       (new stack% [diag-top (rec expr-top #t)] [diag-bot (rec expr-bot #t)]
+            [polarity polarity] [flex in-stack?])]
+      [(list* 'seq exprs)
+       (new sequence% [subs (map (λ (e) (rec e #f)) exprs)])])))
