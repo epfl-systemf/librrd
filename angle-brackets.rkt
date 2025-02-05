@@ -694,14 +694,13 @@
              [layout-bot
               (if (eq? polarity '+)
                   (send diag-bot lay-out clamped-available-width 'top 'top direction)
-                  (let ([arrow (new hstrut% [physical-width 0] [always-arrow #t]
-                                    [direction (direction-toggle direction)])])
-                    (new happend-layout%
-                         [subs (list arrow
-                                     (send diag-bot lay-out clamped-available-width 'top 'top
-                                           (direction-toggle direction))
-                                     arrow)]
-                         [fuse? #t] [direction (direction-toggle direction)])))]
+                  (let ([lb (send diag-bot lay-out clamped-available-width 'top 'top
+                                  (direction-toggle direction))])
+                    (if (is-a? diag-bot stack%) lb
+                        (let ([arrow (new hstrut% [physical-width 0] [always-arrow #t]
+                                          [direction (direction-toggle direction)])])
+                          (new happend-layout% [subs (list arrow lb arrow)]
+                               [fuse? #t] [direction (direction-toggle direction)])))))]
              [justified-layouts
               (map
                (λ (layout)
