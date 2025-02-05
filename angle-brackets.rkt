@@ -16,6 +16,8 @@
 
 (define (display-expr k) (begin (displayln k) k))
 
+(define (~= x y) (> 0.0001 (abs (- x y))))
+
 ;; a type of align-items
 (define (center total-width this-width)
   (/ (- total-width this-width) 2))
@@ -127,7 +129,7 @@
 
     (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
       ; inexact equality
-      (unless (> 0.0001 (- (apply max sub-widths) (apply min sub-widths)))
+      (unless (~= (apply max sub-widths) (apply min sub-widths))
         (raise-arguments-error 'vappend-layout "subs must be equal widths"
                                "sub-widths" sub-widths))
       (super-new
@@ -662,7 +664,7 @@
     (field
      [global-wraps-measures
       (if wrapped?
-          (if (> 0.0001 (- max-content min-content))
+          (if (~= max-content min-content)
               (list (list (cons 'natural-width min-content)
                           (cons 'height height)
                           (cons 'wrap this)))
@@ -777,7 +779,7 @@
          (let ([wrapped
                 (new wrapped-sequence% [wrap-spec (first x)] [subs (rest x)]
                      [min-gap min-gap] [flex-absorb flex-absorb])])
-           (unless (> 0.0001 (- (get-field max-content wrapped) (get-field min-content wrapped)))
+           (unless (~= (get-field max-content wrapped) (get-field min-content wrapped))
              (raise-arguments-error
               'sequence%-global-wraps-measures
               "max- and min-content must be equal for a globally wrapped diagram"
@@ -803,10 +805,10 @@
          (if (empty? fitting)
              (cdr (assq 'wrap (last wraps-measures)))
              (let* ([least-height (apply min (map (λ (w) (cdr (assoc 'height w))) fitting))]
-                    [lh-wraps (filter (λ (w) (> 0.001 (- (cdr (assoc 'height w)) least-height)))
+                    [lh-wraps (filter (λ (w) (~= (cdr (assoc 'height w)) least-height))
                                       fitting)]
                     [least-width (apply min (map (λ (w) (cdr (assoc 'natural-width w))) lh-wraps))]
-                    [lw-wraps (filter (λ (w) (> 0.001 (- (cdr (assoc 'natural-width w)) least-width)))
+                    [lw-wraps (filter (λ (w) (~= (cdr (assoc 'natural-width w)) least-width))
                                       lh-wraps)])
                (when (< 1 (length lw-wraps))
                  (displayln "found it")
