@@ -256,8 +256,8 @@
                      [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))]
                      [arc-x (list 0 (- arc-size))]
                      [arc-theta (list (/ pi 2) 0)])
-            `((draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side) (/ arc-size 2))
-                         ,bracket-x ,(+ bot-y (send bot-sub tip-y side) (- (/ arc-size 2))))
+            `((draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side) #;(/ arc-size 2))
+                         ,bracket-x ,(+ bot-y (send bot-sub tip-y side) #;(- (/ arc-size 2))))
               #;(draw-arc
                ,(+ bracket-x arc-x) ,(+ top-y (send top-sub tip-y side))
                ,arc-size ,arc-size
@@ -500,7 +500,7 @@
 
 (define ellipsis-marker%
   (class text-marker%
-    (super-new [label "…"] [y-alignment-magic (* (the-font-size) 0.12)])))
+    (super-new [label "…"] [y-alignment-magic (* (the-font-size) 0.08)])))
 
 (define random-marker%
   (class text-marker%
@@ -842,7 +842,7 @@
     (define wrapped-subs (break-at subs wrap-spec))
 
     (define maybe-marker-width
-      (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new ellipsis-marker%)))))
+      (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new random-marker%)))))
     (define (sum-content field-name)
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-get-field field-name s)) row)
                                      (* (- (length row) 1) min-gap)
@@ -901,7 +901,7 @@
                 (directional-reverse direction sub-layouts)
                 direction min-gap)))
            wrapped-subs)]
-         [style 'marker] [marker (new ellipsis-marker% [direction direction])])))))
+         [style 'marker] [marker (new random-marker% [direction direction])])))))
 
 (define (desugar expr)
   (match expr
