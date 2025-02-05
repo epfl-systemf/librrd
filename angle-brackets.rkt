@@ -425,22 +425,24 @@
     (define/override (render x y) '())))
 
 (define hstrut%
-  (class hspace%
+  (class inline-layout%
     (init-field [always-arrow #f])
-    (super-new #;[physical-width pass-through] #;[direction pass-through])
+    (define base-diff (* (the-font-size) 0.125))
+    (define y-diff (* base-diff 2))
+    (super-new [physical-height (* 2 y-diff)]
+               [tips `((left default . ,y-diff) (right default . ,y-diff))]
+               #;[physical-width pass-through] #;[direction pass-through])
     (inherit-field physical-width direction)
     (define/override (render x y)
       (append
        `((set-pen ,(the-strut-pen))
-         (draw-line ,x ,y ,(+ x physical-width) ,y))
+         (draw-line ,x ,(+ y y-diff) ,(+ x physical-width) ,(+ y y-diff)))
        (if (or always-arrow (>= physical-width (* min-strut-width 7)))
-           (let* ([base-diff (* (the-font-size) 0.125)]
-                  [x-diff ((if (eq? direction 'ltr) + -) (* base-diff 3))]
-                  [y-diff (* base-diff 2)])
+           (let ([x-diff ((if (eq? direction 'ltr) + -) (* base-diff 3))])
              `((draw-lines
                 ((,(- x-diff) . ,(- y-diff)) (,x-diff . 0) (,(- x-diff) . ,y-diff))
                                            ; optical correction
-                ,(+ x (/ physical-width 2) (* x-diff 0.3)) ,y)))
+                ,(+ x (/ physical-width 2) (* x-diff 0.3)) ,(+ y y-diff))))
            '())))
     (define/public (fuse other)
       (unless (is-a? other hstrut%)
