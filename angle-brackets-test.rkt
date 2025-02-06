@@ -6,19 +6,19 @@
 (send my-svg-dc start-doc "")
 (send my-svg-dc start-page)
 
-(define my-target (make-bitmap 1500 500))
+(define my-target (make-bitmap 1500 900))
 (define my-bitmap-dc
   (new bitmap-dc% [bitmap my-target]))
 (send my-bitmap-dc scale 2 2)
 
-(define function-arguments-diagram-global
+#;(define function-arguments-diagram-global
   (diagram '((+ ((+ "DISTINCT" epsilon)
                  (<> - "[expr]" ",")
                  (+ epsilon ("ORDER" "BY" (<> - "[ordering-term]" ","))))
                 "*"
                 epsilon))))
 
-(define compound-select
+#;(define compound-select
   (diagram '((+ ("WITH" (+ epsilon "RECURSIVE") (<> - "[common-table-expression]" ","))
                 epsilon)
              (<> - "[select-core]" (<> + "UNION" ("UNION" "ALL") "INTERSECT" "EXCEPT"))
@@ -83,12 +83,16 @@
             (send (send diag lay-out width 'default 'default 'ltr) render 10 10))
   my-target)
 
-;; (println "width")
-;; (define my-layout (send function-arguments-diagram-global lay-out 300 'default 'default 'rtl))
-;; (println (get-field physical-width my-layout))
-;; (for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send my-layout render 10 10))
-;; my-target
+(define my-diagram
+  (diagram
+   '((+ ("ssaaa" "aaaaB") epsilon) "c")))
 
-(render-layouts! (make-layouts compound-select))
+(define my-layout (send my-diagram lay-out-global 155 '(physical . 0) '(physical . 0) 'ltr))
+(println "width")
+(println (get-field physical-width my-layout))
+(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send my-layout render 10 10))
+my-target
+
+;; (render-layouts! (make-layouts compound-select))
 (send my-svg-dc end-page)
 (send my-svg-dc end-doc)
