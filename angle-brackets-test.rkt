@@ -83,10 +83,11 @@
             (send (send diag lay-out width 'default 'default 'ltr) render 10 10))
   my-target)
 
-;(println "width")
-;(println (get-field physical-width function-arguments-layout))
-;(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send function-arguments-layout render 10 10))
-;my-target
+;; (println "width")
+;; (define my-layout (send function-arguments-diagram-global lay-out 300 'default 'default 'rtl))
+;; (println (get-field physical-width my-layout))
+;; (for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send my-layout render 10 10))
+;; my-target
 
 (render-layouts! (make-layouts compound-select))
 (send my-svg-dc end-page)

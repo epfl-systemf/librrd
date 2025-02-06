@@ -119,69 +119,15 @@
 (define (direction-toggle d)
   (case d [(ltr) 'rtl] [(rtl) 'ltr] [else (raise-argument-error 'd "direction?" d)]))
 
-(define (vappend-common %)
-  (class %
-    (init tip-specs)
-    (init-field [(subs common-subs)])
-    (define side-struts?
-      (for/list ([side '(left right)])
-        (cons side (not (memq (cdr (assq side tip-specs)) '(top bot none))))))
-
-    (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
-      ; inexact equality
-      (unless (~= (apply max sub-widths) (apply min sub-widths))
-        (raise-arguments-error 'vappend-layout "subs must be equal widths"
-                               "sub-widths" sub-widths))
-      (super-new
-       [physical-width (+ (first sub-widths)
-                          (if (cdr (assq 'left side-struts?)) min-strut-width 0)
-                          (if (cdr (assq 'right side-struts?)) min-strut-width 0))]
-       [physical-height
-        (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
-           (* (- (length subs) 1) row-gap))]))
-
-    (inherit tip-y)
-    (inherit-field physical-width direction)
-
-    (define/public (check-directions)
-      (unless (andmap (lambda (s) (eq? (get-field direction s) direction)) subs)
-        (raise-arguments-error
-         'vappend-layout
-         "subs must all have same direction as this layout"
-         "subs" subs "direction" direction)))
-    (check-directions)
-
-    (define/overment (render x y)
-      (let ([sub-x (+ x (if (cdr (assq 'left side-struts?)) min-strut-width 0))])
-        (let-values
-            ([(sub-renders sub-ys)
-              (for/fold
-                  ([sub-y y]
-                   [sub-renders '()]
-                   [sub-ys '()]
-                   #:result (values (apply append sub-renders)
-                                    (reverse sub-ys)))
-                  ([sub subs])
-                (values (+ sub-y (get-field physical-height sub) row-gap)
-                        (cons (send sub render sub-x sub-y) sub-renders)
-                        (cons sub-y sub-ys)))])
-          (append
-           sub-renders
-           `((set-pen ,(the-strut-pen)))
-           (for/list ([side '(left right)]
-                      [tip-x (list x (+ x physical-width (- min-strut-width)))]
-                      #:when (cdr (assq side side-struts?)))
-             `(draw-line ,tip-x ,(+ y (tip-y side))
-                         ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))
-           (inner '() render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
-
 (define (linear-interpolate xstart ystart xend yend x)
   (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
 
 (define vappend-block-layout%
-  (class (vappend-common layout%)
-    (init tip-specs)
-    (init-field subs)
+  (class layout%
+    (init-field tip-specs subs)
+
+    (define/public (side-struts? side)
+      (not (memq (cdr (assq side tip-specs)) '(top bot))))
 
     (define ((get-rows side) sub)
       (if (and (is-a? sub vappend-block-layout%)
@@ -189,9 +135,10 @@
                           '(top bot))))
           1
           (cdr (assq side (get-field num-rows sub)))))
-    (define num-rows
-      (for/list ([side '(left right)])
-        (cons side (apply + (map (get-rows side) subs)))))
+    (init [num-rows
+           (for/list ([side '(left right)])
+             (cons side (apply + (map (get-rows side) subs))))])
+    (define init-num-rows num-rows)
 
     (define/augride (tip-y side spec)
       (match spec
@@ -202,7 +149,7 @@
                    (- (get-field physical-height last-sub))
                    (send last-sub tip-y side spec)))]
         [(cons 'logical (? number? row-num))
-         (let* ([num-rows (- (cdr (assq side num-rows)) 1)])
+         (let* ([num-rows (- (cdr (assq side init-num-rows)) 1)])
            (unless (<= 0 row-num num-rows)
              (raise-arguments-error
               'vappend-block-layout-tip-y
@@ -230,42 +177,84 @@
                  [else (loop (- n sub-rows 1) next-cumul-y (rest subs))]))))]
         ['default
          (tip-y side (cons 'logical
-                           (quotient (- (cdr (assq side num-rows)) 1) 2)))]
+                           (quotient (- (cdr (assq side init-num-rows)) 1) 2)))]
         [else #f]))
 
-    (super-new
-     [tip-specs tip-specs] [common-subs subs] [num-rows num-rows]
-     [tips (map (lambda (s)
-                  (let ([side (car s)] [spec (cdr s)])
-                    (cons side (cons spec (tip-y side spec)))))
-                tip-specs)])
+    (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
+      ; inexact equality
+      (unless (~= (apply max sub-widths) (apply min sub-widths))
+        (raise-arguments-error 'vappend-layout "subs must be equal widths"
+                               "sub-widths" sub-widths))
+      (super-new
+       [physical-width (+ (first sub-widths)
+                          (if (side-struts? 'left) min-strut-width 0)
+                          (if (side-struts? 'right) min-strut-width 0))]
+       [physical-height
+        (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
+           (* (- (length subs) 1) row-gap))]
+       [num-rows init-num-rows]
+       [tips (map (lambda (s)
+                    (let ([side (car s)] [spec (cdr s)])
+                      (cons side (cons spec (tip-y side spec)))))
+                  tip-specs)]))
 
-    (inherit-field direction tips)
+    (inherit-field direction tips physical-width)
 
-    (define/augride (render x y sub-x sub-width sub-ys)
-      (cons
-       `(set-pen ,(the-strut-pen))
-       (let ([top-sub (first subs)]
-             [top-y (first sub-ys)]
-             [bot-sub (last subs)]
-             [bot-y (last sub-ys)]
-             [arc-size (* 2 min-strut-width)])
-         (apply
-          append
-          (for/list ([side '(left right)]
-                     [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))]
-                     [arc-x (list 0 (- arc-size))]
-                     [arc-theta (list (/ pi 2) 0)])
-            `((draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side) #;(/ arc-size 2))
-                         ,bracket-x ,(+ bot-y (send bot-sub tip-y side) #;(- (/ arc-size 2))))
-              #;(draw-arc
-               ,(+ bracket-x arc-x) ,(+ top-y (send top-sub tip-y side))
-               ,arc-size ,arc-size
-               ,arc-theta ,(+ arc-theta (/ pi 2)))
-              #;(draw-arc
-               ,(+ bracket-x arc-x) ,(+ bot-y (send bot-sub tip-y side) (- arc-size))
-               ,arc-size ,arc-size
-               ,(- (- arc-theta) (/ pi 2)) ,(- arc-theta))))))))))
+    (define/public (check-directions)
+      (unless (andmap (lambda (s) (eq? (get-field direction s) direction)) subs)
+        (raise-arguments-error
+         'vappend-layout
+         "subs must all have same direction as this layout"
+         "subs" subs "direction" direction)))
+    (check-directions)
+
+    (define/overment (render x y)
+      (let ([sub-x (+ x (if (side-struts? 'left) min-strut-width 0))])
+        (let-values
+            ([(sub-renders sub-ys)
+              (for/fold
+                  ([sub-y y]
+                   [sub-renders '()]
+                   [sub-ys '()]
+                   #:result (values (apply append sub-renders)
+                                    (reverse sub-ys)))
+                  ([sub subs])
+                (values (+ sub-y (get-field physical-height sub) row-gap)
+                        (cons (send sub render sub-x sub-y) sub-renders)
+                        (cons sub-y sub-ys)))])
+          (append
+           sub-renders
+           `((set-pen ,(the-strut-pen)))
+           (for/list ([side '(left right)]
+                      [tip-x (list x (+ x physical-width (- min-strut-width)))]
+                      #:when (side-struts? side))
+             `(draw-line ,tip-x ,(+ y (tip-y side))
+                         ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))
+           (inner
+            (cons
+             `(set-pen ,(the-strut-pen))
+             (let ([top-sub (first subs)]
+                   [top-y (first sub-ys)]
+                   [bot-sub (last subs)]
+                   [bot-y (last sub-ys)]
+                   [arc-size (* 2 min-strut-width)])
+               (apply
+                append
+                (for/list ([side '(left right)]
+                           [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))]
+                           [arc-x (list 0 (- arc-size))]
+                           [arc-theta (list (/ pi 2) 0)])
+                  `((draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side) #;(/ arc-size 2))
+                               ,bracket-x ,(+ bot-y (send bot-sub tip-y side) #;(- (/ arc-size 2))))
+                    #;(draw-arc
+                       ,(+ bracket-x arc-x) ,(+ top-y (send top-sub tip-y side))
+                       ,arc-size ,arc-size
+                       ,arc-theta ,(+ arc-theta (/ pi 2)))
+                    #;(draw-arc
+                       ,(+ bracket-x arc-x) ,(+ bot-y (send bot-sub tip-y side) (- arc-size))
+                       ,arc-size ,arc-size
+                       ,(- (- arc-theta) (/ pi 2)) ,(- arc-theta)))))))
+            render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
 
 (define vappend-forward-backward-layout%
   (class vappend-block-layout%
@@ -296,84 +285,86 @@
          "second sub must have opposite direction as this layout"
          "second sub" (second subs) "direction" direction)))))
 
-(define inline-layout%
-  (class layout%
-    (init tips [num-rows '((left . 1) (right . 1))])
-    (unless (and (eq? 'default (cadr (assq 'left tips)))
-                 (eq? 'default (cadr (assq 'right tips))))
-      (raise-arguments-error 'inline-layout "tip specs must be 'default"
-                             "tips" tips))
-    (super-new [num-rows num-rows] [tips tips])
-    (define/augment (tip-y side spec)
-      (or (inner #f tip-y side spec)
-          (case spec
-            [(default (logical . 0) top bot) (tip-y side)]
-            [else #f])))))
-
 (define vappend-inline-layout%
-  (class (vappend-common inline-layout%)
-    (init-field subs style [marker #f])
+  (class vappend-block-layout%
+    (init [(init-subs subs)])
+    (init-field style [marker #f])
     ; needed for modifying subs if style is marker below, before super-new.
     ; renamed internally so that after super-new we can inherit "direction".
     (init [(init-direction direction) 'ltr])
 
-    (case style
-      [(marker)
-       (unless (is-a? marker inline-layout%)
+    (define/override (side-struts? side) #f)
+
+    (define subs
+      (case style
+        [(marker)
+         (unless (is-a? marker inline-layout%)
+           (raise-arguments-error
+            'vappend-inline-layout
+            "when style is 'marker, marker must be an inline-layout%"
+            "marker" marker))
+         (if (= (length init-subs) 1) init-subs
+             (let*-values ([(first-subs rest-subs) (split-at init-subs 1)]
+                           [(mid-subs last-subs) (split-at-right rest-subs 1)])
+               (let* ([marker-width (get-field physical-width marker)]
+                      [struct-sub-markers
+                       (for/list ([sub (list (first first-subs) (first last-subs))]
+                                  [maybe-reverse (if (eq? init-direction 'rtl)
+                                                     (list reverse identity)
+                                                     (list identity reverse))])
+                         (new happend-layout% [fuse? #t] [direction init-direction]
+                              [subs (maybe-reverse
+                                     (list (new hstrut% [physical-width marker-width]
+                                                [direction init-direction] [always-arrow #t])
+                                           sub marker))]))])
+                 (append
+                  (list (first struct-sub-markers))
+                  (map (λ (s) (new happend-layout% [direction init-direction]
+                                   [subs (list marker s marker)]))
+                       mid-subs)
+                  (list (second struct-sub-markers))))))]
+
+        [(boustrophedon)
+         (unless (odd? (length init-subs))
+           (raise-arguments-error
+            'vappend-inline-layout
+            "when style is 'boustrophedon, must have odd number of subs"
+            "subs" init-subs))
+         init-subs]
+
+        [(bare) init-subs]
+
+        [else
          (raise-arguments-error
-          'vappend-inline-layout
-          "when style is 'marker, marker must be an inline-layout%"
-          "marker" marker))
-       (unless (= (length subs) 1)
-         (let*-values ([(first-subs rest-subs) (split-at subs 1)]
-                       [(mid-subs last-subs) (split-at-right rest-subs 1)])
-           (let* ([marker-width (get-field physical-width marker)]
-                  [struct-sub-markers
-                   (for/list ([sub (list (first first-subs) (first last-subs))]
-                              [maybe-reverse (if (eq? init-direction 'rtl)
-                                                 (list reverse identity)
-                                                 (list identity reverse))])
-                     (new happend-layout% [fuse? #t] [direction init-direction]
-                          [subs (maybe-reverse
-                                 (list (new hstrut% [physical-width marker-width]
-                                            [direction init-direction] [always-arrow #t])
-                                       sub marker))]))])
-             (set! subs (append
-                         (list (first struct-sub-markers))
-                         (map (λ (s) (new happend-layout% [direction init-direction]
-                                          [subs (list marker s marker)]))
-                              mid-subs)
-                         (list (second struct-sub-markers)))))))]
+          'vappend-inline-layout "style must be 'bare, 'marker, or 'boustrophedon"
+          "style" style)]))
 
-      [(boustrophedon)
-       (unless (odd? (length subs))
-         (raise-arguments-error
-          'vappend-inline-layout
-          "when style is 'boustrophedon, must have odd number of subs"
-          "subs" subs))]
+    (init [tip-specs '((left . default) (right . default))])
+    (for ([side '(left right)])
+      (let* ([tip-spec (assoc side tip-specs)] [ts (cdr tip-spec)])
+        (unless
+            (or (eq? ts 'default)
+                (and (eq? (car ts) 'logical) (<= 0 (cdr ts)) (< (cdr ts) (length subs))))
+          (raise-arguments-error
+           'vappend-inline-layout
+           "tip spec must be 'default, or logical row in [0, R-1]"
+           "tip-spec" tip-spec))))
 
-      [(bare) 'pass]
-
-      [else
-       (raise-arguments-error
-        'vappend-inline-layout "style must be 'bare, 'marker, or 'boustrophedon"
-        "style" style)])
+    (define-values (left-tip-spec right-tip-spec)
+      (apply values ((if (eq? init-direction 'rtl) reverse identity)
+                     `((logical . 0) (logical . ,(- (length subs) 1))))))
+    (define/override (tip-y side spec)
+      (match spec
+        ['default
+         (case side
+           [(left) (super tip-y 'left left-tip-spec)]
+           [(right) (super tip-y 'right right-tip-spec)])]
+        [else (super tip-y side spec)]))
 
     (super-new
-     [common-subs subs] [direction init-direction]
-     ;; so that vappend-common doesn't draw tips
-     [tip-specs '((left . none) (right . none))]
-     [tips
-      (let ([start-tip (λ (side) (send (first subs) tip-y side))]
-            [end-tip (λ (side)
-                       (let-values ([(nonlast-subs last-sub) (split-at-right subs 1)])
-                         (+ (send (first last-sub) tip-y side)
-                            (apply + (map (lambda (s) (get-field physical-height s))
-                                          nonlast-subs))
-                            (* (length nonlast-subs) row-gap))))])
-        (if (eq? init-direction 'ltr)
-            `((left default . ,(start-tip 'left)) (right default . ,(end-tip 'right)))
-            `((left default . ,(end-tip 'left)) (right default . ,(start-tip 'right)))))])
+     [subs subs] [direction init-direction]
+     [num-rows `((left . ,(length subs)) (right . ,(length subs)))]
+     [tip-specs tip-specs])
 
     (inherit-field direction)
 
@@ -416,6 +407,16 @@
              (not end-right?)))
           '()))))
 
+(define inline-layout%
+  (class layout%
+    (init [num-rows '((left . 1) (right . 1))])
+    (super-new [num-rows num-rows])
+    (define/augment (tip-y side spec)
+      (or (inner #f tip-y side spec)
+          (case spec
+            [(default (logical . 0) top bot) (tip-y side)]
+            [else #f])))))
+
 (define hspace%
   (class inline-layout%
     (init [(init-width physical-width) min-strut-width])
@@ -433,6 +434,7 @@
                [tips `((left default . ,y-diff) (right default . ,y-diff))]
                #;[physical-width pass-through] #;[direction pass-through])
     (inherit-field physical-width direction)
+
     (define/override (render x y)
       (append
        `((set-pen ,(the-strut-pen))
@@ -444,6 +446,7 @@
                                            ; optical correction
                 ,(+ x (/ physical-width 2) (* x-diff 0.3)) ,(+ y y-diff))))
            '())))
+
     (define/public (fuse other)
       (unless (is-a? other hstrut%)
         (raise-arguments-error 'hstrut "can only fuse with another hstrut" "other" other))
@@ -466,6 +469,7 @@
        [tips `((left default . ,(/ physical-height 2))
                (right default . ,(/ physical-height 2)))]))
     (inherit-field physical-height)
+
     (define/override (render x y)
       (let* ([box-width (+ label-width (* 2 padding-x))]
              [box-height physical-height]
