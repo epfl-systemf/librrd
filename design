@@ -1,3 +1,36 @@
+2025-02-06
+==========
+
+why allow for aligning the boxes and then choosing tips?
+  aligning boxes looks unnatural, outside the schema I have for RRDs
+
+today's work sets up for tomorrow:
+* align-items policies beyond physical-0
+* refine global optimality definition
+* think about the TODO about physical tips for block layout
+
+later, leave space for curves. should be simple now that widths depend on requested tips everywhere.
+
+2025-02-05
+==========
+
+currently: choose tips (default ones), then align "pulled taut"
+todo:
+* choose non-default tips (and then align as usual). which ones? top, mid, bot?
+* align first (start center end ?), then choose tips that minimize (avoid?) curviness
+* sequences have more than one tip on either side: curvy connectors
+  so atoms have only one tip, same height both sides;
+  and seqs & stacks have continuous tips, each side indep.
+  consistent
+
+possible factors of optimality
+* height
+* natural width
+* number of wraps, total or each level weighted
+  (inner worse than outer)
+* compactness
+
+
 2025-01-29
 ==========
 
