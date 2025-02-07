@@ -676,7 +676,7 @@
             (if (empty? jls) '()
                 (let ([rests (if (empty? los) '()
                                  (cons (car los) (loop (cdr los) (cdr jls))))])
-                  (if (zero? (car jls)) rests
+                  (if (~= 0 (car jls)) rests
                       (cons (new hstrut% [physical-width (car jls)] [direction direction])
                             rests)))))])
     (new happend-layout% [subs layouts-and-struts] [fuse? #t] [direction direction])))
