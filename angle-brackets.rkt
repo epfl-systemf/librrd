@@ -20,7 +20,8 @@
 
 ;; a type of align-items
 ;; this is a dummy policy, affects nothing, TODO
-(define top '(physical . 0))
+(define top '((name . top) (value physical . 0)))
+(define baseline '((name . baseline) (value . default)))
 
 ;; a type of justify-content
 ; contract: must not exceed total-space
@@ -354,9 +355,7 @@
       (apply values ((if (eq? init-direction 'rtl) reverse identity) '(left right))))
     (define/override (tip-y side spec)
       (match spec
-        ['default (tip-y side '(logical . 0))]
-        ['top (tip-y side '(physical . 0))]
-        ['bot (tip-y side '(physical . 1))]
+        [(or 'default 'top 'bot) (tip-y side '(logical . 0))]
         [(cons 'physical (? number? row-num))
          (unless (<= 0 row-num 1)
            (raise-arguments-error
@@ -376,18 +375,13 @@
                   (* (length nonlast-subs) row-gap))))]
         [else (super tip-y side spec)]))
 
-    (define needs-side-bracket?
-      (for/list ([side (list start-side end-side)]
-                 [defaults '((default top (physical . 0) (logical . 0))
-                             (default bot (physical . 1) (logical . 0)))])
-        (cons side (not (member (cdr (assq side tip-specs)) defaults)))))
     (define needs-side-strut?
       (for/list ([side (list start-side end-side)]
                  [defaults '((default top bot (physical . 0) (logical . 0))
                              (default top bot (physical . 1) (logical . 0)))])
         (cons side (not (member (cdr (assq side tip-specs)) defaults)))))
-    (define/override (side-struts? side)
-      (and (> (length subs) 1) (cdr (assq side needs-side-strut?))))
+    (define needs-side-bracket? needs-side-strut?)
+    (define/override (side-struts? side) (cdr (assq side needs-side-strut?)))
 
     (super-new
      [subs subs] [direction init-direction]
@@ -699,14 +693,20 @@
           [(or 'default (cons 'logical _) (cons 'physical _)) min-strut-width]
           [else 0])))
 
+    (define-values (top-end-tip bot-start-tip)
+      (let ([align-items-name (cdr (assq 'name (align-items)))]
+            [align-items-value (cdr (assq 'value (align-items)))])
+        (apply
+         values
+         (for/list ([diag (list diag-top diag-bot)] [name '(top bot)] [default '(bot top)])
+           (if (and (equal? align-items-name name)
+                    (or (is-a? diag sequence%) (is-a? diag wrapped-sequence%)))
+               align-items-value default)))))
+
     (define (-content which start-tip end-tip)
-      (let ([top-start-tip (if (equal? start-tip '(physical . 0)) start-tip 'bot)]
-            [top-end-tip (if (equal? end-tip '(physical . 0)) end-tip 'bot)]
-            [bot-start-tip (if (equal? start-tip '(physical . 1)) start-tip 'top)]
-            [bot-end-tip (if (equal? end-tip '(physical . 1)) end-tip 'top)])
-        (+ (max (dynamic-send diag-top which top-start-tip top-end-tip)
-                (dynamic-send diag-bot which bot-start-tip bot-end-tip))
-           (maybe-tips-width start-tip end-tip))))
+      (+ (max (dynamic-send diag-top which 'bot top-end-tip)
+              (dynamic-send diag-bot which bot-start-tip 'top))
+         (maybe-tips-width start-tip end-tip)))
 
     (define/override (min-content start-tip end-tip)
       (-content 'min-content start-tip end-tip))
@@ -749,15 +749,11 @@
                (max-content start-tip end-tip)
                (max (min-content start-tip end-tip) width))]
              [clamped-available-width (- clamped-width (maybe-tips-width start-tip end-tip))]
-             [top-start-tip (if (equal? start-tip '(physical . 0)) start-tip 'bot)]
-             [top-end-tip (if (equal? end-tip '(physical . 0)) end-tip 'bot)]
-             [layout-top (send diag-top lay-out clamped-available-width top-start-tip top-end-tip direction)]
-             [bot-start-tip (if (equal? start-tip '(physical . 1)) start-tip 'top)]
-             [bot-end-tip (if (equal? end-tip '(physical . 1)) end-tip 'top)]
+             [layout-top (send diag-top lay-out clamped-available-width 'bot top-end-tip direction)]
              [layout-bot
               (if (eq? polarity '+)
-                  (send diag-bot lay-out clamped-available-width bot-start-tip bot-end-tip direction)
-                  (let ([lb (send diag-bot lay-out clamped-available-width bot-start-tip bot-end-tip
+                  (send diag-bot lay-out clamped-available-width bot-start-tip 'top direction)
+                  (let ([lb (send diag-bot lay-out clamped-available-width bot-start-tip 'top
                                   (direction-toggle direction))])
                     (if (is-a? diag-bot stack%) lb
                         (let ([arrow (new hstrut% [physical-width 0] [always-arrow #t]
@@ -865,9 +861,7 @@
     (super-new [flex #t])
 
     (define/override (min-content start-tip end-tip)
-      (+ (send (last wraps-measures) min-content start-tip end-tip)
-         (if (member start-tip '(default top bot (logical . 0) (physical . 0))) 0 min-strut-width)
-         (if (member end-tip '(default top bot (logical . 0) (physical . 1))) 0 min-strut-width)))
+      (send (last wraps-measures) min-content start-tip end-tip))
 
     (define/override (max-content start-tip end-tip)
       (send (first wraps-measures) min-content start-tip end-tip))
@@ -911,16 +905,15 @@
     (define maybe-marker-width
       (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new random-marker%)))))
     (define (maybe-tips-width start-tip end-tip)
-      (if (empty? wrap-spec) 0
-          (+ (if (member start-tip '(default top bot (logical . 0) (physical . 0))) 0
-                 min-strut-width)
-             (if (member end-tip '(default top bot (logical . 0) (physical . 1))) 0
-                 min-strut-width))))
+      (+ (if (member start-tip '(default top bot (logical . 0) (physical . 0))) 0
+             min-strut-width)
+         (if (member end-tip '(default top bot (logical . 0) (physical . 1))) 0
+             min-strut-width)))
     (super-new [flex #t])
 
     ;; TODO: align-items affects this!
-    (define START-TIP '(physical . 0))
-    (define END-TIP '(physical . 0))
+    (define START-TIP (cdr (assq 'value (align-items))))
+    (define END-TIP (cdr (assq 'value (align-items))))
 
     (define (-content which start-tip end-tip)
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which START-TIP END-TIP)) row)
