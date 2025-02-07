@@ -2,7 +2,7 @@
 (require racket/draw racket/help)
 (require (for-syntax racket/syntax))
 (provide
- align-items top
+ align-items baseline top center bottom
  justify-content space-evenly flex-end
  min-strut-width row-gap
  the-font the-font-size
@@ -18,10 +18,11 @@
 
 (define (~= x y) (> 0.0001 (abs (- x y))))
 
-;; a type of align-items
-;; this is a dummy policy, affects nothing, TODO
-(define top '((name . top) (value physical . 0)))
+;; types of align-items
 (define baseline '((name . baseline) (value . default)))
+(define top '((name . top) (value physical . 0)))
+(define center '((name . center) (value physical . 0.5)))
+(define bottom '((name . bottom) (value physical . 1)))
 
 ;; a type of justify-content
 ; contract: must not exceed total-space
@@ -694,18 +695,20 @@
           [else 0])))
 
     (define-values (top-end-tip bot-start-tip)
-      (let ([align-items-name (cdr (assq 'name (align-items)))]
-            [align-items-value (cdr (assq 'value (align-items)))])
-        (apply
-         values
-         (for/list ([diag (list diag-top diag-bot)] [name '(top bot)] [default '(bot top)])
-           (if (and (equal? align-items-name name)
-                    (or (is-a? diag sequence%) (is-a? diag wrapped-sequence%)))
-               align-items-value default)))))
+      (apply
+       values
+       (for/list ([diag (list diag-top diag-bot)]
+                  [names '((top center) (bottom center))]
+                  [default '(bot top)]
+                  [value '((physical . 0) (physical . 1))])
+         (λ _ (let ([align-items-name (cdr (assq 'name (align-items)))])
+                (if (and (memq align-items-name names)
+                         (or (is-a? diag sequence%) (is-a? diag wrapped-sequence%)))
+                    value default))))))
 
     (define (-content which start-tip end-tip)
-      (+ (max (dynamic-send diag-top which 'bot top-end-tip)
-              (dynamic-send diag-bot which bot-start-tip 'top))
+      (+ (max (dynamic-send diag-top which 'bot (top-end-tip))
+              (dynamic-send diag-bot which (bot-start-tip) 'top))
          (maybe-tips-width start-tip end-tip)))
 
     (define/override (min-content start-tip end-tip)
@@ -749,11 +752,11 @@
                (max-content start-tip end-tip)
                (max (min-content start-tip end-tip) width))]
              [clamped-available-width (- clamped-width (maybe-tips-width start-tip end-tip))]
-             [layout-top (send diag-top lay-out clamped-available-width 'bot top-end-tip direction)]
+             [layout-top (send diag-top lay-out clamped-available-width 'bot (top-end-tip) direction)]
              [layout-bot
               (if (eq? polarity '+)
-                  (send diag-bot lay-out clamped-available-width bot-start-tip 'top direction)
-                  (let ([lb (send diag-bot lay-out clamped-available-width bot-start-tip 'top
+                  (send diag-bot lay-out clamped-available-width (bot-start-tip) 'top direction)
+                  (let ([lb (send diag-bot lay-out clamped-available-width (bot-start-tip) 'top
                                   (direction-toggle direction))])
                     (if (is-a? diag-bot stack%) lb
                         (let ([arrow (new hstrut% [physical-width 0] [always-arrow #t]
@@ -911,12 +914,11 @@
              min-strut-width)))
     (super-new [flex #t])
 
-    ;; TODO: align-items affects this!
-    (define START-TIP (cdr (assq 'value (align-items))))
-    (define END-TIP (cdr (assq 'value (align-items))))
+    (define (START-TIP) (cdr (assq 'value (align-items))))
+    (define (END-TIP) (cdr (assq 'value (align-items))))
 
     (define (-content which start-tip end-tip)
-      (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which START-TIP END-TIP)) row)
+      (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which (START-TIP) (END-TIP))) row)
                                      (* (- (length row) 1) min-gap)))
                          wrapped-subs))
          maybe-marker-width
@@ -940,9 +942,9 @@
              (let* (; available-width will be rebound at every step
                     [available-width (- available-width (* min-gap (- (length row) 1)))]
                     ; w- bindings will add up to the width for each sub
-                    [w-min-contents (map (λ (s) (send s min-content START-TIP END-TIP)) row)]
+                    [w-min-contents (map (λ (s) (send s min-content (START-TIP) (END-TIP))) row)]
                     [available-width (- available-width (apply + w-min-contents))]
-                    [remaining-contents (map (λ (s mc) (- (send s max-content START-TIP END-TIP) mc))
+                    [remaining-contents (map (λ (s mc) (- (send s max-content (START-TIP) (END-TIP)) mc))
                                              row w-min-contents)]
                     [total-remaining-contents (apply + remaining-contents)]
                     [w-grow-contents
@@ -955,7 +957,7 @@
                     [x-initial (* flex-absorb available-width)]
                     [available-width (- available-width x-initial)]
                     [flex-max-contents
-                     (map (λ (s) (if (get-field flex s) (send s max-content START-TIP END-TIP) 0)) row)]
+                     (map (λ (s) (if (get-field flex s) (send s max-content (START-TIP) (END-TIP)) 0)) row)]
                     [total-flex-max-contents (apply + flex-max-contents)]
                     [w-grow-flex
                      (if (= total-flex-max-contents 0) (make-list (length row) 0)
@@ -965,7 +967,7 @@
                     [w-total (map + w-min-contents w-grow-contents w-grow-flex)]
                     ; TODO tips
                     [sub-layouts
-                     (map (λ (s w) (send s lay-out w START-TIP END-TIP direction)) row w-total)])
+                     (map (λ (s w) (send s lay-out w (START-TIP) (END-TIP) direction)) row w-total)])
                (justify-layouts-without-zero-hstruts
                 (+ x-initial x-post-flex)
                 (directional-reverse direction sub-layouts)
