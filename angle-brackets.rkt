@@ -225,9 +225,12 @@
             "physical tip spec must be in [0, 1]"
             "height" row-num))
          (linear-interpolate
-          ;; TODO: or should we delegate to physical of first?
-          0 (tip-y side '(logical . 0))
-          1 (tip-y side `(logical . ,(- (cdr (assq side init-num-rows)) 1)))
+          0 (send (first subs) tip-y side '(physical . 0))
+          1 (let ([last-sub (last subs)])
+              (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
+                 (* (- (length subs) 1) row-gap)
+                 (- (get-field physical-height last-sub))
+                 (send last-sub tip-y side '(physical . 1))))
           row-num)]
         [else #f]))
 
@@ -317,11 +320,13 @@
        "subs" internal-subs))
 
     (define/override (tip-y side spec)
-      (match spec
-        ['default (super tip-y side '(logical . 0))]
+      (case spec
+        [(default top bot) (super tip-y side '(logical . 0))]
         [else (super tip-y side spec)]))
 
-    (super-new [subs internal-subs])
+    (define/override (side-struts? side) #t)
+
+    (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))])
 
     (inherit-field direction subs)
     (define/override (check-directions)
@@ -391,7 +396,7 @@
     (init [tip-specs '((left . default) (right . default))])
 
     (define-values (start-side end-side)
-      (apply values ((if (eq? init-direction 'rtl) reverse identity) '(left right))))
+      (apply values (directional-reverse init-direction '(left right))))
     (define/override (tip-y side spec)
       (match spec
         [(or 'default 'top 'bot) (tip-y side '(logical . 0))]
@@ -712,10 +717,9 @@
                   (if (~= 0 (car jls)) rests
                       (cons (new hstrut% [physical-width (car jls)] [direction direction])
                             rests)))))])
-    (new happend-layout% [subs layouts-and-struts] [fuse? #t] [direction direction])))
-
-(define (directional-reverse direction l)
-  ((if (eq? direction 'rtl) reverse identity) l))
+    (if (= 1 (length layouts-and-struts))
+        (first layouts-and-struts) ; only one layout, and completely fills space
+        (new happend-layout% [subs layouts-and-struts] [fuse? #t] [direction direction]))))
 
 (define stack%
   (class block-diagram%
@@ -730,19 +734,18 @@
       (for/sum ([tip (list start-tip end-tip)])
         (match tip
           [(or 'default (cons 'logical _) (cons 'physical _)) min-strut-width]
-          [else 0])))
+          [else (if (eq? polarity '-) min-strut-width 0)])))
 
     (define-values (top-end-tip bot-start-tip)
-      (apply
-       values
-       (for/list ([diag (list diag-top diag-bot)]
-                  [names '((top center) (bottom center))]
-                  [default '(bot top)]
-                  [value '((physical . 0) (physical . 1))])
-         (λ _ (let ([align-items-name (cdr (assq 'name (align-items)))])
-                (if (and (memq align-items-name names)
-                         (or (is-a? diag sequence%) (is-a? diag wrapped-sequence%)))
-                    value default))))))
+      (values
+       (λ _
+         (if (and (memq (cdr (assq 'name (align-items))) '(top center))
+                  (or (is-a? diag-top sequence%) (is-a? diag-top wrapped-sequence%)))
+             '(physical . 0) 'bot))
+       (λ _
+         (if (and (memq (cdr (assq 'name (align-items))) '(bottom center))
+                  (or (is-a? diag-bot sequence%) (is-a? diag-bot wrapped-sequence%)))
+             '(physical . 1) 'top))))
 
     (define (-content which start-tip end-tip)
       (+ (max (dynamic-send diag-top which 'bot (top-end-tip))
@@ -946,10 +949,11 @@
     (define maybe-marker-width
       (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new random-marker%)))))
     (define (maybe-tips-width start-tip end-tip)
-      (+ (if (member start-tip '(default top bot (logical . 0) (physical . 0))) 0
-             min-strut-width)
-         (if (member end-tip '(default top bot (logical . 0) (physical . 1))) 0
-             min-strut-width)))
+      (if (empty? wrap-spec) 0
+          (+ (if (member start-tip '(default top bot (logical . 0) (physical . 0))) 0
+                 min-strut-width)
+             (if (member end-tip '(default top bot (logical . 0) (physical . 1))) 0
+                 min-strut-width))))
     (super-new [flex #t])
 
     (define (START-TIP) (cdr (assq 'value (align-items))))
@@ -969,51 +973,56 @@
     (field [height (get-field physical-height (lay-out (max-content 'default 'default)))])
 
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
-      (let ([available-width (- (max width (min-content start-tip end-tip))
-                                maybe-marker-width
-                                (maybe-tips-width start-tip end-tip))])
-        (new
-         vappend-inline-layout% [direction direction]
-         [subs
-          (map
-           (λ (row)
-             (let* (; available-width will be rebound at every step
-                    [available-width (- available-width (* min-gap (- (length row) 1)))]
-                    ; w- bindings will add up to the width for each sub
-                    [w-min-contents (map (λ (s) (send s min-content (START-TIP) (END-TIP))) row)]
-                    [available-width (- available-width (apply + w-min-contents))]
-                    [remaining-contents (map (λ (s mc) (- (send s max-content (START-TIP) (END-TIP)) mc))
-                                             row w-min-contents)]
-                    [total-remaining-contents (apply + remaining-contents)]
-                    [w-grow-contents
-                     (if (= total-remaining-contents 0) (make-list (length row) 0)
-                         (map (λ (remc)
-                                (min remc (* available-width (/ remc total-remaining-contents))))
-                              remaining-contents))]
-                    [available-width (- available-width (apply + w-grow-contents))]
-                    ; x- bindings will add up to the absorbed space
-                    [x-initial (* flex-absorb available-width)]
-                    [available-width (- available-width x-initial)]
-                    [flex-max-contents
-                     (map (λ (s) (if (get-field flex s) (send s max-content (START-TIP) (END-TIP)) 0)) row)]
-                    [total-flex-max-contents (apply + flex-max-contents)]
-                    [w-grow-flex
-                     (if (= total-flex-max-contents 0) (make-list (length row) 0)
-                         (map (λ (fmc) (* available-width (/ fmc total-flex-max-contents)))
-                              flex-max-contents))]
-                    [x-post-flex (- available-width (apply + w-grow-flex))]
-                    [w-total (map + w-min-contents w-grow-contents w-grow-flex)]
-                    ; TODO tips
-                    [sub-layouts
-                     (map (λ (s w) (send s lay-out w (START-TIP) (END-TIP) direction)) row w-total)])
-               (justify-layouts-without-zero-hstruts
-                (+ x-initial x-post-flex)
-                (directional-reverse direction sub-layouts)
-                direction min-gap)))
-           wrapped-subs)]
-         [tip-specs
-          (map cons '(left right) (directional-reverse direction (list start-tip end-tip)))]
-         [style 'marker] [marker (new random-marker% [direction direction])])))))
+      (let*
+          ([available-width (- (max width (min-content start-tip end-tip))
+                               maybe-marker-width
+                               (maybe-tips-width start-tip end-tip))]
+           [lay-out-row
+            (λ (row)
+              (let* (; available-width will be rebound at every step
+                     [available-width (- available-width (* min-gap (- (length row) 1)))]
+                     ; w- bindings will add up to the width for each sub
+                     [w-min-contents (map (λ (s) (send s min-content (START-TIP) (END-TIP))) row)]
+                     [available-width (- available-width (apply + w-min-contents))]
+                     [remaining-contents (map (λ (s mc)
+                                                (- (send s max-content (START-TIP) (END-TIP)) mc))
+                                              row w-min-contents)]
+                     [total-remaining-contents (apply + remaining-contents)]
+                     [w-grow-contents
+                      (if (= total-remaining-contents 0) (make-list (length row) 0)
+                          (map (λ (remc)
+                                 (min remc (* available-width (/ remc total-remaining-contents))))
+                               remaining-contents))]
+                     [available-width (- available-width (apply + w-grow-contents))]
+                     ; x- bindings will add up to the absorbed space
+                     [x-initial (* flex-absorb available-width)]
+                     [available-width (- available-width x-initial)]
+                     [flex-max-contents
+                      (map (λ (s)
+                             (if (get-field flex s) (send s max-content (START-TIP) (END-TIP)) 0))
+                           row)]
+                     [total-flex-max-contents (apply + flex-max-contents)]
+                     [w-grow-flex
+                      (if (= total-flex-max-contents 0) (make-list (length row) 0)
+                          (map (λ (fmc) (* available-width (/ fmc total-flex-max-contents)))
+                               flex-max-contents))]
+                     [x-post-flex (- available-width (apply + w-grow-flex))]
+                     [w-total (map + w-min-contents w-grow-contents w-grow-flex)]
+                     ; TODO tips
+                     [sub-layouts
+                      (map (λ (s w) (send s lay-out w (START-TIP) (END-TIP) direction))
+                           row w-total)])
+                (justify-layouts-without-zero-hstruts
+                 (+ x-initial x-post-flex)
+                 (directional-reverse direction sub-layouts)
+                 direction min-gap)))])
+        (if (empty? wrap-spec)
+            (lay-out-row (first wrapped-subs))
+            (new
+             vappend-inline-layout% [direction direction] [subs (map lay-out-row wrapped-subs)]
+             [tip-specs
+              (map cons '(left right) (directional-reverse direction (list start-tip end-tip)))]
+             [style 'marker] [marker (new random-marker% [direction direction])]))))))
 
 (define (desugar expr)
   (match expr
