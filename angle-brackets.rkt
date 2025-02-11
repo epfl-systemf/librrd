@@ -511,7 +511,7 @@
       (append
        `((set-pen ,(the-strut-pen))
          (draw-line ,x ,(+ y y-diff) ,(+ x physical-width) ,(+ y y-diff)))
-       (if (or always-arrow (>= physical-width (* min-strut-width 7)))
+       (if (or always-arrow (>= physical-width (* min-strut-width 5)))
            (let ([x-diff ((if (eq? direction 'ltr) + -) (* base-diff 3))])
              `((draw-lines
                 ((,(- x-diff) . ,(- y-diff)) (,x-diff . 0) (,(- x-diff) . ,y-diff))
