@@ -13,10 +13,13 @@
              [diag (diagram expr)]
              [width 950] [self-padding 10]
              [this-justify-content jc-space-evenly]
-             [this-align-items ai-top])
+             [this-align-items ai-top]
+             [this-flex-stacks? #t]
+             [this-flex-absorb 0.5]
+             [this-arrow-threshold 6])
       (define/public (set-expr value)
         (set-field! expr this value)
-        (set-field! diag this (diagram value))
+        (set-field! diag this (diagram value this-flex-stacks?))
         (refresh-now repaint))
       (define/public (set-justify-content value)
         (set-field! this-justify-content this value)
@@ -24,16 +27,28 @@
       (define/public (set-align-items value)
         (set-field! this-align-items this value)
         (refresh-now repaint))
+      (define/public (set-flex-absorb value)
+        (set-field! this-flex-absorb this value)
+        (refresh-now repaint))
+      (define/public (set-arrow-threshold value)
+        (set-field! this-arrow-threshold this value)
+        (refresh-now repaint))
+      (define/public (set-flex-stacks value)
+        (set-field! this-flex-stacks? this value)
+        (set-field! diag this (diagram expr this-flex-stacks?))
+        (refresh-now repaint))
       (define (repaint dc)
         (parameterize ([justify-content this-justify-content]
-                       [align-items this-align-items])
+                       [align-items this-align-items]
+                       [flex-absorb this-flex-absorb])
           (for-each
            (λ (render) (for-each (λ (cmd) (apply dynamic-send dc cmd)) render))
            (list
             (send (send diag lay-out width) render self-padding self-padding)
             (let ([l (send diag lay-out-global width)])
               (parameterize ([the-atom-box-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
-                             [the-strut-pen (make-pen #:color "red" #:width 1 #:style 'solid)])
+                             [the-strut-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
+                             [arrow-threshold this-arrow-threshold])
                 (send l render self-padding (+ self-padding 500))))))))
       (define/override (on-paint) (let ([dc (get-dc)]) (repaint dc)))
       (define/override (on-event event)
@@ -44,15 +59,6 @@
   (define p1 (new horizontal-pane% [parent frame] [spacing 10]))
   (define canvas (new my-canvas% [parent p1] [min-width 1000]))
   (define p2 (new vertical-pane% [parent p1] [spacing 40] [vert-margin 30] [horiz-margin 10]))
-
-  #;(define leaf-node-slider (new slider% [label "leaf-node weight ratio"]
-                                [style '(horizontal plain vertical-label)]
-                                [min-value -100] [max-value 200] [init-value 50] [parent p2]
-                                [callback (lambda (s e) (send canvas set-leaf-node-weight-ratio (send s get-value)))]))
-  #;(define padding-slider (new slider% [label "internal padding"]
-                              [style '(horizontal plain vertical-label)]
-                              [min-value 0] [max-value 30] [init-value 10] [parent p2]
-                              [callback (lambda (s e) (send canvas set-padding (send s get-value)))]))
 
   (define p3 (new vertical-pane% [parent p2] [spacing 15] [vert-margin 20]))
   (define expr-textbox (new text-field% [label "angle brackets expression"] [parent p3]
@@ -81,6 +87,7 @@
 
   (define p4 (new horizontal-pane% [parent p3] [spacing 50]
                   [alignment '(center center)] [stretchable-height #f]))
+
   (define justify-content-choices
     (list "space-evenly" "space-between" "space-around" "start" "end" "left" "center" "right"))
   (define justify-content-radio
@@ -101,6 +108,7 @@
                     [("left") jc-left]
                     [("center") jc-center]
                     [("right") jc-right])))]))
+
   (define align-items-choices
     (list "top" "center" "bottom" "baseline"))
   (define align-items-radio
@@ -117,6 +125,40 @@
                     [("center") ai-center]
                     [("bottom") ai-bottom]
                     [("baseline") ai-baseline])))]))
+
+  (define p5 (new vertical-pane% [parent p4] [spacing 15] [stretchable-width #f]))
+
+  (define flex-stacks-checkbox
+    (new check-box% [label "flex-stacks?"] [parent p5] [value #t]
+         [callback
+          (λ (self e)
+            (send canvas set-flex-stacks (send self get-value)))]))
+
+  (define flex-absorb-slider
+    (new slider%
+         [label "flex-absorb"]
+         [parent p5]
+         [min-value 0]
+         [max-value 100]
+         [min-width 200]
+         [stretchable-width #f]
+         [init-value 50]
+         [style '(horizontal vertical-label)]
+         [callback
+          (λ (self e)
+            (send canvas set-flex-absorb (/ (send self get-value) 100)))]))
+
+  (define arrow-threshold-radio
+    (new radio-box%
+         [label "how many arrows"]
+         [choices '("a few" "some" "lots")]
+         [selection 1]
+         [parent p5]
+         [style '(vertical vertical-label)]
+         [callback
+          (λ (self e)
+            (send canvas set-arrow-threshold
+                  (case (send self get-selection) [(0) 15] [(1) 6] [(2) 3])))]))
 
   (define expr-submit
     (new button%

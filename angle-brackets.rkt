@@ -5,9 +5,10 @@
  align-items ai-baseline ai-top ai-center ai-bottom
  justify-content jc-space-evenly jc-space-between jc-space-around
  jc-start jc-end jc-left jc-center jc-right
- min-strut-width row-gap
+ min-strut-width row-gap min-gap flex-absorb
  the-font the-font-size
  the-atom-text-pen the-atom-box-pen the-strut-pen the-atom-box-brush
+ arrow-threshold
  layout% text-box% hstrut% happend-layout% ellipsis-marker%
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
  diagram% block-diagram% stack%
@@ -18,6 +19,11 @@
 (define (display-expr k) (begin (displayln k) k))
 
 (define (~= x y) (> 0.0001 (abs (- x y))))
+
+; not parameters; global constants
+(define min-strut-width 6)
+(define min-gap 0)
+(define row-gap 8)
 
 ;; types of align-items
 (define ai-baseline '((name . baseline) (value . default)))
@@ -32,7 +38,7 @@
 ;; a type of justify-content
 ; contract: must not exceed total-space
 ; contract: total-space must be at least (* min-gap num-subs)
-(define (jc-space-evenly total-space num-subs #;direction _ [min-gap 0])
+(define (jc-space-evenly total-space num-subs #;direction _)
   (let* ([each-basis (/ total-space (+ num-subs 1))]
          [each-mid-space (max min-gap each-basis)]
          [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
@@ -40,14 +46,14 @@
             (build-list (- num-subs 1) (λ _ each-mid-space))
             (list each-end-space))))
 
-(define (jc-space-between total-space num-subs #;direction _ [min-gap 0])
+(define (jc-space-between total-space num-subs #;direction _)
   (case num-subs
-    [(1) (jc-center total-space num-subs _ min-gap)]
+    [(1) (jc-center total-space num-subs _)]
     [(2) (list 0 total-space 0)]
     [else
-     (append (list 0) (jc-space-evenly total-space (- num-subs 2) _ min-gap) (list 0))]))
+     (append (list 0) (jc-space-evenly total-space (- num-subs 2) _) (list 0))]))
 
-(define (jc-space-around total-space num-subs #;direction _ [min-gap 0])
+(define (jc-space-around total-space num-subs #;direction _)
   (let* ([each-basis (/ total-space num-subs)]
          [each-mid-space (max min-gap each-basis)]
          [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
@@ -55,25 +61,25 @@
             (build-list (- num-subs 1) (λ _ each-mid-space))
             (list each-end-space))))
 
-(define (jc-right total-space num-subs #;direction _ [min-gap 0])
+(define (jc-right total-space num-subs #;direction _)
   (append
    (list (- total-space (* min-gap (- num-subs 1))))
    (build-list (- num-subs 1) (λ _ min-gap))
    (list 0)))
 
-(define (jc-end total-space num-subs direction [min-gap 0])
-  (directional-reverse direction (jc-right total-space num-subs direction min-gap)))
+(define (jc-end total-space num-subs direction)
+  (directional-reverse direction (jc-right total-space num-subs direction)))
 
-(define (jc-left total-space num-subs #;direction _ [min-gap 0])
+(define (jc-left total-space num-subs #;direction _)
   (append
    (list 0)
    (build-list (- num-subs 1) (λ _ min-gap))
    (list (- total-space (* min-gap (- num-subs 1))))))
 
-(define (jc-start total-space num-subs direction [min-gap 0])
-  (directional-reverse direction (jc-left total-space num-subs direction min-gap)))
+(define (jc-start total-space num-subs direction)
+  (directional-reverse direction (jc-left total-space num-subs direction)))
 
-(define (jc-center total-space num-subs #;direction _ [min-gap 0])
+(define (jc-center total-space num-subs #;direction _)
   (let ([each-end-space (/ (- total-space (* min-gap (- num-subs 1))) 2)])
     (append
      (list each-end-space)
@@ -117,9 +123,7 @@
                 (send text-measurement-dc get-text-extent text #f #t)])
     height))
 
-; not parameters; global constants
-(define min-strut-width 6)
-(define row-gap 8)
+(define flex-absorb (make-parameter 0.5))
 
 ;; affect rendering
 (define the-atom-text-pen
@@ -130,6 +134,8 @@
   (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
 (define the-atom-box-brush
   (make-parameter (make-brush #:style 'transparent)))
+
+(define arrow-threshold (make-parameter 5))
 
 
 ;; A layout can have a tip at height:
@@ -511,7 +517,7 @@
       (append
        `((set-pen ,(the-strut-pen))
          (draw-line ,x ,(+ y y-diff) ,(+ x physical-width) ,(+ y y-diff)))
-       (if (or always-arrow (>= physical-width (* min-strut-width 5)))
+       (if (or always-arrow (>= physical-width (* min-strut-width (arrow-threshold))))
            (let ([x-diff ((if (eq? direction 'ltr) + -) (* base-diff 3))])
              `((draw-lines
                 ((,(- x-diff) . ,(- y-diff)) (,x-diff . 0) (,(- x-diff) . ,y-diff))
@@ -707,8 +713,8 @@
 (define block-diagram%
   (class diagram% (super-new)))
 
-(define (justify-layouts-without-zero-hstruts justify-space layouts direction [min-gap 0])
-  (let* ([justify-lengths ((justify-content) justify-space (length layouts) direction min-gap)]
+(define (justify-layouts-without-zero-hstruts justify-space layouts direction)
+  (let* ([justify-lengths ((justify-content) justify-space (length layouts) direction)]
          [layouts-and-struts
           (let loop ([los layouts] [jls justify-lengths])
             (if (empty? jls) '()
@@ -868,24 +874,21 @@
 
 (define sequence%
   (class inline-diagram%
-    (init-field subs [min-gap 0] [flex-absorb 0.2])
+    (init-field subs)
     (unless (> (length subs) 0)
       (raise-arguments-error 'sequence "must sequence at least one diagram"))
 
     (define wraps-measures
       (map
        (λ (wrap-spec)
-         (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec]
-              [min-gap min-gap] [flex-absorb flex-absorb]))
+         (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec]))
        (combinations (range (- (length subs) 1)))))
 
     (field
      [global-wraps-measures
       (map
        (λ (x)
-         (let ([wrapped
-                (new wrapped-sequence% [wrap-spec (first x)] [subs (rest x)]
-                     [min-gap min-gap] [flex-absorb flex-absorb])])
+         (let ([wrapped (new wrapped-sequence% [wrap-spec (first x)] [subs (rest x)])])
            (unless (~= (send wrapped max-content 'default 'default)
                        (send wrapped min-content 'default 'default))
              (raise-arguments-error
@@ -940,7 +943,7 @@
 
 (define wrapped-sequence%
   (class inline-diagram%
-    (init-field subs wrap-spec [min-gap 0] [flex-absorb 0.2])
+    (init-field subs wrap-spec)
     (unless (andmap (λ (break) (<= 0 break (- (length subs) 2))) wrap-spec)
       (raise-arguments-error
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
@@ -956,11 +959,11 @@
                  min-strut-width))))
     (super-new [flex #t])
 
-    (define (START-TIP) (cdr (assq 'value (align-items))))
-    (define (END-TIP) (cdr (assq 'value (align-items))))
+    (define (sub-start-tip) (cdr (assq 'value (align-items))))
+    (define (sub-end-tip) (cdr (assq 'value (align-items))))
 
     (define (-content which start-tip end-tip)
-      (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which (START-TIP) (END-TIP))) row)
+      (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which (sub-start-tip) (sub-end-tip))) row)
                                      (* (- (length row) 1) min-gap)))
                          wrapped-subs))
          maybe-marker-width
@@ -982,11 +985,12 @@
               (let* (; available-width will be rebound at every step
                      [available-width (- available-width (* min-gap (- (length row) 1)))]
                      ; w- bindings will add up to the width for each sub
-                     [w-min-contents (map (λ (s) (send s min-content (START-TIP) (END-TIP))) row)]
+                     [w-min-contents
+                      (map (λ (s) (send s min-content (sub-start-tip) (sub-end-tip))) row)]
                      [available-width (- available-width (apply + w-min-contents))]
-                     [remaining-contents (map (λ (s mc)
-                                                (- (send s max-content (START-TIP) (END-TIP)) mc))
-                                              row w-min-contents)]
+                     [remaining-contents
+                      (map (λ (s mc) (- (send s max-content (sub-start-tip) (sub-end-tip)) mc))
+                           row w-min-contents)]
                      [total-remaining-contents (apply + remaining-contents)]
                      [w-grow-contents
                       (if (= total-remaining-contents 0) (make-list (length row) 0)
@@ -995,11 +999,12 @@
                                remaining-contents))]
                      [available-width (- available-width (apply + w-grow-contents))]
                      ; x- bindings will add up to the absorbed space
-                     [x-initial (* flex-absorb available-width)]
+                     [x-initial (* (flex-absorb) available-width)]
                      [available-width (- available-width x-initial)]
                      [flex-max-contents
-                      (map (λ (s)
-                             (if (get-field flex s) (send s max-content (START-TIP) (END-TIP)) 0))
+                      (map (λ (s) (if (get-field flex s)
+                                      (send s max-content (sub-start-tip) (sub-end-tip))
+                                      0))
                            row)]
                      [total-flex-max-contents (apply + flex-max-contents)]
                      [w-grow-flex
@@ -1008,14 +1013,13 @@
                                flex-max-contents))]
                      [x-post-flex (- available-width (apply + w-grow-flex))]
                      [w-total (map + w-min-contents w-grow-contents w-grow-flex)]
-                     ; TODO tips
                      [sub-layouts
-                      (map (λ (s w) (send s lay-out w (START-TIP) (END-TIP) direction))
+                      (map (λ (s w) (send s lay-out w (sub-start-tip) (sub-end-tip) direction))
                            row w-total)])
                 (justify-layouts-without-zero-hstruts
                  (+ x-initial x-post-flex)
                  (directional-reverse direction sub-layouts)
-                 direction min-gap)))])
+                 direction)))])
         (if (empty? wrap-spec)
             (lay-out-row (first wrapped-subs))
             (new
@@ -1046,7 +1050,7 @@
     [(? list?) (cons 'seq (map desugar expr))]
     [_ expr]))
 
-(define (diagram expr)
+(define (diagram expr [flex-stacks? #t])
   (let rec ([expr (desugar expr)] [in-stack? #f])
     (match expr
       ['(epsilon) (new epsilon%)]
@@ -1054,6 +1058,6 @@
       [(list 'nonterm label) (new station% [terminal? #f] [label label])]
       [(list '<> polarity expr-top expr-bot)
        (new stack% [diag-top (rec expr-top #t)] [diag-bot (rec expr-bot #t)]
-            [polarity polarity] [flex in-stack?])]
+            [polarity polarity] [flex (or flex-stacks? in-stack?)])]
       [(list* 'seq exprs)
        (new sequence% [subs (map (λ (e) (rec e #f)) exprs)])])))
