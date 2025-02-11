@@ -2,8 +2,9 @@
 (require racket/draw racket/help)
 (require (for-syntax racket/syntax))
 (provide
- align-items baseline top center bottom
- justify-content space-evenly flex-end
+ align-items ai-baseline ai-top ai-center ai-bottom
+ justify-content jc-space-evenly jc-space-between jc-space-around
+ jc-start jc-end jc-left jc-center jc-right
  min-strut-width row-gap
  the-font the-font-size
  the-atom-text-pen the-atom-box-pen the-strut-pen the-atom-box-brush
@@ -19,33 +20,70 @@
 (define (~= x y) (> 0.0001 (abs (- x y))))
 
 ;; types of align-items
-(define baseline '((name . baseline) (value . default)))
-(define top '((name . top) (value physical . 0)))
-(define center '((name . center) (value physical . 0.5)))
-(define bottom '((name . bottom) (value physical . 1)))
+(define ai-baseline '((name . baseline) (value . default)))
+(define ai-top '((name . top) (value physical . 0)))
+(define ai-center '((name . center) (value physical . 0.5)))
+(define ai-bottom '((name . bottom) (value physical . 1)))
+
+(define (directional-reverse direction l)
+  (unless (memq direction '(ltr rtl)) (raise-argument-error 'direction "direction?" direction))
+  ((if (eq? direction 'rtl) reverse identity) l))
 
 ;; a type of justify-content
 ; contract: must not exceed total-space
 ; contract: total-space must be at least (* min-gap num-subs)
-(define (space-evenly total-space num-subs [min-gap 0])
+(define (jc-space-evenly total-space num-subs #;direction _ [min-gap 0])
   (let* ([each-basis (/ total-space (+ num-subs 1))]
          [each-mid-space (max min-gap each-basis)]
          [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
     (append (list each-end-space)
-            (build-list (- num-subs 1) (lambda _ each-mid-space))
+            (build-list (- num-subs 1) (λ _ each-mid-space))
             (list each-end-space))))
 
-;; a type of justify-content
-(define (flex-end total-space num-subs [min-gap 0])
+(define (jc-space-between total-space num-subs #;direction _ [min-gap 0])
+  (case num-subs
+    [(1) (jc-center total-space num-subs _ min-gap)]
+    [(2) (list 0 total-space 0)]
+    [else
+     (append (list 0) (jc-space-evenly total-space (- num-subs 2) _ min-gap) (list 0))]))
+
+(define (jc-space-around total-space num-subs #;direction _ [min-gap 0])
+  (let* ([each-basis (/ total-space num-subs)]
+         [each-mid-space (max min-gap each-basis)]
+         [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
+    (append (list each-end-space)
+            (build-list (- num-subs 1) (λ _ each-mid-space))
+            (list each-end-space))))
+
+(define (jc-right total-space num-subs #;direction _ [min-gap 0])
   (append
    (list (- total-space (* min-gap (- num-subs 1))))
    (build-list (- num-subs 1) (λ _ min-gap))
    (list 0)))
 
+(define (jc-end total-space num-subs direction [min-gap 0])
+  (directional-reverse direction (jc-right total-space num-subs direction min-gap)))
+
+(define (jc-left total-space num-subs #;direction _ [min-gap 0])
+  (append
+   (list 0)
+   (build-list (- num-subs 1) (λ _ min-gap))
+   (list (- total-space (* min-gap (- num-subs 1))))))
+
+(define (jc-start total-space num-subs direction [min-gap 0])
+  (directional-reverse direction (jc-left total-space num-subs direction min-gap)))
+
+(define (jc-center total-space num-subs #;direction _ [min-gap 0])
+  (let ([each-end-space (/ (- total-space (* min-gap (- num-subs 1))) 2)])
+    (append
+     (list each-end-space)
+     (build-list (- num-subs 1) (λ _ (max min-gap 0)))
+     (list each-end-space))))
+
 
 ;; affect layout
-(define align-items (make-parameter top))
-(define justify-content (make-parameter space-evenly))
+(define align-items (make-parameter ai-top))
+(define justify-content (make-parameter jc-space-evenly))
 
 (define the-font
   (make-parameter (make-font #:font-list the-font-list
@@ -665,7 +703,7 @@
   (class diagram% (super-new)))
 
 (define (justify-layouts-without-zero-hstruts justify-space layouts direction [min-gap 0])
-  (let* ([justify-lengths ((justify-content) justify-space (length layouts) min-gap)]
+  (let* ([justify-lengths ((justify-content) justify-space (length layouts) direction min-gap)]
          [layouts-and-struts
           (let loop ([los layouts] [jls justify-lengths])
             (if (empty? jls) '()
