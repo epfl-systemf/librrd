@@ -13,7 +13,7 @@
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
  diagram% block-diagram% stack%
  inline-diagram% sequence% wrapped-sequence% station% epsilon%
- desugar diagram)
+ desugar diagram local-wraps-<)
 
 
 (define (display-expr k) (begin (displayln k) k))
@@ -123,7 +123,7 @@
                 (send text-measurement-dc get-text-extent text #f #t)])
     height))
 
-(define flex-absorb (make-parameter 0.5))
+(define flex-absorb (make-parameter 0.0))
 
 ;; affect rendering
 (define the-atom-text-pen
@@ -774,15 +774,7 @@
     (field
      [global-wraps-measures
       (if wrapped?
-          (if (~= (max-content 'default 'default) (min-content 'default 'default))
-              (list (list (cons 'natural-width (min-content 'default 'default))
-                          (cons 'height height)
-                          (cons 'wrap this)))
-              (raise-arguments-error
-               'stack%-global-wraps-measures
-               "max- and min-content must be equal for a globally wrapped diagram"
-               "max-content" (max-content 'default 'default)
-               "min-content" (min-content 'default 'default)))
+          'undefined
           (for*/list ([top-wrap (get-field global-wraps-measures diag-top)]
                       [bot-wrap (get-field global-wraps-measures diag-bot)])
             (let ([wrapped (new stack% [diag-top (cdr (assq 'wrap top-wrap))]
@@ -791,6 +783,7 @@
               (list
                (cons 'natural-width (send wrapped min-content 'default 'default))
                (cons 'height (get-field height wrapped))
+               (cons 'wrap-specs (cons '() (map (λ (wm) (cdr (assq 'wrap-specs wm))) (list top-wrap bot-wrap))))
                (cons 'wrap wrapped)))))])
 
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
@@ -832,6 +825,7 @@
     (field [global-wraps-measures
             (list (list (cons 'natural-width init-layout-width)
                         (cons 'height height)
+                        (cons 'wrap-specs '(() . ()))
                         (cons 'wrap this)))])
     (define/override (min-content start-tip end-tip)
       (+ init-layout-width
@@ -856,6 +850,7 @@
     (field [global-wraps-measures
             (list (list (cons 'natural-width 0)
                         (cons 'height height)
+                        (cons 'wrap-specs '(() . ()))
                         (cons 'wrap this)))])
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       (new hstrut% [physical-width width] [direction direction]))))
@@ -872,71 +867,98 @@
           ['() (list lst)]
           [(cons idx rests) (cons (take lst idx) (helper (drop lst idx) rests))]))))
 
+(define (wrap-specs-badness wrap-specs)
+  (let rec ([ws wrap-specs] [depth 0])
+    (let ([self-ws (first ws)] [subs-ws (rest ws)])
+      (apply + (* (expt 2 depth) (length self-ws)) (map (λ (sws) (rec sws (+ 1 depth))) subs-ws)))))
+
+(define (global-wraps-< gw1 gw2)
+  (let ([height1 (cdr (assq 'height gw1))]
+        [natural-width1 (cdr (assq 'natural-width gw1))]
+        [wrap-badness1 (wrap-specs-badness (cdr (assq 'wrap-specs gw1)))]
+        [height2 (cdr (assq 'height gw2))]
+        [natural-width2 (cdr (assq 'natural-width gw2))]
+        [wrap-badness2 (wrap-specs-badness (cdr (assq 'wrap-specs gw2)))])
+    (let ([badness (λ xs (+map * xs '(10 1 2)))])
+      (< (badness height1 natural-width1 wrap-badness1)
+         (badness height2 natural-width2 wrap-badness2)))))
+
+(define ((make-lexicographic-< . accessors) x1 x2)
+  (let loop ([accs accessors])
+    (and (not (empty? accs))
+         (let ([acc1 ((car accs) x1)] [acc2 ((car accs) x2)])
+           (or (and (~= acc1 acc2)
+                    (loop (cdr accs)))
+               (< acc1 acc2))))))
+
+(define (local-wraps-< start-tip end-tip)
+  (make-lexicographic-<
+   (λ (w) (length (get-field wrap-spec w)))
+   (λ (w) (send w max-content start-tip end-tip))
+   (λ (w) (send w min-content start-tip end-tip))))
+
 (define sequence%
   (class inline-diagram%
     (init-field subs)
     (unless (> (length subs) 0)
       (raise-arguments-error 'sequence "must sequence at least one diagram"))
 
-    (define wraps-measures
-      (map
-       (λ (wrap-spec)
-         (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec]))
-       (combinations (range (- (length subs) 1)))))
+    (field [wraps
+            (map
+             (λ (wrap-spec)
+               (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec]))
+             (combinations (range (- (length subs) 1))))])
 
     (field
      [global-wraps-measures
-      (map
-       (λ (x)
-         (let ([wrapped (new wrapped-sequence% [wrap-spec (first x)] [subs (rest x)])])
-           (unless (~= (send wrapped max-content 'default 'default)
-                       (send wrapped min-content 'default 'default))
-             (raise-arguments-error
-              'sequence%-global-wraps-measures
-              "max- and min-content must be equal for a globally wrapped diagram"
-              "max-content" (send wrapped max-content 'default 'default)
-              "min-content" (send wrapped min-content 'default 'default)))
-           (list
-            (cons 'natural-width (send wrapped min-content 'default 'default))
-            (cons 'height (get-field height wrapped))
-            (cons 'wrap wrapped))))
-       (apply
-        cartesian-product
-        (combinations (range (- (length subs) 1)))
-        (map (λ (s) (map (λ (wm) (cdr (assq 'wrap wm))) (get-field global-wraps-measures s))) subs)))])
+      (sort
+       (map
+        (λ (x)
+          (let* ([subs (map (λ (wm) (cdr (assq 'wrap wm))) (rest x))]
+                 [sub-wrap-specs (map (λ (wm) (cdr (assq 'wrap-specs wm))) (rest x))]
+                 [wrapped (new wrapped-sequence% [wrap-spec (first x)] [subs subs])])
+            (unless (~= (send wrapped max-content 'default 'default)
+                        (send wrapped min-content 'default 'default))
+              (raise-arguments-error
+               'sequence%-global-wraps-measures
+               "max- and min-content must be equal for a globally wrapped diagram"
+               "max-content" (send wrapped max-content 'default 'default)
+               "min-content" (send wrapped min-content 'default 'default)))
+            (list
+             (cons 'natural-width (send wrapped min-content 'default 'default))
+             (cons 'height (get-field height wrapped))
+             (cons 'wrap-specs (cons (first x) sub-wrap-specs))
+             (cons 'wrap wrapped))))
+        (apply
+         cartesian-product
+         (combinations (range (- (length subs) 1)))
+         (map (λ (s) (get-field global-wraps-measures s)) subs)))
+       global-wraps-<)])
 
     (super-new [flex #t])
 
+    (define (choose-wrap width start-tip end-tip)
+      (let ([fitting (filter (λ (w) (<= (send w min-content start-tip end-tip) width)) wraps)])
+         (if (empty? fitting)
+             (argmin (λ (w) (send w min-content start-tip end-tip)) wraps)
+             (first (sort fitting (local-wraps-< start-tip end-tip))))))
+
     (define/override (min-content start-tip end-tip)
-      (send (last wraps-measures) min-content start-tip end-tip))
+      (send (last wraps) min-content start-tip end-tip))
 
     (define/override (max-content start-tip end-tip)
-      (send (first wraps-measures) min-content start-tip end-tip))
+      (send (first wraps) max-content start-tip end-tip))
 
     (define/public (lay-out-global width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       (send
-       (let ([fitting (filter (λ (w) (<= (cdr (assoc 'natural-width w)) width)) global-wraps-measures)])
-         (if (empty? fitting)
-             (cdr (assq 'wrap (last global-wraps-measures)))
-             (let* ([least-height (apply min (map (λ (w) (cdr (assoc 'height w))) fitting))]
-                    [lh-wraps (filter (λ (w) (~= (cdr (assoc 'height w)) least-height))
-                                      fitting)]
-                    [least-width (apply min (map (λ (w) (cdr (assoc 'natural-width w))) lh-wraps))]
-                    [lw-wraps (filter (λ (w) (~= (cdr (assoc 'natural-width w)) least-width))
-                                      lh-wraps)])
-               ;; TODO: refine optimality
-               #;(when (< 1 (length lw-wraps))
-                 (displayln "found it")
-                 (displayln lw-wraps))
-               (cdr (assoc 'wrap (first lw-wraps))))))
+       (let* ([natural-width (λ (w) (cdr (assq 'natural-width w)))]
+              [fitting (filter (λ (w) (<= (natural-width w) width)) global-wraps-measures)])
+         (cdr (assq 'wrap (if (empty? fitting) (argmin natural-width global-wraps-measures) (first fitting)))))
        lay-out width start-tip end-tip direction))
 
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       (send
-       (let ([fitting (filter (λ (wm) (<= (send wm max-content start-tip end-tip) width)) wraps-measures)])
-         (if (empty? fitting)
-             (argmin (λ (wm) (send wm min-content start-tip end-tip)) wraps-measures)
-             (argmax (λ (wm) (send wm max-content start-tip end-tip)) fitting)))
+       (choose-wrap width start-tip end-tip)
        lay-out width start-tip end-tip direction))))
 
 (define (+map f . ls) (apply + (apply map f ls)))
@@ -989,7 +1011,8 @@
                       (map (λ (s) (send s min-content (sub-start-tip) (sub-end-tip))) row)]
                      [available-width (- available-width (apply + w-min-contents))]
                      [remaining-contents
-                      (map (λ (s mc) (- (send s max-content (sub-start-tip) (sub-end-tip)) mc))
+                      (map (λ (s mc)
+                             (expt (- (/ (send s max-content (sub-start-tip) (sub-end-tip)) mc) 1) 2))
                            row w-min-contents)]
                      [total-remaining-contents (apply + remaining-contents)]
                      [w-grow-contents

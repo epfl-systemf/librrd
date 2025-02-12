@@ -1,3 +1,21 @@
+2025-02-11
+==========
+
+fixed bugs identified yesterday.
+still tbd about finishing behavior.
+today: play with optimality.
+
+2025-02-10
+==========
+
+bugs with nested recursion. try
+    ((<> - "a" (<> + (<> - "b" "c") "d")))
+
+1. not enough space for mandatory arrows
+2. need to disambiguate the inner recursion "c" from the outer option "d". extra space
+
+control the finishing behavior with a parameter
+
 2025-02-06
 ==========
 

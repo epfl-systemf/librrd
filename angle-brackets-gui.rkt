@@ -15,7 +15,7 @@
              [this-justify-content jc-space-evenly]
              [this-align-items ai-top]
              [this-flex-stacks? #t]
-             [this-flex-absorb 0.5]
+             [this-flex-absorb 0.0]
              [this-arrow-threshold 6])
       (define/public (set-expr value)
         (set-field! expr this value)
@@ -43,13 +43,18 @@
                        [flex-absorb this-flex-absorb])
           (for-each
            (λ (render) (for-each (λ (cmd) (apply dynamic-send dc cmd)) render))
-           (list
-            (send (send diag lay-out width) render self-padding self-padding)
-            (let ([l (send diag lay-out-global width)])
-              (parameterize ([the-atom-box-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
-                             [the-strut-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
-                             [arrow-threshold this-arrow-threshold])
-                (send l render self-padding (+ self-padding 500))))))))
+           (let ([ll (send diag lay-out width)]
+                 [lg (send diag lay-out-global width)])
+             (parameterize ([arrow-threshold this-arrow-threshold])
+               (list
+                (send ll render self-padding self-padding)
+                (list
+                 (list 'draw-text (~a width) (+ self-padding (get-field physical-width ll) self-padding) self-padding)
+                 (list 'draw-text (~a (get-field physical-width ll)) (+ self-padding (get-field physical-width ll) self-padding) (+ self-padding 20)))
+                (parameterize ([the-atom-box-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
+                               [the-strut-pen (make-pen #:color "red" #:width 1 #:style 'solid)])
+                  (send lg render self-padding (+ self-padding 500)))
+                (list (list 'draw-text (~a (get-field physical-width lg)) (+ self-padding (get-field physical-width lg) self-padding) (+ self-padding 500)))))))))
       (define/override (on-paint) (let ([dc (get-dc)]) (repaint dc)))
       (define/override (on-event event)
         (when (send event dragging?)
@@ -142,7 +147,7 @@
          [max-value 100]
          [min-width 200]
          [stretchable-width #f]
-         [init-value 50]
+         [init-value 0]
          [style '(horizontal vertical-label)]
          [callback
           (λ (self e)
