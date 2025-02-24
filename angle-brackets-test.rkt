@@ -6,7 +6,7 @@
 (send my-svg-dc start-doc "")
 (send my-svg-dc start-page)
 
-(define my-target (make-bitmap 1500 900))
+(define my-target (make-bitmap 1500 500))
 (define my-bitmap-dc
   (new bitmap-dc% [bitmap my-target]))
 (send my-bitmap-dc scale 2 2)
@@ -32,8 +32,8 @@
     (/ (+ (* (- n i) start) (* i end)) n)))
 
 (define (make-layouts diag)
-  (let ([max-content (+ (if (is-a? diag stack%) (* 2 min-strut-width) 0) (get-field max-content diag))]
-        [min-content (+ (if (is-a? diag stack%) (* 2 min-strut-width) 0) (get-field min-content diag))])
+  (let ([max-content (send diag max-content 'default 'default)]
+        [min-content (send diag min-content 'default 'default)])
     (map (λ (width)
            (let ([layout (send diag lay-out width 'default 'default 'ltr)]
                  [optimal-layout (send diag lay-out-global width 'default 'default 'ltr)])
@@ -80,18 +80,24 @@
 (define (show! diag width)
   (send my-bitmap-dc erase)
   (for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd))
-            (send (send diag lay-out width 'default 'default 'ltr) render 10 10))
+            (append
+             (let ([l (send diag lay-out width 'default 'default 'ltr)])
+               (send l render 10 10))
+             (send
+              (parameterize ([distribute-fun distribute-quadratic])
+                (send diag lay-out width 'default 'default 'ltr))
+              render 10 100)))
   my-target)
 
 (define my-diagram
   (diagram
-   '((+ ("ssaaa" "aaaaB") epsilon) "c")))
+   '((<> - "[common-table-expression]" ",")
+     (+ ("ORDER" "BY" (<> - "[ordering-term]" ","))
+        epsilon)
+     (+ ("LIMIT" "aa") epsilon))
+   #f))
 
-(define my-layout (send my-diagram lay-out-global 155 '(physical . 0) '(physical . 0) 'ltr))
-(println "width")
-(println (get-field physical-width my-layout))
-(for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd)) (send my-layout render 10 10))
-my-target
+(show! my-diagram 254)
 
 ;; (render-layouts! (make-layouts compound-select))
 (send my-svg-dc end-page)
