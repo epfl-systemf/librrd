@@ -13,6 +13,7 @@
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
  diagram% block-diagram% stack%
  inline-diagram% sequence% wrapped-sequence% station% epsilon%
+ distribute-fun distribute-linear distribute-quadratic distribute-extreme
  desugar diagram local-wraps-<)
 
 
@@ -879,7 +880,7 @@
         [height2 (cdr (assq 'height gw2))]
         [natural-width2 (cdr (assq 'natural-width gw2))]
         [wrap-badness2 (wrap-specs-badness (cdr (assq 'wrap-specs gw2)))])
-    (let ([badness (λ xs (+map * xs '(10 1 2)))])
+    (let ([badness (λ xs (+map * xs '(5 1 5)))])
       (< (badness height1 natural-width1 wrap-badness1)
          (badness height2 natural-width2 wrap-badness2)))))
 
@@ -944,7 +945,7 @@
              (first (sort fitting (local-wraps-< start-tip end-tip))))))
 
     (define/override (min-content start-tip end-tip)
-      (send (last wraps) min-content start-tip end-tip))
+      (apply min (map (λ (w) (send w min-content start-tip end-tip)) wraps)))
 
     (define/override (max-content start-tip end-tip)
       (send (first wraps) max-content start-tip end-tip))
@@ -962,6 +963,52 @@
        lay-out width start-tip end-tip direction))))
 
 (define (+map f . ls) (apply + (apply map f ls)))
+
+(define (distribute-linear max-contents remaining-proportions)
+  (make-list (length max-contents) (λ (t) t)))
+
+(define (distribute-quadratic max-contents remaining-proportions)
+  (let* ([k 2]
+         [remaining-contents (map * max-contents remaining-proportions)]
+         [remaining-proportions-pow (map (λ (p) (expt p k)) remaining-proportions)]
+         [basis (/ (apply + remaining-contents)
+                   3 (apply + (map * remaining-contents remaining-proportions-pow)))])
+    (map (λ (pp) (λ (t) (+ (expt t 3) (* 2 (- 1 t) (expt t 2)) (* 3 basis pp (expt (- 1 t) 2) t))))
+         remaining-proportions-pow)))
+
+(define (second-last l) (list-ref l (- (length l) 2)))
+(define ((piecewise-linear-interpolate xs ys) x)
+  (cond
+    [(< x (first xs))
+     (linear-interpolate (first xs) (first ys) (second xs) (second ys) x)]
+    [(<= (last xs) x)
+     (linear-interpolate (second-last xs) (second-last ys) (last xs) (last ys) x)]
+    [else
+     (let loop ([xis (map cons (drop-right xs 1) (rest xs))]
+                [yis (map cons (drop-right ys 1) (rest ys))])
+       (let ([xlo (caar xis)] [xhi (cdar xis)] [ylo (caar yis)] [yhi (cdar yis)])
+         (if (and (<= xlo x) (< x xhi))
+             (linear-interpolate xlo ylo xhi yhi x)
+             (loop (cdr xis) (cdr yis)))))]))
+
+(define (distribute-extreme max-contents remaining-proportions)
+  (if (andmap zero? remaining-proportions)
+      (make-list (length remaining-proportions) (λ (t) (linear-interpolate 0 0 1 1 t)))
+      (let* ([ctrl-ys (map (λ (p)
+                             (append
+                              (map (λ (q) (max 0 (- 1 (/ q p))))
+                                   (sort (filter-not zero? remaining-proportions) >))
+                              '(1)))
+                           remaining-proportions)]
+             [ctrl-ys-transpose (apply map list ctrl-ys)]
+             [ctrl-xs (map (λ (ys) (+map * ys max-contents remaining-proportions))
+                           ctrl-ys-transpose)]
+             [ctrl-xs (map (λ (x) (/ x (last ctrl-xs))) ctrl-xs)])
+        (map
+         (λ (ys) (piecewise-linear-interpolate ctrl-xs ys))
+         ctrl-ys))))
+
+(define distribute-fun (make-parameter distribute-linear))
 
 (define wrapped-sequence%
   (class inline-diagram%
@@ -1010,25 +1057,25 @@
                      [w-min-contents
                       (map (λ (s) (send s min-content (sub-start-tip) (sub-end-tip))) row)]
                      [available-width (- available-width (apply + w-min-contents))]
-                     [remaining-contents
-                      (map (λ (s mc)
-                             (expt (- (/ (send s max-content (sub-start-tip) (sub-end-tip)) mc) 1) 2))
-                           row w-min-contents)]
+                     [max-contents
+                      (map (λ (s) (send s max-content (sub-start-tip) (sub-end-tip))) row)]
+                     [remaining-contents (map - max-contents w-min-contents)]
+                     [remaining-proportions (map / remaining-contents max-contents)]
                      [total-remaining-contents (apply + remaining-contents)]
-                     [w-grow-contents
-                      (if (= total-remaining-contents 0) (make-list (length row) 0)
-                          (map (λ (remc)
-                                 (min remc (* available-width (/ remc total-remaining-contents))))
-                               remaining-contents))]
+                     [available-remaining-proportion
+                      (if (~= total-remaining-contents 0) 0
+                          (/ (min available-width total-remaining-contents)
+                             total-remaining-contents))]
+                     [distribute-funs ((distribute-fun) max-contents remaining-proportions)]
+                     [w-grow-contents (map (λ (f rc) (* rc (f available-remaining-proportion)))
+                                           distribute-funs
+                                           remaining-contents)]
                      [available-width (- available-width (apply + w-grow-contents))]
                      ; x- bindings will add up to the absorbed space
                      [x-initial (* (flex-absorb) available-width)]
                      [available-width (- available-width x-initial)]
                      [flex-max-contents
-                      (map (λ (s) (if (get-field flex s)
-                                      (send s max-content (sub-start-tip) (sub-end-tip))
-                                      0))
-                           row)]
+                      (map (λ (s xc) (if (get-field flex s) xc 0)) row max-contents)]
                      [total-flex-max-contents (apply + flex-max-contents)]
                      [w-grow-flex
                       (if (= total-flex-max-contents 0) (make-list (length row) 0)

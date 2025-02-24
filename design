@@ -1,3 +1,36 @@
+2025-02-20
+==========
+
+I guess still TBD about finishing behavior.
+
+decided that flex distr will be arith (others don't make sense)
+
+TODOs
+* animate width with constant speed, see what arith vs quad distr looks like
+* come up with paper outline
+* draw curves??
+* global optimum should be calculated based on align-items
+  + actually doesn't affect any of the parameters
+
+From weekly update:
+
+> Regardless of the form, I think global optimality depends on the following
+> properties of wraps:
+> * the natural width (must be less than requested, and doesn’t matter too much
+>   beyond that);
+> * the height (smaller is better); and
+> * the global wrap specifications, i.e. where line breaks have happened, at
+>   each nested level (fewer is better, and outer is better than inner, so there
+>   is another degree of freedom here in choosing how those two combine).
+>
+> A local wrapping decision depends on:
+> * the min-content width (must be less than requested, and beyond that ?);
+> * the max-content width (?? I guess the difference between the requested width
+>   and the min- and max-content widths is a proxy for height, which we cannot
+>   directly measure in an unwrapped diagram, and for which smaller is better);
+>   and
+> * the local wrap specifications (fewer is better).
+
 2025-02-11
 ==========
 
