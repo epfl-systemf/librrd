@@ -1,6 +1,8 @@
 #lang racket
 (require racket/draw racket/gui/base "angle-brackets.rkt")
 
+(the-font-size 9)
+
 (define (gui)
   (define frame (new frame% [label "angle bracket diagrams"] [width 1200] [height 1000]))
   (define my-canvas%

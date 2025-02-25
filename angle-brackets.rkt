@@ -21,11 +21,6 @@
 
 (define (~= x y) (> 0.0001 (abs (- x y))))
 
-; not parameters; global constants
-(define min-strut-width 6)
-(define min-gap 0)
-(define row-gap 8)
-
 ;; types of align-items
 (define ai-baseline '((name . baseline) (value . default)))
 (define ai-top '((name . top) (value physical . 0)))
@@ -38,10 +33,10 @@
 
 ;; a type of justify-content
 ; contract: must not exceed total-space
-; contract: total-space must be at least (* min-gap num-subs)
+; contract: total-space must be at least (* (min-gap) num-subs)
 (define (jc-space-evenly total-space num-subs #;direction _)
   (let* ([each-basis (/ total-space (+ num-subs 1))]
-         [each-mid-space (max min-gap each-basis)]
+         [each-mid-space (max (min-gap) each-basis)]
          [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
     (append (list each-end-space)
             (build-list (- num-subs 1) (λ _ each-mid-space))
@@ -56,7 +51,7 @@
 
 (define (jc-space-around total-space num-subs #;direction _)
   (let* ([each-basis (/ total-space num-subs)]
-         [each-mid-space (max min-gap each-basis)]
+         [each-mid-space (max (min-gap) each-basis)]
          [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
     (append (list each-end-space)
             (build-list (- num-subs 1) (λ _ each-mid-space))
@@ -64,8 +59,8 @@
 
 (define (jc-right total-space num-subs #;direction _)
   (append
-   (list (- total-space (* min-gap (- num-subs 1))))
-   (build-list (- num-subs 1) (λ _ min-gap))
+   (list (- total-space (* (min-gap) (- num-subs 1))))
+   (build-list (- num-subs 1) (λ _ (min-gap)))
    (list 0)))
 
 (define (jc-end total-space num-subs direction)
@@ -74,17 +69,17 @@
 (define (jc-left total-space num-subs #;direction _)
   (append
    (list 0)
-   (build-list (- num-subs 1) (λ _ min-gap))
-   (list (- total-space (* min-gap (- num-subs 1))))))
+   (build-list (- num-subs 1) (λ _ (min-gap)))
+   (list (- total-space (* (min-gap) (- num-subs 1))))))
 
 (define (jc-start total-space num-subs direction)
   (directional-reverse direction (jc-left total-space num-subs direction)))
 
 (define (jc-center total-space num-subs #;direction _)
-  (let ([each-end-space (/ (- total-space (* min-gap (- num-subs 1))) 2)])
+  (let ([each-end-space (/ (- total-space (* (min-gap) (- num-subs 1))) 2)])
     (append
      (list each-end-space)
-     (build-list (- num-subs 1) (λ _ (max min-gap 0)))
+     (build-list (- num-subs 1) (λ _ (max (min-gap) 0)))
      (list each-end-space))))
 
 
@@ -110,6 +105,9 @@
                            #:weight (send (the-font) get-weight)))
    (lambda (f) (send f get-size))))
 
+(define (min-strut-width) (* (+ (the-font-size) 12) 1/4))
+(define (row-gap) (* (the-font-size) 2/3))
+
 (define text-measurement-dc (new bitmap-dc% [bitmap #f]))
 
 (define (text-width text)
@@ -124,6 +122,7 @@
                 (send text-measurement-dc get-text-extent text #f #t)])
     height))
 
+(define min-gap (make-parameter 0))
 (define flex-absorb (make-parameter 0.0))
 
 ;; affect rendering
@@ -192,7 +191,7 @@
         ['top (send (first subs) tip-y side spec)]
         ['bot (let ([last-sub (last subs)])
                 (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
-                   (* (- (length subs) 1) row-gap)
+                   (* (- (length subs) 1) (row-gap))
                    (- (get-field physical-height last-sub))
                    (send last-sub tip-y side spec)))]
         [(cons 'logical (? number? row-num))
@@ -202,12 +201,12 @@
               'vappend-block-layout-tip-y
               "logical tip spec must be in [0, R-1]"
               "height" row-num "L" num-rows))
-           (let loop ([n row-num] [cumul-y (- (/ row-gap 2))] [subs subs])
+           (let loop ([n row-num] [cumul-y (- (/ (row-gap) 2))] [subs subs])
              (let* ([sub (first subs)]
                     [sub-rows (- ((get-rows side) sub) 1)]
-                    [sub-top-y (+ cumul-y (/ row-gap 2))]
+                    [sub-top-y (+ cumul-y (/ (row-gap) 2))]
                     [next-cumul-y
-                     (+ sub-top-y (get-field physical-height sub) (/ row-gap 2))])
+                     (+ sub-top-y (get-field physical-height sub) (/ (row-gap) 2))])
                (cond
                  [(< n 0)
                   (linear-interpolate
@@ -235,7 +234,7 @@
           0 (send (first subs) tip-y side '(physical . 0))
           1 (let ([last-sub (last subs)])
               (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
-                 (* (- (length subs) 1) row-gap)
+                 (* (- (length subs) 1) (row-gap))
                  (- (get-field physical-height last-sub))
                  (send last-sub tip-y side '(physical . 1))))
           row-num)]
@@ -248,11 +247,11 @@
                                "sub-widths" sub-widths))
       (super-new
        [physical-width (+ (first sub-widths)
-                          (if (side-struts? 'left) min-strut-width 0)
-                          (if (side-struts? 'right) min-strut-width 0))]
+                          (if (side-struts? 'left) (min-strut-width) 0)
+                          (if (side-struts? 'right) (min-strut-width) 0))]
        [physical-height
         (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
-           (* (- (length subs) 1) row-gap))]
+           (* (- (length subs) 1) (row-gap)))]
        [num-rows init-num-rows]
        [tips (map (lambda (s)
                     (let ([side (car s)] [spec (cdr s)])
@@ -270,7 +269,7 @@
     (check-directions)
 
     (define/overment (render x y)
-      (let ([sub-x (+ x (if (side-struts? 'left) min-strut-width 0))])
+      (let ([sub-x (+ x (if (side-struts? 'left) (min-strut-width) 0))])
         (let-values
             ([(sub-renders sub-ys)
               (for/fold
@@ -280,17 +279,17 @@
                    #:result (values (apply append sub-renders)
                                     (reverse sub-ys)))
                   ([sub subs])
-                (values (+ sub-y (get-field physical-height sub) row-gap)
+                (values (+ sub-y (get-field physical-height sub) (row-gap))
                         (cons (send sub render sub-x sub-y) sub-renders)
                         (cons sub-y sub-ys)))])
           (append
            sub-renders
            `((set-pen ,(the-strut-pen)))
            (for/list ([side '(left right)]
-                      [tip-x (list x (+ x physical-width (- min-strut-width)))]
+                      [tip-x (list x (+ x physical-width (- (min-strut-width))))]
                       #:when (side-struts? side))
              `(draw-line ,tip-x ,(+ y (tip-y side))
-                         ,(+ tip-x min-strut-width) ,(+ y (tip-y side))))
+                         ,(+ tip-x (min-strut-width)) ,(+ y (tip-y side))))
            (inner
             (cons
              `(set-pen ,(the-strut-pen))
@@ -298,7 +297,7 @@
                    [top-y (first sub-ys)]
                    [bot-sub (last subs)]
                    [bot-y (last sub-ys)]
-                   [arc-size (* 2 min-strut-width)])
+                   [arc-size (* 2 (min-strut-width))])
                (apply
                 append
                 (for/list ([side '(left right)]
@@ -423,7 +422,7 @@
              (let-values ([(nonlast-subs last-sub) (split-at-right subs 1)])
                (+ (send (first last-sub) tip-y side)
                   (+map (λ (s) (get-field physical-height s)) nonlast-subs)
-                  (* (length nonlast-subs) row-gap))))]
+                  (* (length nonlast-subs) (row-gap)))))]
         [else (super tip-y side spec)]))
 
     (define needs-side-strut?
@@ -498,7 +497,7 @@
 
 (define hspace%
   (class inline-layout%
-    (init [(init-width physical-width) min-strut-width])
+    (init [(init-width physical-width) (min-strut-width)])
     (super-new [physical-height 0]
                [tips '((left default . 0) (right default . 0))]
                [physical-width init-width] #;[direction pass-through])
@@ -518,7 +517,7 @@
       (append
        `((set-pen ,(the-strut-pen))
          (draw-line ,x ,(+ y y-diff) ,(+ x physical-width) ,(+ y y-diff)))
-       (if (or always-arrow (>= physical-width (* min-strut-width (arrow-threshold))))
+       (if (or always-arrow (>= physical-width (* (min-strut-width) (arrow-threshold))))
            (let ([x-diff ((if (eq? direction 'ltr) + -) (* base-diff 3))])
              `((draw-lines
                 ((,(- x-diff) . ,(- y-diff)) (,x-diff . 0) (,(- x-diff) . ,y-diff))
@@ -558,9 +557,9 @@
              [text-y (+ box-y padding-y)]
              [struts-y (+ y (/ physical-height 2))]
              [lstrut-lx x]
-             [lstrut-rx (+ lstrut-lx min-strut-width)]
-             [rstrut-lx (+ x min-strut-width box-width)]
-             [rstrut-rx (+ rstrut-lx min-strut-width)])
+             [lstrut-rx (+ lstrut-lx (min-strut-width))]
+             [rstrut-lx (+ x (min-strut-width) box-width)]
+             [rstrut-rx (+ rstrut-lx (min-strut-width))])
         `((set-pen ,(the-atom-text-pen))
           (set-font ,(the-font))
           (draw-text ,label ,text-x ,text-y #t)
@@ -571,7 +570,7 @@
 
 (define text-marker%
   (class text-box%
-    (super-new [terminal? #f] [padding-x min-strut-width])
+    (super-new [terminal? #f] [padding-x (min-strut-width)])
     (init-field [y-alignment-magic (* (the-font-size) 0.23)])
     (inherit-field label padding-x)
     (define/override (render x y)
@@ -740,8 +739,8 @@
     (define (maybe-tips-width start-tip end-tip)
       (for/sum ([tip (list start-tip end-tip)])
         (match tip
-          [(or 'default (cons 'logical _) (cons 'physical _)) min-strut-width]
-          [else (if (eq? polarity '-) min-strut-width 0)])))
+          [(or 'default (cons 'logical _) (cons 'physical _)) (min-strut-width)]
+          [else (if (eq? polarity '-) (min-strut-width) 0)])))
 
     (define-values (top-end-tip bot-start-tip)
       (values
@@ -831,14 +830,14 @@
     (define/override (min-content start-tip end-tip)
       (+ init-layout-width
          ;; TODO: top/bot leaves extra space (also for others?)
-         #;(if (memq start-tip '(top bot)) min-strut-width 0)
-         #;(if (memq end-tip '(top bot)) min-strut-width 0)))
+         #;(if (memq start-tip '(top bot)) (min-strut-width) 0)
+         #;(if (memq end-tip '(top bot)) (min-strut-width) 0)))
     (define/override (max-content start-tip end-tip) (min-content start-tip end-tip))
     (super-new [flex #f])
 
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested width doesn't matter
-      (let ([tip-strut (new hstrut% [physical-width min-strut-width] [direction direction])]
+      (let ([tip-strut (new hstrut% [physical-width (min-strut-width)] [direction direction])]
             [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])])
         (new happend-layout% [subs (list tip-strut text-box tip-strut)] [direction direction])))))
 
@@ -1023,9 +1022,9 @@
     (define (maybe-tips-width start-tip end-tip)
       (if (empty? wrap-spec) 0
           (+ (if (member start-tip '(default top bot (logical . 0) (physical . 0))) 0
-                 min-strut-width)
+                 (min-strut-width))
              (if (member end-tip '(default top bot (logical . 0) (physical . 1))) 0
-                 min-strut-width))))
+                 (min-strut-width)))))
     (super-new [flex #t])
 
     (define (sub-start-tip) (cdr (assq 'value (align-items))))
@@ -1033,7 +1032,7 @@
 
     (define (-content which start-tip end-tip)
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which (sub-start-tip) (sub-end-tip))) row)
-                                     (* (- (length row) 1) min-gap)))
+                                     (* (- (length row) 1) (min-gap))))
                          wrapped-subs))
          maybe-marker-width
          (maybe-tips-width start-tip end-tip)))
@@ -1052,7 +1051,7 @@
            [lay-out-row
             (λ (row)
               (let* (; available-width will be rebound at every step
-                     [available-width (- available-width (* min-gap (- (length row) 1)))]
+                     [available-width (- available-width (* (min-gap) (- (length row) 1)))]
                      ; w- bindings will add up to the width for each sub
                      [w-min-contents
                       (map (λ (s) (send s min-content (sub-start-tip) (sub-end-tip))) row)]
