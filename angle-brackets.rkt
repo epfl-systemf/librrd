@@ -1098,7 +1098,7 @@
               (map cons '(left right) (directional-reverse direction (list start-tip end-tip)))]
              [style 'marker] [marker (new random-marker% [direction direction])]))))))
 
-(define (desugar expr)
+(define (desugar expr [splice? #t])
   (match expr
     [(? string?) (if (and (string-prefix? expr "[") (string-suffix? expr "]"))
                        (list 'nonterm (substring expr 1 (- (string-length expr) 1)))
@@ -1116,12 +1116,18 @@
        [else (raise-arguments-error
               'desugar "negative polarity stack takes exactly two arguments"
               "exprs" exprs)])]
-    [(list* 'seq exprs) (cons 'seq (map desugar exprs))]
-    [(? list?) (cons 'seq (map desugar expr))]
+    [(list* 'seq exprs)
+     (cons 'seq
+           (if splice?
+               (append-map (λ (e) (match (desugar e)
+                                    [(list* 'seq exprs) exprs]
+                                    [exprs (list exprs)])) exprs)
+               (map desugar exprs)))]
+    [(? list?) (desugar (cons 'seq expr))]
     [_ expr]))
 
-(define (diagram expr [flex-stacks? #t])
-  (let rec ([expr (desugar expr)] [in-stack? #f])
+(define (diagram expr [flex-stacks? #t] [splice? #t])
+  (let rec ([expr (desugar expr splice?)] [in-stack? #f])
     (match expr
       ['(epsilon) (new epsilon%)]
       [(list 'term label) (new station% [terminal? #t] [label label])]
