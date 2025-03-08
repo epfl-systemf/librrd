@@ -863,21 +863,10 @@
           ['() (list lst)]
           [(cons idx rests) (cons (take lst idx) (helper (drop lst idx) rests))]))))
 
-(define (wrap-specs-badness wrap-specs)
+(define (wrap-specs-badness wrap-specs depth-f)
   (let rec ([ws wrap-specs] [depth 0])
     (let ([self-ws (first ws)] [subs-ws (rest ws)])
-      (apply + (* (expt 2 depth) (length self-ws)) (map (λ (sws) (rec sws (+ 1 depth))) subs-ws)))))
-
-(define (global-wraps-< gw1 gw2)
-  (let ([height1 (cdr (assq 'height gw1))]
-        [natural-width1 (cdr (assq 'natural-width gw1))]
-        [wrap-badness1 (wrap-specs-badness (cdr (assq 'wrap-specs gw1)))]
-        [height2 (cdr (assq 'height gw2))]
-        [natural-width2 (cdr (assq 'natural-width gw2))]
-        [wrap-badness2 (wrap-specs-badness (cdr (assq 'wrap-specs gw2)))])
-    (let ([badness (λ xs (+map * xs '(5 1 5)))])
-      (< (badness height1 natural-width1 wrap-badness1)
-         (badness height2 natural-width2 wrap-badness2)))))
+      (apply + (* (depth-f depth) (length self-ws)) (map (λ (sws) (rec sws (+ 1 depth))) subs-ws)))))
 
 (define ((make-lexicographic-< . accessors) x1 x2)
   (let loop ([accs accessors])
@@ -886,6 +875,31 @@
            (or (and (~= acc1 acc2)
                     (loop (cdr accs)))
                (< acc1 acc2))))))
+
+#;(define global-wraps-<
+  (make-lexicographic-<
+   (λ (w) (cdr (assq 'height w)))
+   (λ (w) (wrap-specs-badness (cdr (assq 'wrap-specs w))))
+   (λ (w) (cdr (assq 'natural-width w)))))
+
+(define (global-wraps-< min-content-wrap max-content-wrap)
+  (let* (#;[max-content-height (get-field height max-content-wrap)]
+         #;[min-content-height (cdr (assq 'height min-content-wrap))]
+         #;[height (λ (gw) (/ (cdr (assq 'height gw)) min-content-height))]
+         #;[max-content-width (send max-content-wrap min-content 'default 'default)]
+         [natural-width (λ (gw) (cdr (assq 'natural-width gw)))]
+         #;[min-content-badness
+          (wrap-specs-badness (cdr (assq 'wrap-specs min-content-wrap))
+                              (λ (d) (expt 2 d)))]
+         [wrap-badness
+          (λ (gw) (wrap-specs-badness (cdr (assq 'wrap-specs gw))
+                                      (λ (d) (+ d 1))))]
+         #;[badness (λ (gw) (+map (λ (fn wt) (* wt (fn gw)))
+                                (list height natural-width wrap-badness) '(1 1 1)))])
+    (make-lexicographic-<
+     wrap-badness
+     natural-width)
+    #;(λ (gw1 gw2) (< (badness gw1) (badness gw2)))))
 
 (define (local-wraps-< start-tip end-tip)
   (make-lexicographic-<
@@ -907,29 +921,30 @@
 
     (field
      [global-wraps-measures
-      (sort
-       (map
-        (λ (x)
-          (let* ([subs (map (λ (wm) (cdr (assq 'wrap wm))) (rest x))]
-                 [sub-wrap-specs (map (λ (wm) (cdr (assq 'wrap-specs wm))) (rest x))]
-                 [wrapped (new wrapped-sequence% [wrap-spec (first x)] [subs subs])])
-            (unless (~= (send wrapped max-content 'default 'default)
-                        (send wrapped min-content 'default 'default))
-              (raise-arguments-error
-               'sequence%-global-wraps-measures
-               "max- and min-content must be equal for a globally wrapped diagram"
-               "max-content" (send wrapped max-content 'default 'default)
-               "min-content" (send wrapped min-content 'default 'default)))
-            (list
-             (cons 'natural-width (send wrapped min-content 'default 'default))
-             (cons 'height (get-field height wrapped))
-             (cons 'wrap-specs (cons (first x) sub-wrap-specs))
-             (cons 'wrap wrapped))))
-        (apply
-         cartesian-product
-         (combinations (range (- (length subs) 1)))
-         (map (λ (s) (get-field global-wraps-measures s)) subs)))
-       global-wraps-<)])
+      (let ([measured
+             (map
+              (λ (x)
+                (let* ([subs (map (λ (wm) (cdr (assq 'wrap wm))) (rest x))]
+                       [sub-wrap-specs (map (λ (wm) (cdr (assq 'wrap-specs wm))) (rest x))]
+                       [wrapped (new wrapped-sequence% [wrap-spec (first x)] [subs subs])])
+                  (unless (~= (send wrapped max-content 'default 'default)
+                              (send wrapped min-content 'default 'default))
+                    (raise-arguments-error
+                     'sequence%-global-wraps-measures
+                     "max- and min-content must be equal for a globally wrapped diagram"
+                     "max-content" (send wrapped max-content 'default 'default)
+                     "min-content" (send wrapped min-content 'default 'default)))
+                  (list
+                   (cons 'natural-width (send wrapped min-content 'default 'default))
+                   (cons 'height (get-field height wrapped))
+                   (cons 'wrap-specs (cons (first x) sub-wrap-specs))
+                   (cons 'wrap wrapped))))
+              (apply
+               cartesian-product
+               (combinations (range (- (length subs) 1)))
+               (map (λ (s) (get-field global-wraps-measures s)) subs)))])
+        (sort measured
+              (global-wraps-< (argmin (λ (w) (cdr (assq 'natural-width w))) measured) (first wraps))))])
 
     (super-new [flex #t])
 
@@ -1067,6 +1082,14 @@
                      [w-grow-contents (map (λ (f rc) (* rc (f available-remaining-proportion)))
                                            distribute-funs
                                            remaining-contents)]
+                     #;[check (unless (~= (apply + w-grow-contents) (min available-width total-remaining-contents))
+                              (raise-arguments-error 'distribute "error"
+                                                     "min-contents" w-min-contents
+                                                     "max-contents" max-contents
+                                                     "grow" (apply + w-grow-contents)
+                                                     "grow-contents" w-grow-contents
+                                                     "total" total-remaining-contents
+                                                     "available" available-width))]
                      [available-width (- available-width (apply + w-grow-contents))]
                      ; x- bindings will add up to the absorbed space
                      [x-initial (* (flex-absorb) available-width)]
