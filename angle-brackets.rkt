@@ -818,61 +818,63 @@
              [tip-specs
               (map cons '(left right) (directional-reverse direction `(,start-tip ,end-tip)))])))))
 
+(define inline-diagram%
+  (class diagram% (super-new)))
+
+(define atomic-inline-diagram%
+  (class inline-diagram% (super-new)
+    (define (vertical? tip) (memq tip '(top bot)))
+    (define (vertical-tip-space-width start-tip end-tip)
+      (+ (if (vertical? start-tip) (min-strut-width) 0)
+         (if (vertical? end-tip) (min-strut-width) 0)))
+    (define/overment (min-content start-tip end-tip)
+      (+ (inner 0 min-content start-tip end-tip) (vertical-tip-space-width start-tip end-tip)))
+    (define/overment (max-content start-tip end-tip)
+      (+ (inner 0 max-content start-tip end-tip) (vertical-tip-space-width start-tip end-tip)))
+    (define/overment (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
+      (let ([tip-space
+             (λ (tip) (and (vertical? tip) (list (new hspace% [direction direction]))))])
+        (new happend-layout%
+             [subs (append (or (tip-space start-tip) '())
+                           (list
+                            (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
+                                   start-tip end-tip direction))
+                           (or (tip-space end-tip) '()))]
+             [direction direction])))))
+
 (define station%
-  (class block-diagram%
+  (class atomic-inline-diagram%
     (init-field terminal? label)
-    (define init-layout (lay-out #f))
-    (define init-layout-width (get-field physical-width init-layout))
-    (field [height (get-field physical-height init-layout)])
+    (define init-text-box (new text-box% [terminal? terminal?] [label label]))
+    (define (init-layout-width)
+      (+ (* 2 (min-strut-width)) (get-field physical-width init-text-box)))
+    (field [height (get-field physical-height init-text-box)])
     (field [global-wraps-measures
             (list (list (cons 'natural-width init-layout-width)
                         (cons 'height height)
                         (cons 'wrap-specs '(() . ()))
                         (cons 'wrap this)))])
-    (define/override (min-content start-tip end-tip)
-      (+ init-layout-width
-         ;; TODO: top/bot leaves extra space (also for others?)
-         (if (memq start-tip '(top bot)) (min-strut-width) 0)
-         (if (memq end-tip '(top bot)) (min-strut-width) 0)))
-    (define/override (max-content start-tip end-tip) (min-content start-tip end-tip))
+    (define/augride (min-content start-tip end-tip) (init-layout-width))
+    (define/augride (max-content start-tip end-tip) (init-layout-width))
     (super-new [flex #f])
 
-    (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
+    (define/augride (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested width doesn't matter
       (let ([tip-strut (new hstrut% [physical-width (min-strut-width)] [direction direction])]
-            [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])]
-            [tip-space
-             (λ (tip) (and (memq tip '(top bot)) (list (new hspace% [direction direction]))))])
-        (new happend-layout% [subs (append (or (tip-space start-tip) '())
-                                           (list tip-strut text-box tip-strut)
-                                           (or (tip-space end-tip) '()))]
-             [direction direction])))))
+            [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])])
+        (new happend-layout% [subs (list tip-strut text-box tip-strut)] [direction direction])))))
 
 (define epsilon%
-  (class block-diagram%
+  (class atomic-inline-diagram%
     (super-new [flex #t])
-    (define/override (min-content start-tip end-tip)
-      (+ (if (memq start-tip '(top bot)) (min-strut-width) 0)
-         (if (memq end-tip '(top bot)) (min-strut-width) 0)))
-    (define/override (max-content start-tip end-tip) (min-content start-tip end-tip))
     (field [height 0])
     (field [global-wraps-measures
             (list (list (cons 'natural-width 0)
                         (cons 'height height)
                         (cons 'wrap-specs '(() . ()))
                         (cons 'wrap this)))])
-    (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
-      (let ([tip-space
-             (λ (tip) (and (memq tip '(top bot)) (list (new hspace% [direction direction]))))]
-            [width (- width (min-content start-tip end-tip))])
-        (new happend-layout%
-             [subs (append (or (tip-space start-tip) '())
-                           (list (new hstrut% [physical-width width] [direction direction]))
-                           (or (tip-space end-tip) '()))]
-             [direction direction])))))
-
-(define inline-diagram%
-  (class diagram% (super-new)))
+    (define/augride (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
+      (new hstrut% [physical-width width] [direction direction]))))
 
 (define (break-at lst idxs)
   (if (empty? idxs)
