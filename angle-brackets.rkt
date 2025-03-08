@@ -21,6 +21,12 @@
 
 (define (~= x y) (> 0.0001 (abs (- x y))))
 
+(define (pre-post-pend pre mid post)
+  (append
+   (if pre (list pre) '())
+   (if (list? mid) mid (list mid))
+   (if post (list post) '())))
+
 ;; types of align-items
 (define ai-baseline '((name . baseline) (value . default)))
 (define ai-top '((name . top) (value physical . 0)))
@@ -38,49 +44,45 @@
   (let* ([each-basis (/ total-space (+ num-subs 1))]
          [each-mid-space (max (min-gap) each-basis)]
          [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
-    (append (list each-end-space)
-            (build-list (- num-subs 1) (λ _ each-mid-space))
-            (list each-end-space))))
+    (pre-post-pend each-end-space (build-list (- num-subs 1) (λ _ each-mid-space)) each-end-space)))
 
 (define (jc-space-between total-space num-subs #;direction _)
   (case num-subs
     [(1) (jc-center total-space num-subs _)]
     [(2) (list 0 total-space 0)]
     [else
-     (append (list 0) (jc-space-evenly total-space (- num-subs 2) _) (list 0))]))
+     (pre-post-pend 0 (jc-space-evenly total-space (- num-subs 2) _) 0)]))
 
 (define (jc-space-around total-space num-subs #;direction _)
   (let* ([each-basis (/ total-space num-subs)]
          [each-mid-space (max (min-gap) each-basis)]
          [each-end-space (/ (- total-space (* each-mid-space (- num-subs 1))) 2)])
-    (append (list each-end-space)
-            (build-list (- num-subs 1) (λ _ each-mid-space))
-            (list each-end-space))))
+    (pre-post-pend each-end-space (build-list (- num-subs 1) (λ _ each-mid-space)) each-end-space)))
 
 (define (jc-right total-space num-subs #;direction _)
-  (append
-   (list (- total-space (* (min-gap) (- num-subs 1))))
+  (pre-post-pend
+   (- total-space (* (min-gap) (- num-subs 1)))
    (build-list (- num-subs 1) (λ _ (min-gap)))
-   (list 0)))
+   0))
 
 (define (jc-end total-space num-subs direction)
   (directional-reverse direction (jc-right total-space num-subs direction)))
 
 (define (jc-left total-space num-subs #;direction _)
-  (append
-   (list 0)
+  (pre-post-pend
+   0
    (build-list (- num-subs 1) (λ _ (min-gap)))
-   (list (- total-space (* (min-gap) (- num-subs 1))))))
+   (- total-space (* (min-gap) (- num-subs 1)))))
 
 (define (jc-start total-space num-subs direction)
   (directional-reverse direction (jc-left total-space num-subs direction)))
 
 (define (jc-center total-space num-subs #;direction _)
   (let ([each-end-space (/ (- total-space (* (min-gap) (- num-subs 1))) 2)])
-    (append
-     (list each-end-space)
+    (pre-post-pend
+     each-end-space
      (build-list (- num-subs 1) (λ _ (max (min-gap) 0)))
-     (list each-end-space))))
+     each-end-space)))
 
 
 ;; affect layout
@@ -377,12 +379,12 @@
                                      (list (new hstrut% [physical-width marker-width]
                                                 [direction init-direction] [always-arrow #t])
                                            sub marker))]))])
-                 (append
-                  (list (first struct-sub-markers))
+                 (pre-post-pend
+                  (first struct-sub-markers)
                   (map (λ (s) (new happend-layout% [direction init-direction]
                                    [subs (list marker s marker)]))
                        mid-subs)
-                  (list (second struct-sub-markers))))))]
+                  (second struct-sub-markers)))))]
 
         [(boustrophedon)
          (unless (odd? (length init-subs))
@@ -596,15 +598,15 @@
                   (apply append
                          (map (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
                               init-subs))]
-                 [space? (λ (s) (if (is-a? s hspace%) (list s) #f))]
+                 [space? (λ (s) (if (is-a? s hspace%) s #f))]
                  [start-space (space? (first (dropf spliced-subs (is-a?/c hstrut%))))]
                  [end-space (space? (last (dropf-right spliced-subs (is-a?/c hstrut%))))]
                  [spliced-subs (filter-not space? spliced-subs)])
             (for/fold ([cur-hstrut #f]
                        [subs '()]
-                       #:result (append (or start-space '())
-                                        (reverse (if cur-hstrut (cons cur-hstrut subs) subs))
-                                        (or end-space '())))
+                       #:result (pre-post-pend start-space
+                                               (reverse (if cur-hstrut (cons cur-hstrut subs) subs))
+                                               end-space))
                       ([cur-sub spliced-subs])
               (if cur-hstrut
                   (if (is-a? cur-sub hstrut%)
@@ -833,17 +835,17 @@
       (+ (inner 0 max-content start-tip end-tip) (vertical-tip-space-width start-tip end-tip)))
     (define/overment (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       (let ([tip-space
-             (λ (tip) (and (vertical? tip) (list (new hspace% [direction direction]))))])
+             (λ (tip) (and (vertical? tip) (new hspace% [direction direction])))])
         (new happend-layout%
-             [subs (append (or (tip-space start-tip) '())
-                           (list
-                            (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
-                                   start-tip end-tip direction))
-                           (or (tip-space end-tip) '()))]
+             [subs (pre-post-pend (tip-space start-tip)
+                                  (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
+                                         start-tip end-tip direction)
+                                  (tip-space end-tip))]
              [direction direction])))))
 
 (define station%
   (class atomic-inline-diagram%
+    (super-new [flex #f])
     (init-field terminal? label)
     (define init-text-box (new text-box% [terminal? terminal?] [label label]))
     (define (init-layout-width)
@@ -856,7 +858,6 @@
                         (cons 'wrap this)))])
     (define/augride (min-content start-tip end-tip) (init-layout-width))
     (define/augride (max-content start-tip end-tip) (init-layout-width))
-    (super-new [flex #f])
 
     (define/augride (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested width doesn't matter
