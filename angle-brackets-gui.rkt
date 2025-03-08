@@ -12,7 +12,7 @@
                      (<> - "[select-core]" (<> + "UNION" ("UNION" "ALL") "INTERSECT" "EXCEPT"))
                      (+ ("ORDER" "BY" (<> - "[ordering-term]" ",")) epsilon)
                      (+ ("LIMIT" "[expr]" (+ epsilon ("OFFSET" "[expr]") ("," "[expr]"))) epsilon))]
-             [diag (diagram expr)]
+             [diag (diagram expr #f #f)]
              [width 950] [self-padding 10]
              [this-justify-content jc-space-evenly]
              [this-align-items ai-top]
@@ -21,7 +21,7 @@
              [this-arrow-threshold 6])
       (define/public (set-expr value)
         (set-field! expr this value)
-        (set-field! diag this (diagram value this-flex-stacks?))
+        (set-field! diag this (diagram value this-flex-stacks? #f))
         (refresh-now))
       (define/public (set-justify-content value)
         (set-field! this-justify-content this value)
@@ -37,7 +37,7 @@
         (refresh-now))
       (define/public (set-flex-stacks value)
         (set-field! this-flex-stacks? this value)
-        (set-field! diag this (diagram expr this-flex-stacks?))
+        (set-field! diag this (diagram expr this-flex-stacks? #f))
         (refresh-now))
 
       (define (measure-desc desc m)
