@@ -592,13 +592,19 @@
     (field
      [subs
       (if fuse?
-          (let ([spliced-subs
-                 (apply append
-                        (map (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
-                             init-subs))])
+          (let* ([spliced-subs
+                  (apply append
+                         (map (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
+                              init-subs))]
+                 [space? (λ (s) (if (is-a? s hspace%) (list s) #f))]
+                 [start-space (space? (first (dropf spliced-subs (is-a?/c hstrut%))))]
+                 [end-space (space? (last (dropf-right spliced-subs (is-a?/c hstrut%))))]
+                 [spliced-subs (filter-not space? spliced-subs)])
             (for/fold ([cur-hstrut #f]
                        [subs '()]
-                       #:result (reverse (if cur-hstrut (cons cur-hstrut subs) subs)))
+                       #:result (append (or start-space '())
+                                        (reverse (if cur-hstrut (cons cur-hstrut subs) subs))
+                                        (or end-space '())))
                       ([cur-sub spliced-subs])
               (if cur-hstrut
                   (if (is-a? cur-sub hstrut%)
@@ -826,22 +832,29 @@
     (define/override (min-content start-tip end-tip)
       (+ init-layout-width
          ;; TODO: top/bot leaves extra space (also for others?)
-         #;(if (memq start-tip '(top bot)) (min-strut-width) 0)
-         #;(if (memq end-tip '(top bot)) (min-strut-width) 0)))
+         (if (memq start-tip '(top bot)) (min-strut-width) 0)
+         (if (memq end-tip '(top bot)) (min-strut-width) 0)))
     (define/override (max-content start-tip end-tip) (min-content start-tip end-tip))
     (super-new [flex #f])
 
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested width doesn't matter
       (let ([tip-strut (new hstrut% [physical-width (min-strut-width)] [direction direction])]
-            [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])])
-        (new happend-layout% [subs (list tip-strut text-box tip-strut)] [direction direction])))))
+            [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])]
+            [tip-space
+             (λ (tip) (and (memq tip '(top bot)) (list (new hspace% [direction direction]))))])
+        (new happend-layout% [subs (append (or (tip-space start-tip) '())
+                                           (list tip-strut text-box tip-strut)
+                                           (or (tip-space end-tip) '()))]
+             [direction direction])))))
 
 (define epsilon%
   (class block-diagram%
     (super-new [flex #t])
-    (define/override (min-content start-tip end-tip) 0)
-    (define/override (max-content start-tip end-tip) 0)
+    (define/override (min-content start-tip end-tip)
+      (+ (if (memq start-tip '(top bot)) (min-strut-width) 0)
+         (if (memq end-tip '(top bot)) (min-strut-width) 0)))
+    (define/override (max-content start-tip end-tip) (min-content start-tip end-tip))
     (field [height 0])
     (field [global-wraps-measures
             (list (list (cons 'natural-width 0)
@@ -849,7 +862,14 @@
                         (cons 'wrap-specs '(() . ()))
                         (cons 'wrap this)))])
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
-      (new hstrut% [physical-width width] [direction direction]))))
+      (let ([tip-space
+             (λ (tip) (and (memq tip '(top bot)) (list (new hspace% [direction direction]))))]
+            [width (- width (min-content start-tip end-tip))])
+        (new happend-layout%
+             [subs (append (or (tip-space start-tip) '())
+                           (list (new hstrut% [physical-width width] [direction direction]))
+                           (or (tip-space end-tip) '()))]
+             [direction direction])))))
 
 (define inline-diagram%
   (class diagram% (super-new)))
@@ -1029,8 +1049,8 @@
     (define wrapped-subs (break-at subs wrap-spec))
 
     (define random-label (list-ref '("†" "‡" "◊" "¤" "*") (random 5)))
-    (define maybe-marker-width
-      (if (empty? wrap-spec) 0
+    (define marker-or-space-width
+      (if (empty? wrap-spec) (* 2 (min-strut-width))
           (* 2 (get-field physical-width (new text-marker% [label random-label])))))
     (define (maybe-tips-width start-tip end-tip)
       (if (empty? wrap-spec) 0
@@ -1047,7 +1067,7 @@
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which (sub-start-tip) (sub-end-tip))) row)
                                      (* (- (length row) 1) (min-gap))))
                          wrapped-subs))
-         maybe-marker-width
+         marker-or-space-width
          (maybe-tips-width start-tip end-tip)))
     (define/override (min-content start-tip end-tip)
       (-content 'min-content start-tip end-tip))
@@ -1059,7 +1079,7 @@
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       (let*
           ([available-width (- (max width (min-content start-tip end-tip))
-                               maybe-marker-width
+                               marker-or-space-width
                                (maybe-tips-width start-tip end-tip))]
            [lay-out-row
             (λ (row)
@@ -1111,7 +1131,9 @@
                  (directional-reverse direction sub-layouts)
                  direction)))])
         (if (empty? wrap-spec)
-            (lay-out-row (first wrapped-subs))
+            (let ([space (new hspace% [direction direction])])
+              (new happend-layout% [subs (list space (lay-out-row (first wrapped-subs)) space)]
+                   [fuse? #t] [direction direction]))
             (new
              vappend-inline-layout% [direction direction] [subs (map lay-out-row wrapped-subs)]
              [tip-specs
