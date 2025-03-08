@@ -586,10 +586,6 @@
   (class text-marker%
     (super-new [label "…"] [y-alignment-magic (* (the-font-size) 0.08)])))
 
-(define random-marker%
-  (class text-marker%
-    (super-new [label (list-ref '("†" "‡" "◊" "¤" "*") (random 5))])))
-
 (define happend-layout%
   (class inline-layout%
     (init [(init-subs subs)] [fuse? #f])
@@ -1017,8 +1013,10 @@
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
     (define wrapped-subs (break-at subs wrap-spec))
 
+    (define random-label (list-ref '("†" "‡" "◊" "¤" "*") (random 5)))
     (define maybe-marker-width
-      (if (empty? wrap-spec) 0 (* 2 (get-field physical-width (new random-marker%)))))
+      (if (empty? wrap-spec) 0
+          (* 2 (get-field physical-width (new text-marker% [label random-label])))))
     (define (maybe-tips-width start-tip end-tip)
       (if (empty? wrap-spec) 0
           (+ (if (member start-tip '(default top bot (logical . 0) (physical . 0))) 0
@@ -1095,7 +1093,8 @@
              vappend-inline-layout% [direction direction] [subs (map lay-out-row wrapped-subs)]
              [tip-specs
               (map cons '(left right) (directional-reverse direction (list start-tip end-tip)))]
-             [style 'marker] [marker (new random-marker% [direction direction])]))))))
+             [style 'marker]
+             [marker (new text-marker% [direction direction] [label random-label])]))))))
 
 (define (desugar expr [splice? #t])
   (match expr
