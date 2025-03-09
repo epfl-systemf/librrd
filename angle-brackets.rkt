@@ -311,24 +311,29 @@
                            [outer-arc-theta (list 0 (/ pi 2))])
                   `((draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side) (/ arc-size 2))
                                ,bracket-x ,(+ bot-y (send bot-sub tip-y side) (- (/ arc-size 2))))
-                    ,@(let ([self-tip-y (+ y (tip-y side))]
+                    ,@(let ([self-tip-spec (cdr (assq side tip-specs))]
+                            [self-tip-y (+ y (tip-y side))]
                             [top-tip-y (+ top-y (send top-sub tip-y side))]
                             [bot-tip-y (+ bot-y (send bot-sub tip-y side))])
-                        (cond
-                          [(~= self-tip-y top-tip-y)
-                           `((draw-line ,bracket-x ,self-tip-y
-                                        ,(+ bracket-x space-dx) ,self-tip-y)
-                             (draw-arc ,(+ bracket-x outer-arc-dx) ,self-tip-y
-                                       ,arc-size ,arc-size
-                                       ,outer-arc-theta ,(+ outer-arc-theta (/ pi 2)))
-                             (draw-arc ,(+ bracket-x inner-arc-dx) ,(- bot-tip-y arc-size)
-                                       ,arc-size ,arc-size
-                                       ,(- (- inner-arc-theta) (/ pi 2)) ,(- inner-arc-theta)))]
-                          [(~= self-tip-y (+ bot-y (send bot-sub tip-y side)))
-                           '()]
-                          [(eq? 'top (cdr (assq side tip-specs))) '()]
-                          [(eq? 'bot (cdr (assq side tip-specs))) '()]
-                          [else '()])))))))
+                        (append
+                         #;(if (not (~= self-tip-y bot-tip-y))
+                             `((draw-arc ,(+ bracket-x inner-arc-dx) ,(- bot-tip-y arc-size)
+                                         ,arc-size ,arc-size
+                                         ,(- (- inner-arc-theta) (/ pi 2)) ,(- inner-arc-theta)))
+                             '())
+                         #;(if (not (~= self-tip-y top-tip-y))
+                             `((draw-arc ,(+ bracket-x inner-arc-dx) ,top-tip-y
+                                         ,arc-size ,arc-size
+                                         ,inner-arc-theta ,(+ inner-arc-theta (/ pi 2))))
+                             '())
+                         (if (not (memq self-tip-spec '(top bot)))
+                             `((draw-line ,bracket-x ,self-tip-y
+                                          ,(+ bracket-x space-dx) ,self-tip-y))
+                             '())
+                         (cond
+                           [(eq? 'top (cdr (assq side tip-specs))) '()]
+                           [(eq? 'bot (cdr (assq side tip-specs))) '()]
+                           [else '()]))))))))
             render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
 
 (define vappend-forward-backward-layout%
