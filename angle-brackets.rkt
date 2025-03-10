@@ -23,9 +23,9 @@
 
 (define (pre-post-pend pre mid post)
   (append
-   (if pre (list pre) '())
+   (if pre (if (list? pre) pre (list pre)) '())
    (if (list? mid) mid (list mid))
-   (if post (list post) '())))
+   (if post (if (list? post) post (list post)) '())))
 
 ;; types of align-items
 (define ai-baseline '((name . baseline) (value . default)))
@@ -245,7 +245,7 @@
     (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
       ; inexact equality
       (unless (~= (apply max sub-widths) (apply min sub-widths))
-        (raise-arguments-error 'vappend-layout "subs must be equal widths"
+        (raise-arguments-error 'vappend-layout "subs must have equal widths"
                                "sub-widths" sub-widths))
       (super-new
        [physical-width (+ (first sub-widths)
@@ -271,7 +271,8 @@
     (check-directions)
 
     (define/overment (render x y)
-      (let ([sub-x (+ x (if (side-struts? 'left) (min-strut-width) 0))])
+      (let ([sub-x (+ x (if (side-struts? 'left) (min-strut-width) 0))]
+            [arc-size (* 2 (min-strut-width))])
         (let-values
             ([(sub-renders sub-ys)
               (for/fold
@@ -284,57 +285,56 @@
                 (values (+ sub-y (get-field physical-height sub) (row-gap))
                         (cons (send sub render sub-x sub-y) sub-renders)
                         (cons sub-y sub-ys)))])
-          (append
+          (apply
+           append
            sub-renders
            `((set-pen ,(the-strut-pen)))
            (for/list ([side '(left right)]
-                      [tip-x (list x (+ x physical-width (- (min-strut-width))))]
-                      #:when (side-struts? side))
-             `(draw-line ,tip-x ,(+ y (tip-y side))
-                         ,(+ tip-x (min-strut-width)) ,(+ y (tip-y side))))
-           (inner
-            (cons
-             `(set-pen ,(the-strut-pen))
-             (let ([top-sub (first subs)]
-                   [top-y (first sub-ys)]
-                   [bot-sub (last subs)]
-                   [bot-y (last sub-ys)]
-                   [arc-size (* 2 (min-strut-width))])
-               (apply
-                append
-                (for/list ([side '(left right)]
-                           [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))]
-                           [space-dx (list (min-strut-width) (- (min-strut-width)))]
-                           [inner-arc-dx (list 0 (- arc-size))]
-                           [outer-arc-dx (list (- arc-size) 0)]
-                           [inner-arc-theta (list (/ pi 2) 0)]
-                           [outer-arc-theta (list 0 (/ pi 2))])
-                  `((draw-line ,bracket-x ,(+ top-y (send top-sub tip-y side) (/ arc-size 2))
-                               ,bracket-x ,(+ bot-y (send bot-sub tip-y side) (- (/ arc-size 2))))
-                    ,@(let ([self-tip-spec (cdr (assq side tip-specs))]
-                            [self-tip-y (+ y (tip-y side))]
-                            [top-tip-y (+ top-y (send top-sub tip-y side))]
-                            [bot-tip-y (+ bot-y (send bot-sub tip-y side))])
-                        (append
-                         #;(if (not (~= self-tip-y bot-tip-y))
-                             `((draw-arc ,(+ bracket-x inner-arc-dx) ,(- bot-tip-y arc-size)
-                                         ,arc-size ,arc-size
-                                         ,(- (- inner-arc-theta) (/ pi 2)) ,(- inner-arc-theta)))
-                             '())
-                         #;(if (not (~= self-tip-y top-tip-y))
-                             `((draw-arc ,(+ bracket-x inner-arc-dx) ,top-tip-y
-                                         ,arc-size ,arc-size
-                                         ,inner-arc-theta ,(+ inner-arc-theta (/ pi 2))))
-                             '())
-                         (if (not (memq self-tip-spec '(top bot)))
-                             `((draw-line ,bracket-x ,self-tip-y
-                                          ,(+ bracket-x space-dx) ,self-tip-y))
-                             '())
-                         (cond
-                           [(eq? 'top (cdr (assq side tip-specs))) '()]
-                           [(eq? 'bot (cdr (assq side tip-specs))) '()]
-                           [else '()]))))))))
-            render x y sub-x (get-field physical-width (first subs)) sub-ys)))))))
+                      [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))]
+                      [inner-arc-dx (list 0 (- arc-size))]
+                      [outer-arc-dx (list (- arc-size) 0)]
+                      [positive-theta (list (/ pi 2) 0)]
+                      [negative-theta (list 0 (/ pi 2))])
+             (let* ([self-tip-y (+ y (tip-y side))]
+                    [sub-tip-ys (map (λ (r) (+ y (tip-y side `(logical . ,r))))
+                                     (range (cdr (assq side init-num-rows))))]
+                    [arc (λ (dx dy t) (λ (y) `(draw-arc ,(+ bracket-x dx) ,(+ y dy)
+                                                        ,arc-size ,arc-size
+                                                        ,t ,(+ t (/ pi 2)))))]
+                    [inner-up-arc (arc inner-arc-dx (- arc-size) (+ negative-theta pi))]
+                    [outer-up-arc (arc outer-arc-dx (- arc-size) (+ positive-theta pi))]
+                    [outer-down-arc (arc outer-arc-dx 0 negative-theta)]
+                    [inner-down-arc (arc inner-arc-dx 0 positive-theta)]
+                    [vline (λ (sy ey) `(draw-line ,bracket-x ,(+ sy (/ arc-size 2))
+                                                  ,bracket-x ,(- ey (/ arc-size 2))))])
+               (inner
+                (if (memq (cdr (assq side tip-specs)) '(top bot)) '()
+                    ; only top-level vappend draws curves and connecting struts
+                    (for/fold ([cmds '()]
+                               [vline-above? #f]
+                               [vline-below? #f]
+                               #:result (pre-post-pend
+                                         (and vline-above?
+                                              (list (outer-up-arc self-tip-y)
+                                                    (vline (first sub-tip-ys) self-tip-y)))
+                                         cmds
+                                         (and vline-below?
+                                              (list (outer-down-arc self-tip-y)
+                                                    (vline self-tip-y (last sub-tip-ys))))))
+                              ([ty sub-tip-ys])
+                      (cond
+                        [(~= ty self-tip-y)
+                         (values
+                          (cons `(draw-line ,(- bracket-x inner-arc-dx (/ arc-size 2)) ,ty
+                                            ,(+ bracket-x inner-arc-dx (/ arc-size 2)) ,ty) cmds)
+                          vline-above? vline-below?)]
+                        [(< ty self-tip-y)
+                         (values (cons (inner-down-arc ty) cmds) #t vline-below?)]
+                        [(> ty self-tip-y)
+                         (values (cons (inner-up-arc ty) cmds) vline-above? #t)])))
+                render self-tip-y sub-ys side bracket-x vline
+                arc-size inner-arc-dx outer-arc-dx positive-theta negative-theta
+                inner-up-arc outer-up-arc outer-down-arc inner-down-arc)))))))))
 
 (define vappend-forward-backward-layout%
   (class vappend-block-layout%
@@ -354,7 +354,7 @@
 
     (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))])
 
-    (inherit-field direction subs)
+    (inherit-field direction subs tip-specs num-rows)
     (define/override (check-directions)
       (unless (eq? direction (get-field direction (first subs)))
         (raise-arguments-error
@@ -365,7 +365,39 @@
         (raise-arguments-error
          'vappend-forward-backward-layout
          "second sub must have opposite direction as this layout"
-         "second sub" (second subs) "direction" direction)))))
+         "second sub" (second subs) "direction" direction)))
+
+    (define/augride (render self-tip-y sub-ys side bracket-x vline
+                            arc-size inner-arc-dx outer-arc-dx positive-theta negative-theta
+                            inner-up-arc outer-up-arc outer-down-arc inner-down-arc)
+      (let* ([bot-sub (second subs)]
+             [sub-tip-ys
+              (if (is-a? bot-sub vappend-block-layout%)
+                  (map (λ (r) (+ (second sub-ys) (send bot-sub tip-y side `(logical . ,r))))
+                       (range (cdr (assq side (get-field num-rows (second subs))))))
+                  (list (+ (second sub-ys) (send bot-sub tip-y side))))]
+             [top-tip-y (+ (first sub-ys) (send (first subs) tip-y side))]
+             [bot-tip-y (last sub-tip-ys)])
+        (append
+         ; for the top sub
+         (list (inner-down-arc top-tip-y))
+         ; for all subs except top
+         (append-map (λ (ty) (list (inner-up-arc ty))) sub-tip-ys)
+         ; for the self-tip
+         (cond
+           [(~= self-tip-y top-tip-y)
+            (if (memq (cdr (assq side tip-specs)) '(top bot))
+                `((draw-line ,bracket-x ,self-tip-y
+                             ,(+ bracket-x inner-arc-dx (/ arc-size 2)) ,self-tip-y))
+                `((draw-line ,(- bracket-x inner-arc-dx (/ arc-size 2)) ,self-tip-y
+                             ,(+ bracket-x inner-arc-dx (/ arc-size 2)) ,self-tip-y)))]
+           [(< self-tip-y top-tip-y)
+            (list (outer-down-arc self-tip-y)
+                  (vline self-tip-y top-tip-y)
+                  (inner-up-arc top-tip-y))]
+           [else (list (outer-up-arc self-tip-y))])
+         ; unconditional vline
+         (list (vline top-tip-y bot-tip-y)))))))
 
 (define vappend-inline-layout%
   (class vappend-block-layout%
@@ -373,7 +405,21 @@
     (init-field style [marker #f])
     ; needed for modifying subs if style is marker below, before super-new.
     ; renamed internally so that after super-new we can inherit "direction".
-    (init [(init-direction direction) 'ltr])
+    (init [(init-direction direction) 'ltr]
+          [tip-specs '((left . default) (right . default))])
+
+    (define-values (start-side end-side)
+      (apply values (directional-reverse init-direction '(left right))))
+
+    (define side-finishing?
+      (list (cons start-side (match (cdr (assq start-side tip-specs))
+                               [(cons 'physical r) (not (= r 0))]
+                               [else #f]))
+            (cons end-side (match (cdr (assq end-side tip-specs))
+                             [(cons 'physical r) (not (= r 1))]
+                             [else #f]))))
+
+    (define/override (side-struts? side) (cdr (assq side side-finishing?)))
 
     (define subs
       (case style
@@ -383,26 +429,40 @@
             'vappend-inline-layout
             "when style is 'marker, marker must be an inline-layout%"
             "marker" marker))
-         (if (= (length init-subs) 1) init-subs
-             (let*-values ([(first-subs rest-subs) (split-at init-subs 1)]
-                           [(mid-subs last-subs) (split-at-right rest-subs 1)])
-               (let* ([marker-width (get-field physical-width marker)]
-                      [struct-sub-markers
-                       (for/list ([sub (list (first first-subs) (first last-subs))]
-                                  [maybe-reverse (if (eq? init-direction 'rtl)
-                                                     (list reverse identity)
-                                                     (list identity reverse))])
-                         (new happend-layout% [fuse? #t] [direction init-direction]
-                              [subs (maybe-reverse
-                                     (list (new hstrut% [physical-width marker-width]
-                                                [direction init-direction] [always-arrow #t])
-                                           sub marker))]))])
-                 (pre-post-pend
-                  (first struct-sub-markers)
-                  (map (λ (s) (new happend-layout% [direction init-direction]
-                                   [subs (list marker s marker)]))
-                       mid-subs)
-                  (second struct-sub-markers)))))]
+         (let ([marker-width (get-field physical-width marker)])
+           (unless (> marker-width (min-strut-width))
+             (raise-arguments-error
+              'vappend-inline-layout
+              "marker width must be at least min-strut-width"
+              "marker-width" marker-width))
+           (if (= (length init-subs) 1) init-subs
+               (let*-values ([(first-subs rest-subs) (split-at init-subs 1)]
+                             [(mid-subs last-subs) (split-at-right rest-subs 1)])
+                 (let ([struct-sub-markers
+                        (for/list ([sub (list (first first-subs) (first last-subs))]
+                                   [maybe-reverse (if (eq? init-direction 'rtl)
+                                                      (list reverse identity)
+                                                      (list identity reverse))]
+                                   [tip-side (list start-side end-side)])
+                          (new happend-layout% [fuse? #t] [direction init-direction]
+                               [subs
+                                (maybe-reverse
+                                 (append
+                                  (if (or (memq (cdr (assq tip-side tip-specs)) '(top bot))
+                                          (side-struts? tip-side))
+                                      (list (new hspace% [direction init-direction])
+                                            (new hstrut%
+                                                 [physical-width (- marker-width (min-strut-width))]
+                                                 [direction init-direction] [always-arrow #t]))
+                                      (list (new hstrut% [physical-width marker-width]
+                                                 [direction init-direction] [always-arrow #t])))
+                                  (list sub marker)))]))])
+                   (pre-post-pend
+                    (first struct-sub-markers)
+                    (map (λ (s) (new happend-layout% [direction init-direction]
+                                     [subs (list marker s marker)]))
+                         mid-subs)
+                    (second struct-sub-markers))))))]
 
         [(boustrophedon)
          (unless (odd? (length init-subs))
@@ -419,10 +479,6 @@
           'vappend-inline-layout "style must be 'bare, 'marker, or 'boustrophedon"
           "style" style)]))
 
-    (init [tip-specs '((left . default) (right . default))])
-
-    (define-values (start-side end-side)
-      (apply values (directional-reverse init-direction '(left right))))
     (define/override (tip-y side spec)
       (match spec
         [(or 'default 'top 'bot) (tip-y side '(logical . 0))]
@@ -444,14 +500,6 @@
                   (+map (λ (s) (get-field physical-height s)) nonlast-subs)
                   (* (length nonlast-subs) (row-gap)))))]
         [else (super tip-y side spec)]))
-
-    (define needs-side-strut?
-      (for/list ([side (list start-side end-side)]
-                 [defaults '((default top bot (physical . 0) (logical . 0))
-                             (default top bot (physical . 1) (logical . 0)))])
-        (cons side (not (member (cdr (assq side tip-specs)) defaults)))))
-    (define needs-side-bracket? needs-side-strut?)
-    (define/override (side-struts? side) (cdr (assq side needs-side-strut?)))
 
     (super-new
      [subs subs] [direction init-direction]
@@ -479,31 +527,21 @@
                "this direction" direction)))
           (super check-directions)))
 
-    (define/augride (render x y sub-x sub-width sub-ys)
-      (append
-       (if (eq? style 'boustrophedon)
-           (for/fold ([brackets '()]
-                      [end-right? (eq? (get-field direction (first subs)) 'ltr)]
-                      #:result (cons `(set-pen ,(the-strut-pen)) brackets))
-                     ([sub subs]
-                      [sub-y sub-ys]
-                      [next-sub (rest subs)]
-                      [next-y (rest sub-ys)])
-             (values
-              (cons
-               (if end-right?
-                   `(draw-line ,(+ sub-x sub-width) ,(+ sub-y (send sub tip-y 'right))
-                               ,(+ sub-x sub-width) ,(+ next-y (send next-sub tip-y 'right)))
-                   `(draw-line ,sub-x ,(+ sub-y (send sub tip-y 'left))
-                               ,sub-x ,(+ next-y (send next-sub tip-y 'left))))
-               brackets)
-              (not end-right?)))
-           '())
-       (for/list ([side '(left right)]
-                  [bracket-x (list sub-x (+ sub-x sub-width))]
-                  #:when (cdr (assq side needs-side-bracket?)))
-         `(draw-line ,bracket-x ,(+ y (tip-y side))
-                     ,bracket-x ,(+ y (tip-y side 'default))))))))
+    (define/augride (render self-tip-y sub-ys side bracket-x vline
+                            arc-size inner-arc-dx outer-arc-dx positive-theta negative-theta
+                            inner-up-arc outer-up-arc outer-down-arc inner-down-arc)
+      (when (eq? style 'boustrophedon)
+        (raise-user-error "boustrophedon layout not implemented yet"))
+      (if (cdr (assq side side-finishing?))
+          (let ([finish-y (+ self-tip-y (- (tip-y side)) (tip-y side '(logical . 0)))])
+            (if (< finish-y self-tip-y)
+                (list (inner-down-arc finish-y)
+                      (vline finish-y self-tip-y)
+                      (outer-up-arc self-tip-y))
+                (list (outer-down-arc self-tip-y)
+                      (vline self-tip-y finish-y)
+                      (inner-up-arc finish-y))))
+          '()))))
 
 (define inline-layout%
   (class layout%
@@ -616,7 +654,7 @@
                   (apply append
                          (map (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
                               init-subs))]
-                 [space? (λ (s) (if (is-a? s hspace%) s #f))]
+                 [space? (λ (s) (and (is-a? s hspace%) s))]
                  [start-space (space? (first (dropf spliced-subs (is-a?/c hstrut%))))]
                  [end-space (space? (last (dropf-right spliced-subs (is-a?/c hstrut%))))]
                  [spliced-subs (filter-not space? spliced-subs)])
@@ -764,20 +802,9 @@
           [(or 'default (cons 'logical _) (cons 'physical _)) (min-strut-width)]
           [else (if (eq? polarity '-) (min-strut-width) 0)])))
 
-    (define-values (top-end-tip bot-start-tip)
-      (values
-       (λ _
-         (if (and (memq (cdr (assq 'name (align-items))) '(top center))
-                  (or (is-a? diag-top sequence%) (is-a? diag-top wrapped-sequence%)))
-             '(physical . 0) 'bot))
-       (λ _
-         (if (and (memq (cdr (assq 'name (align-items))) '(bottom center))
-                  (or (is-a? diag-bot sequence%) (is-a? diag-bot wrapped-sequence%)))
-             '(physical . 1) 'top))))
-
     (define (-content which start-tip end-tip)
-      (+ (max (dynamic-send diag-top which 'bot (top-end-tip))
-              (dynamic-send diag-bot which (bot-start-tip) 'top))
+      (+ (max (dynamic-send diag-top which 'bot 'bot)
+              (dynamic-send diag-bot which 'top 'top))
          (maybe-tips-width start-tip end-tip)))
 
     (define/override (min-content start-tip end-tip)
@@ -814,11 +841,11 @@
                (max-content start-tip end-tip)
                (max (min-content start-tip end-tip) width))]
              [clamped-available-width (- clamped-width (maybe-tips-width start-tip end-tip))]
-             [layout-top (send diag-top lay-out clamped-available-width 'bot (top-end-tip) direction)]
+             [layout-top (send diag-top lay-out clamped-available-width 'bot 'bot direction)]
              [layout-bot
               (if (eq? polarity '+)
-                  (send diag-bot lay-out clamped-available-width (bot-start-tip) 'top direction)
-                  (let ([lb (send diag-bot lay-out clamped-available-width (bot-start-tip) 'top
+                  (send diag-bot lay-out clamped-available-width 'top 'top direction)
+                  (let ([lb (send diag-bot lay-out clamped-available-width 'top 'top
                                   (direction-toggle direction))])
                     (if (is-a? diag-bot stack%) lb
                         (let ([arrow (new hstrut% [physical-width 0] [always-arrow #t]
@@ -859,7 +886,7 @@
                                   (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
                                          start-tip end-tip direction)
                                   (tip-space end-tip))]
-             [direction direction])))))
+             [fuse? #t] [direction direction])))))
 
 (define station%
   (class atomic-inline-diagram%
@@ -1070,15 +1097,14 @@
     (define wrapped-subs (break-at subs wrap-spec))
 
     (define random-label (list-ref '("†" "‡" "◊" "¤" "*") (random 5)))
-    (define marker-or-space-width
-      (if (empty? wrap-spec) (* 2 (min-strut-width))
-          (* 2 (get-field physical-width (new text-marker% [label random-label])))))
-    (define (maybe-tips-width start-tip end-tip)
-      (if (empty? wrap-spec) 0
-          (+ (if (member start-tip '(default top bot (logical . 0) (physical . 0))) 0
-                 (min-strut-width))
-             (if (member end-tip '(default top bot (logical . 0) (physical . 1))) 0
-                 (min-strut-width)))))
+    (define (extra-width start-tip end-tip)
+      (if (empty? wrap-spec)
+          (+map (λ (tip) (if (member tip '(top bot)) (min-strut-width) 0)) (list start-tip end-tip))
+          (+ (* 2 (get-field physical-width (new text-marker% [label random-label])))
+             (if (member start-tip '(default top bot (logical . 0) (physical . 0)))
+                 0 (min-strut-width))
+             (if (member end-tip '(default top bot (logical . 0) (physical . 1)))
+                 0 (min-strut-width)))))
     (super-new [flex #t])
 
     (define (sub-start-tip) (cdr (assq 'value (align-items))))
@@ -1088,8 +1114,7 @@
       (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which (sub-start-tip) (sub-end-tip))) row)
                                      (* (- (length row) 1) (min-gap))))
                          wrapped-subs))
-         marker-or-space-width
-         (maybe-tips-width start-tip end-tip)))
+         (extra-width start-tip end-tip)))
     (define/override (min-content start-tip end-tip)
       (-content 'min-content start-tip end-tip))
     (define/override (max-content start-tip end-tip)
@@ -1100,8 +1125,7 @@
     (define/override (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       (let*
           ([available-width (- (max width (min-content start-tip end-tip))
-                               marker-or-space-width
-                               (maybe-tips-width start-tip end-tip))]
+                               (extra-width start-tip end-tip))]
            [lay-out-row
             (λ (row)
               (let* (; available-width will be rebound at every step
@@ -1152,8 +1176,12 @@
                  (directional-reverse direction sub-layouts)
                  direction)))])
         (if (empty? wrap-spec)
-            (let ([space (new hspace% [direction direction])])
-              (new happend-layout% [subs (list space (lay-out-row (first wrapped-subs)) space)]
+            (let ([tip-space
+                   (λ (tip) (and (member tip '(top bot)) (new hspace% [direction direction])))])
+              (new happend-layout%
+                   [subs (pre-post-pend (tip-space start-tip)
+                                        (lay-out-row (first wrapped-subs))
+                                        (tip-space end-tip))]
                    [fuse? #t] [direction direction]))
             (new
              vappend-inline-layout% [direction direction] [subs (map lay-out-row wrapped-subs)]
@@ -1163,32 +1191,34 @@
              [marker (new text-marker% [direction direction] [label random-label])]))))))
 
 (define (desugar expr [splice? #t])
-  (match expr
-    [(? string?) (if (and (string-prefix? expr "[") (string-suffix? expr "]"))
+  ; to avoid passing splice? to each call
+  (let desugar ([expr expr])
+    (match expr
+      [(? string?) (if (and (string-prefix? expr "[") (string-suffix? expr "]"))
                        (list 'nonterm (substring expr 1 (- (string-length expr) 1)))
                        (list 'term expr))]
-    ['epsilon '(epsilon)]
-    [(or (list* '<> '+ exprs) (list* '+ exprs))
-     (case (length exprs)
-       [(0) '(epsilon)]
-       [(1) (desugar (first exprs))]
-       [(2) `(<> + ,(desugar (first exprs)) ,(desugar (second exprs)))]
-       [else `(<> + ,(desugar (first exprs)) ,(desugar `(<> + ,@(rest exprs))))])]
-    [(list* '<> '- exprs)
-     (case (length exprs)
-       [(2) `(<> - ,(desugar (first exprs)) ,(desugar (second exprs)))]
-       [else (raise-arguments-error
-              'desugar "negative polarity stack takes exactly two arguments"
-              "exprs" exprs)])]
-    [(list* 'seq exprs)
-     (cons 'seq
-           (if splice?
-               (append-map (λ (e) (match (desugar e)
-                                    [(list* 'seq exprs) exprs]
-                                    [exprs (list exprs)])) exprs)
-               (map desugar exprs)))]
-    [(? list?) (desugar (cons 'seq expr))]
-    [_ expr]))
+      ['epsilon '(epsilon)]
+      [(or (list* '<> '+ exprs) (list* '+ exprs))
+       (case (length exprs)
+         [(0) '(epsilon)]
+         [(1) (desugar (first exprs))]
+         [(2) `(<> + ,(desugar (first exprs)) ,(desugar (second exprs)))]
+         [else `(<> + ,(desugar (first exprs)) ,(desugar `(<> + ,@(rest exprs))))])]
+      [(list* '<> '- exprs)
+       (case (length exprs)
+         [(2) `(<> - ,(desugar (first exprs)) ,(desugar (second exprs)))]
+         [else (raise-arguments-error
+                'desugar "negative polarity stack takes exactly two arguments"
+                "exprs" exprs)])]
+      [(list* 'seq exprs)
+       (cons 'seq
+             (if splice?
+                 (append-map (λ (e) (match (desugar e)
+                                      [(list* 'seq exprs) exprs]
+                                      [exprs (list exprs)])) exprs)
+                 (map desugar exprs)))]
+      [(? list?) (desugar (cons 'seq expr))]
+      [_ expr])))
 
 (define (diagram expr [flex-stacks? #t] [splice? #t])
   (let rec ([expr (desugar expr splice?)] [in-stack? #f])
