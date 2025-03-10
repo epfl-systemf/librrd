@@ -799,7 +799,7 @@
     (define (maybe-tips-width start-tip end-tip)
       (for/sum ([tip (list start-tip end-tip)])
         (match tip
-          [(or 'default (cons 'logical _) (cons 'physical _)) (min-strut-width)]
+          [(or 'default (cons 'logical _) (cons 'physical _)) (* 3/2 (min-strut-width))]
           [else (if (eq? polarity '-) (min-strut-width) 0)])))
 
     (define (-content which start-tip end-tip)
@@ -859,11 +859,19 @@
                  (- clamped-available-width (get-field physical-width layout))
                  (list layout)
                  (get-field direction layout)))
-               (list layout-top layout-bot))])
-        (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
-             [subs justified-layouts] [direction direction]
-             [tip-specs
-              (map cons '(left right) (directional-reverse direction `(,start-tip ,end-tip)))])))))
+               (list layout-top layout-bot))]
+             [side-strut (new hstrut% [physical-width (/ (min-strut-width) 2)]
+                              [direction direction])])
+        (new happend-layout%
+             [subs
+              (pre-post-pend
+               (and (not (memq start-tip '(top bot))) side-strut)
+               (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
+                    [subs justified-layouts] [direction direction]
+                    [tip-specs (map cons '(left right)
+                                    (directional-reverse direction `(,start-tip ,end-tip)))])
+               (and (not (memq end-tip '(top bot))) side-strut))]
+             [direction direction])))))
 
 (define inline-diagram%
   (class diagram% (super-new)))
@@ -882,10 +890,11 @@
       (let ([tip-space
              (λ (tip) (and (vertical? tip) (new hspace% [direction direction])))])
         (new happend-layout%
-             [subs (pre-post-pend (tip-space start-tip)
-                                  (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
-                                         start-tip end-tip direction)
-                                  (tip-space end-tip))]
+             [subs (pre-post-pend
+                    (tip-space start-tip)
+                    (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
+                           start-tip end-tip direction)
+                    (tip-space end-tip))]
              [fuse? #t] [direction direction])))))
 
 (define station%
@@ -894,7 +903,7 @@
     (init-field terminal? label)
     (define init-text-box (new text-box% [terminal? terminal?] [label label]))
     (define (init-layout-width)
-      (+ (* 2 (min-strut-width)) (get-field physical-width init-text-box)))
+      (+ (min-strut-width) (get-field physical-width init-text-box)))
     (field [height (get-field physical-height init-text-box)])
     (field [global-wraps-measures
             (list (list (cons 'natural-width init-layout-width)
@@ -906,7 +915,7 @@
 
     (define/augride (lay-out width [start-tip 'default] [end-tip 'default] [direction 'ltr])
       ;; requested width doesn't matter
-      (let ([tip-strut (new hstrut% [physical-width (min-strut-width)] [direction direction])]
+      (let ([tip-strut (new hstrut% [physical-width (/ (min-strut-width) 2)] [direction direction])]
             [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])])
         (new happend-layout% [subs (list tip-strut text-box tip-strut)] [direction direction])))))
 
@@ -1101,18 +1110,22 @@
       (if (empty? wrap-spec)
           (+map (λ (tip) (if (member tip '(top bot)) (min-strut-width) 0)) (list start-tip end-tip))
           (+ (* 2 (get-field physical-width (new text-marker% [label random-label])))
-             (if (member start-tip '(default top bot (logical . 0) (physical . 0)))
-                 0 (min-strut-width))
-             (if (member end-tip '(default top bot (logical . 0) (physical . 1)))
-                 0 (min-strut-width)))))
+             (match start-tip
+               [(cons 'physical r) #:when (not (= r 0)) (* 3/2 (min-strut-width))]
+               [else 0])
+             (match end-tip
+               [(cons 'physical r) #:when (not (= r 1)) (* 3/2 (min-strut-width))]
+               [else 0]))))
     (super-new [flex #t])
 
     (define (sub-start-tip) (cdr (assq 'value (align-items))))
     (define (sub-end-tip) (cdr (assq 'value (align-items))))
 
     (define (-content which start-tip end-tip)
-      (+ (apply max (map (λ (row) (+ (+map (λ (s) (dynamic-send s which (sub-start-tip) (sub-end-tip))) row)
-                                     (* (- (length row) 1) (min-gap))))
+      (+ (apply max (map (λ (row)
+                           (+ (+map (λ (s) (dynamic-send s which (sub-start-tip) (sub-end-tip)))
+                                    row)
+                              (* (- (length row) 1) (min-gap))))
                          wrapped-subs))
          (extra-width start-tip end-tip)))
     (define/override (min-content start-tip end-tip)
@@ -1183,12 +1196,25 @@
                                         (lay-out-row (first wrapped-subs))
                                         (tip-space end-tip))]
                    [fuse? #t] [direction direction]))
-            (new
-             vappend-inline-layout% [direction direction] [subs (map lay-out-row wrapped-subs)]
-             [tip-specs
-              (map cons '(left right) (directional-reverse direction (list start-tip end-tip)))]
-             [style 'marker]
-             [marker (new text-marker% [direction direction] [label random-label])]))))))
+            (let ([side-strut (new hstrut% [physical-width (/ (min-strut-width) 2)]
+                                   [direction direction])]
+                  [start-finishing?
+                   (match start-tip [(cons 'physical r) #:when (not (= r 0)) #t] [else #f])]
+                  [end-finishing?
+                   (match end-tip [(cons 'physical r) #:when (not (= r 1)) #t] [else #f])])
+              (new happend-layout%
+                   [subs
+                    (pre-post-pend
+                     (and start-finishing? side-strut)
+                     (new
+                      vappend-inline-layout%
+                      [subs (map lay-out-row wrapped-subs)]
+                      [tip-specs (map cons '(left right)
+                                      (directional-reverse direction (list start-tip end-tip)))]
+                      [direction direction] [style 'marker]
+                      [marker (new text-marker% [direction direction] [label random-label])])
+                     (and end-finishing? side-strut))]
+                   [direction direction])))))))
 
 (define (desugar expr [splice? #t])
   ; to avoid passing splice? to each call
