@@ -861,17 +861,17 @@
                  (get-field direction layout)))
                (list layout-top layout-bot))]
              [side-strut (new hstrut% [physical-width (/ (min-strut-width) 2)]
-                              [direction direction])])
-        (new happend-layout%
-             [subs
-              (pre-post-pend
-               (and (not (memq start-tip '(top bot))) side-strut)
-               (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
-                    [subs justified-layouts] [direction direction]
-                    [tip-specs (map cons '(left right)
-                                    (directional-reverse direction `(,start-tip ,end-tip)))])
-               (and (not (memq end-tip '(top bot))) side-strut))]
-             [direction direction])))))
+                              [direction direction])]
+             [layout
+              (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
+                   [subs justified-layouts] [direction direction]
+                   [tip-specs (map cons '(left right)
+                                   (directional-reverse direction `(,start-tip ,end-tip)))])]
+             [with-struts (pre-post-pend (and (not (memq start-tip '(top bot))) side-strut)
+                                         layout
+                                         (and (not (memq end-tip '(top bot))) side-strut))])
+        (if (= 1 (length with-struts)) layout
+            (new happend-layout% [subs with-struts] [direction direction]))))))
 
 (define inline-diagram%
   (class diagram% (super-new)))
@@ -1196,25 +1196,25 @@
                                         (lay-out-row (first wrapped-subs))
                                         (tip-space end-tip))]
                    [fuse? #t] [direction direction]))
-            (let ([side-strut (new hstrut% [physical-width (/ (min-strut-width) 2)]
-                                   [direction direction])]
-                  [start-finishing?
-                   (match start-tip [(cons 'physical r) #:when (not (= r 0)) #t] [else #f])]
-                  [end-finishing?
-                   (match end-tip [(cons 'physical r) #:when (not (= r 1)) #t] [else #f])])
-              (new happend-layout%
-                   [subs
-                    (pre-post-pend
-                     (and start-finishing? side-strut)
-                     (new
-                      vappend-inline-layout%
-                      [subs (map lay-out-row wrapped-subs)]
-                      [tip-specs (map cons '(left right)
-                                      (directional-reverse direction (list start-tip end-tip)))]
-                      [direction direction] [style 'marker]
-                      [marker (new text-marker% [direction direction] [label random-label])])
-                     (and end-finishing? side-strut))]
-                   [direction direction])))))))
+            (let* ([side-strut (new hstrut% [physical-width (/ (min-strut-width) 2)]
+                                    [direction direction])]
+                   [start-finishing?
+                    (match start-tip [(cons 'physical r) #:when (not (= r 0)) #t] [else #f])]
+                   [end-finishing?
+                    (match end-tip [(cons 'physical r) #:when (not (= r 1)) #t] [else #f])]
+                   [layout
+                    (new
+                     vappend-inline-layout%
+                     [subs (map lay-out-row wrapped-subs)]
+                     [tip-specs (map cons '(left right)
+                                     (directional-reverse direction (list start-tip end-tip)))]
+                     [direction direction] [style 'marker]
+                     [marker (new text-marker% [direction direction] [label random-label])])]
+                   [with-struts (pre-post-pend (and start-finishing? side-strut)
+                                               layout
+                                               (and end-finishing? side-strut))])
+              (if (= 1 (length with-struts)) layout
+                  (new happend-layout% [subs with-struts] [direction direction]))))))))
 
 (define (desugar expr [splice? #t])
   ; to avoid passing splice? to each call
