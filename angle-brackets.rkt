@@ -164,6 +164,8 @@
         [(side spec) (inner #f tip-y side spec)]))
     (abstract render #;(render x y))))
 
+(define (vertical? tip-spec) (eq? tip-spec 'vertical))
+
 (define (direction-toggle d)
   (case d [(ltr) 'rtl] [(rtl) 'ltr] [else (raise-argument-error 'd "direction?" d)]))
 
@@ -175,12 +177,11 @@
     (init-field tip-specs subs)
 
     (define/public (side-struts? side)
-      (not (memq (cdr (assq side tip-specs)) '(top bot))))
+      (not (vertical? (cdr (assq side tip-specs)))))
 
     (define ((get-rows side) sub)
       (if (and (is-a? sub vappend-block-layout%)
-               (not (memq (cadr (assq side (get-field tips sub)))
-                          '(top bot))))
+               (not (vertical? (cadr (assq side (get-field tips sub))))))
           1
           (cdr (assq side (get-field num-rows sub)))))
     (init [num-rows
@@ -190,12 +191,8 @@
 
     (define/augride (tip-y side spec)
       (match spec
-        ['top (send (first subs) tip-y side spec)]
-        ['bot (let ([last-sub (last subs)])
-                (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
-                   (* (- (length subs) 1) (row-gap))
-                   (- (get-field physical-height last-sub))
-                   (send last-sub tip-y side spec)))]
+        ; is this one really needed?
+        ['vertical (send (first subs) tip-y side spec)]
         [(cons 'logical (? number? row-num))
          (let* ([num-rows (- (cdr (assq side init-num-rows)) 1)])
            (unless (<= 0 row-num num-rows)
@@ -308,7 +305,7 @@
                     [vline (λ (sy ey) `(draw-line ,bracket-x ,(+ sy (/ arc-size 2))
                                                   ,bracket-x ,(- ey (/ arc-size 2))))])
                (inner
-                (if (memq (cdr (assq side tip-specs)) '(top bot)) '()
+                (if (vertical? (cdr (assq side tip-specs))) '()
                     ; only top-level vappend draws curves and connecting struts
                     (for/fold ([cmds '()]
                                [vline-above? #f]
@@ -347,7 +344,7 @@
 
     (define/override (tip-y side spec)
       (case spec
-        [(default top bot) (super tip-y side '(logical . 0))]
+        [(default vertical) (super tip-y side '(logical . 0))]
         [else (super tip-y side spec)]))
 
     (define/override (side-struts? side) #t)
@@ -386,7 +383,7 @@
          ; for the self-tip
          (cond
            [(~= self-tip-y top-tip-y)
-            (if (memq (cdr (assq side tip-specs)) '(top bot))
+            (if (vertical? (cdr (assq side tip-specs)))
                 `((draw-line ,bracket-x ,self-tip-y
                              ,(+ bracket-x inner-arc-dx (/ arc-size 2)) ,self-tip-y))
                 `((draw-line ,(- bracket-x inner-arc-dx (/ arc-size 2)) ,self-tip-y
@@ -448,7 +445,7 @@
                                [subs
                                 (maybe-reverse
                                  (append
-                                  (if (or (memq (cdr (assq tip-side tip-specs)) '(top bot))
+                                  (if (or (vertical? (cdr (assq tip-side tip-specs)))
                                           (side-struts? tip-side))
                                       (list (new hspace% [direction init-direction])
                                             (new hstrut%
@@ -481,7 +478,7 @@
 
     (define/override (tip-y side spec)
       (match spec
-        [(or 'default 'top 'bot) (tip-y side '(logical . 0))]
+        [(or 'default 'vertical) (tip-y side '(logical . 0))]
         [(cons 'physical (? number? row-num))
          (unless (<= 0 row-num 1)
            (raise-arguments-error
@@ -550,7 +547,7 @@
     (define/augment (tip-y side spec)
       (or (inner #f tip-y side spec)
           (match spec
-            [(or 'default '(logical . 0) 'top 'bot (cons 'physical _)) (tip-y side)]
+            [(or 'default '(logical . 0) 'vertical (cons 'physical _)) (tip-y side)]
             [else #f])))))
 
 (define hspace%
@@ -674,9 +671,9 @@
           init-subs)])
 
     (define expose-first-left-tips?
-      (memq (cadr (assq 'left (get-field tips (first subs)))) '(top bot)))
+      (vertical? (cadr (assq 'left (get-field tips (first subs))))))
     (define expose-last-right-tips?
-      (memq (cadr (assq 'right (get-field tips (last subs)))) '(top bot)))
+      (vertical? (cadr (assq 'right (get-field tips (last subs))))))
 
     (unless (>= (length subs) 1)
       (raise-arguments-error
@@ -803,8 +800,8 @@
           [else (if (eq? polarity '-) (min-strut-width) 0)])))
 
     (define (-content which start-tip end-tip)
-      (+ (max (dynamic-send diag-top which 'bot 'bot)
-              (dynamic-send diag-bot which 'top 'top))
+      (+ (max (dynamic-send diag-top which 'vertical 'vertical)
+              (dynamic-send diag-bot which 'vertical 'vertical))
          (maybe-tips-width start-tip end-tip)))
 
     (define/override (min-content start-tip end-tip)
@@ -841,11 +838,11 @@
                (max-content start-tip end-tip)
                (max (min-content start-tip end-tip) width))]
              [clamped-available-width (- clamped-width (maybe-tips-width start-tip end-tip))]
-             [layout-top (send diag-top lay-out clamped-available-width 'bot 'bot direction)]
+             [layout-top (send diag-top lay-out clamped-available-width 'vertical 'vertical direction)]
              [layout-bot
               (if (eq? polarity '+)
-                  (send diag-bot lay-out clamped-available-width 'top 'top direction)
-                  (let ([lb (send diag-bot lay-out clamped-available-width 'top 'top
+                  (send diag-bot lay-out clamped-available-width 'vertical 'vertical direction)
+                  (let ([lb (send diag-bot lay-out clamped-available-width 'vertical 'vertical
                                   (direction-toggle direction))])
                     (if (is-a? diag-bot stack%) lb
                         (let ([arrow (new hstrut% [physical-width 0] [always-arrow #t]
@@ -867,9 +864,9 @@
                    [subs justified-layouts] [direction direction]
                    [tip-specs (map cons '(left right)
                                    (directional-reverse direction `(,start-tip ,end-tip)))])]
-             [with-struts (pre-post-pend (and (not (memq start-tip '(top bot))) side-strut)
+             [with-struts (pre-post-pend (and (not (vertical? start-tip)) side-strut)
                                          layout
-                                         (and (not (memq end-tip '(top bot))) side-strut))])
+                                         (and (not (vertical? end-tip)) side-strut))])
         (if (= 1 (length with-struts)) layout
             (new happend-layout% [subs with-struts] [direction direction]))))))
 
@@ -878,7 +875,6 @@
 
 (define atomic-inline-diagram%
   (class inline-diagram% (super-new)
-    (define (vertical? tip) (memq tip '(top bot)))
     (define (vertical-tip-space-width start-tip end-tip)
       (+ (if (vertical? start-tip) (min-strut-width) 0)
          (if (vertical? end-tip) (min-strut-width) 0)))
@@ -1108,7 +1104,7 @@
     (define random-label (list-ref '("†" "‡" "◊" "¤" "*") (random 5)))
     (define (extra-width start-tip end-tip)
       (if (empty? wrap-spec)
-          (+map (λ (tip) (if (member tip '(top bot)) (min-strut-width) 0)) (list start-tip end-tip))
+          (+map (λ (tip) (if (vertical? tip) (min-strut-width) 0)) (list start-tip end-tip))
           (+ (* 2 (get-field physical-width (new text-marker% [label random-label])))
              (match start-tip
                [(cons 'physical r) #:when (not (= r 0)) (* 3/2 (min-strut-width))]
@@ -1190,7 +1186,7 @@
                  direction)))])
         (if (empty? wrap-spec)
             (let ([tip-space
-                   (λ (tip) (and (member tip '(top bot)) (new hspace% [direction direction])))])
+                   (λ (tip) (and (vertical? tip) (new hspace% [direction direction])))])
               (new happend-layout%
                    [subs (pre-post-pend (tip-space start-tip)
                                         (lay-out-row (first wrapped-subs))
