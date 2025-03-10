@@ -5,6 +5,7 @@
   (new svg-dc% [width 2500] [height 3500] [output "trial.svg"] [exists 'truncate]))
 (send my-svg-dc start-doc "")
 (send my-svg-dc start-page)
+(send my-svg-dc set-smoothing 'smoothed)
 
 (define my-target (make-bitmap 1500 500))
 (define my-bitmap-dc

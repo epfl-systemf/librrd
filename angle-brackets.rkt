@@ -400,8 +400,6 @@
   (class vappend-block-layout%
     (init [(init-subs subs)])
     (init-field style [marker #f])
-    ; needed for modifying subs if style is marker below, before super-new.
-    ; renamed internally so that after super-new we can inherit "direction".
     (init [(init-direction direction) 'ltr]
           [tip-specs '((left . default) (right . default))])
 
