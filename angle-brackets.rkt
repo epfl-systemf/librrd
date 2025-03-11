@@ -246,8 +246,8 @@
                                "sub-widths" sub-widths))
       (super-new
        [physical-width (+ (first sub-widths)
-                          (if (side-struts? 'left) (min-strut-width) 0)
-                          (if (side-struts? 'right) (min-strut-width) 0))]
+                          (if (side-struts? 'left) (* 3/2 (min-strut-width)) 0)
+                          (if (side-struts? 'right) (* 3/2 (min-strut-width)) 0))]
        [physical-height
         (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
            (* (- (length subs) 1) (row-gap)))]
@@ -268,7 +268,7 @@
     (check-directions)
 
     (define/overment (render x y)
-      (let ([sub-x (+ x (if (side-struts? 'left) (min-strut-width) 0))]
+      (let ([sub-x (+ x (if (side-struts? 'left) (* 3/2 (min-strut-width)) 0))]
             [arc-size (* 2 (min-strut-width))])
         (let-values
             ([(sub-renders sub-ys)
@@ -288,6 +288,7 @@
            `((set-pen ,(the-strut-pen)))
            (for/list ([side '(left right)]
                       [bracket-x (list sub-x (+ sub-x (get-field physical-width (first subs))))]
+                      [inner-dx (list (/ arc-size 2) (- (/ arc-size 2)))]
                       [inner-arc-dx (list 0 (- arc-size))]
                       [outer-arc-dx (list (- arc-size) 0)]
                       [positive-theta (list (/ pi 2) 0)]
@@ -314,7 +315,10 @@
                                          (and vline-above?
                                               (list (outer-up-arc self-tip-y)
                                                     (vline (first sub-tip-ys) self-tip-y)))
-                                         cmds
+                                         (cons
+                                          `(draw-line ,(- bracket-x inner-dx) ,self-tip-y
+                                                      ,(- bracket-x (* 3/2 inner-dx)) ,self-tip-y)
+                                          cmds)
                                          (and vline-below?
                                               (list (outer-down-arc self-tip-y)
                                                     (vline self-tip-y (last sub-tip-ys))))))
@@ -322,14 +326,14 @@
                       (cond
                         [(~= ty self-tip-y)
                          (values
-                          (cons `(draw-line ,(- bracket-x inner-arc-dx (/ arc-size 2)) ,ty
-                                            ,(+ bracket-x inner-arc-dx (/ arc-size 2)) ,ty) cmds)
+                          (cons `(draw-line ,(- bracket-x inner-dx) ,ty ,(+ bracket-x inner-dx) ,ty)
+                                cmds)
                           vline-above? vline-below?)]
                         [(< ty self-tip-y)
                          (values (cons (inner-down-arc ty) cmds) #t vline-below?)]
                         [(> ty self-tip-y)
                          (values (cons (inner-up-arc ty) cmds) vline-above? #t)])))
-                render self-tip-y sub-ys side bracket-x vline
+                render self-tip-y sub-ys side bracket-x inner-dx vline
                 arc-size inner-arc-dx outer-arc-dx positive-theta negative-theta
                 inner-up-arc outer-up-arc outer-down-arc inner-down-arc)))))))))
 
@@ -364,7 +368,7 @@
          "second sub must have opposite direction as this layout"
          "second sub" (second subs) "direction" direction)))
 
-    (define/augride (render self-tip-y sub-ys side bracket-x vline
+    (define/augride (render self-tip-y sub-ys side bracket-x inner-dx vline
                             arc-size inner-arc-dx outer-arc-dx positive-theta negative-theta
                             inner-up-arc outer-up-arc outer-down-arc inner-down-arc)
       (let* ([bot-sub (second subs)]
@@ -381,6 +385,8 @@
          ; for all subs except top
          (append-map (λ (ty) (list (inner-up-arc ty))) sub-tip-ys)
          ; for the self-tip
+         `((draw-line ,(- bracket-x inner-dx) ,self-tip-y
+                      ,(- bracket-x (* 3/2 inner-dx)) ,self-tip-y))
          (cond
            [(~= self-tip-y top-tip-y)
             (if (vertical? (cdr (assq side tip-specs)))
@@ -522,20 +528,24 @@
                "this direction" direction)))
           (super check-directions)))
 
-    (define/augride (render self-tip-y sub-ys side bracket-x vline
+    (define/augride (render self-tip-y sub-ys side bracket-x inner-dx vline
                             arc-size inner-arc-dx outer-arc-dx positive-theta negative-theta
                             inner-up-arc outer-up-arc outer-down-arc inner-down-arc)
       (when (eq? style 'boustrophedon)
         (raise-user-error "boustrophedon layout not implemented yet"))
       (if (cdr (assq side side-finishing?))
-          (let ([finish-y (+ self-tip-y (- (tip-y side)) (tip-y side '(logical . 0)))])
+          (let ([finish-y (+ self-tip-y (- (tip-y side)) (tip-y side '(logical . 0)))]
+                [finish-strut `(draw-line ,(- bracket-x inner-dx) ,self-tip-y
+                                          ,(- bracket-x (* 3/2 inner-dx)) ,self-tip-y)])
             (if (< finish-y self-tip-y)
                 (list (inner-down-arc finish-y)
                       (vline finish-y self-tip-y)
-                      (outer-up-arc self-tip-y))
+                      (outer-up-arc self-tip-y)
+                      finish-strut)
                 (list (outer-down-arc self-tip-y)
                       (vline self-tip-y finish-y)
-                      (inner-up-arc finish-y))))
+                      (inner-up-arc finish-y)
+                      finish-strut)))
           '()))))
 
 (define inline-layout%
@@ -850,23 +860,15 @@
              [justified-layouts
               (map
                (λ (layout)
-                (justify-layouts-without-zero-hstruts
-                 (- clamped-available-width (get-field physical-width layout))
-                 (list layout)
-                 (get-field direction layout)))
-               (list layout-top layout-bot))]
-             [side-strut (new hstrut% [physical-width (/ (min-strut-width) 2)]
-                              [direction direction])]
-             [layout
-              (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
-                   [subs justified-layouts] [direction direction]
-                   [tip-specs (map cons '(left right)
-                                   (directional-reverse direction `(,start-tip ,end-tip)))])]
-             [with-struts (pre-post-pend (and (not (vertical? start-tip)) side-strut)
-                                         layout
-                                         (and (not (vertical? end-tip)) side-strut))])
-        (if (= 1 (length with-struts)) layout
-            (new happend-layout% [subs with-struts] [direction direction]))))))
+                 (justify-layouts-without-zero-hstruts
+                  (- clamped-available-width (get-field physical-width layout))
+                  (list layout)
+                  (get-field direction layout)))
+               (list layout-top layout-bot))])
+        (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
+             [subs justified-layouts] [direction direction]
+             [tip-specs (map cons '(left right)
+                             (directional-reverse direction `(,start-tip ,end-tip)))])))))
 
 (define inline-diagram%
   (class diagram% (super-new)))
@@ -1190,25 +1192,13 @@
                                         (lay-out-row (first wrapped-subs))
                                         (tip-space end-tip))]
                    [fuse? #t] [direction direction]))
-            (let* ([side-strut (new hstrut% [physical-width (/ (min-strut-width) 2)]
-                                    [direction direction])]
-                   [start-finishing?
-                    (match start-tip [(cons 'physical r) #:when (not (= r 0)) #t] [else #f])]
-                   [end-finishing?
-                    (match end-tip [(cons 'physical r) #:when (not (= r 1)) #t] [else #f])]
-                   [layout
-                    (new
-                     vappend-inline-layout%
-                     [subs (map lay-out-row wrapped-subs)]
-                     [tip-specs (map cons '(left right)
-                                     (directional-reverse direction (list start-tip end-tip)))]
-                     [direction direction] [style 'marker]
-                     [marker (new text-marker% [direction direction] [label random-label])])]
-                   [with-struts (pre-post-pend (and start-finishing? side-strut)
-                                               layout
-                                               (and end-finishing? side-strut))])
-              (if (= 1 (length with-struts)) layout
-                  (new happend-layout% [subs with-struts] [direction direction]))))))))
+            (new
+             vappend-inline-layout%
+             [subs (map lay-out-row wrapped-subs)]
+             [tip-specs (map cons '(left right)
+                             (directional-reverse direction (list start-tip end-tip)))]
+             [direction direction] [style 'marker]
+             [marker (new text-marker% [direction direction] [label random-label])]))))))
 
 (define (desugar expr [splice? #t])
   ; to avoid passing splice? to each call
