@@ -177,7 +177,7 @@
     (init-field tip-specs subs)
 
     (define/public (side-struts? side)
-      (not (vertical? (cdr (assq side tip-specs)))))
+      (if (not (vertical? (cdr (assq side tip-specs)))) (* 3/2 (min-strut-width)) 0))
 
     (define ((get-rows side) sub)
       (if (and (is-a? sub vappend-block-layout%)
@@ -245,9 +245,7 @@
         (raise-arguments-error 'vappend-layout "subs must have equal widths"
                                "sub-widths" sub-widths))
       (super-new
-       [physical-width (+ (first sub-widths)
-                          (if (side-struts? 'left) (* 3/2 (min-strut-width)) 0)
-                          (if (side-struts? 'right) (* 3/2 (min-strut-width)) 0))]
+       [physical-width (+ (first sub-widths) (side-struts? 'left) (side-struts? 'right))]
        [physical-height
         (+ (apply + (map (lambda (s) (get-field physical-height s)) subs))
            (* (- (length subs) 1) (row-gap)))]
@@ -268,7 +266,7 @@
     (check-directions)
 
     (define/overment (render x y)
-      (let ([sub-x (+ x (if (side-struts? 'left) (* 3/2 (min-strut-width)) 0))]
+      (let ([sub-x (+ x (side-struts? 'left))]
             [arc-size (* 2 (min-strut-width))])
         (let-values
             ([(sub-renders sub-ys)
@@ -346,16 +344,23 @@
        "vappend-forward-backward must have exactly 2 subs"
        "subs" internal-subs))
 
+    (init [(init-tip-specs tip-specs) '((left . default) (right . default))])
+    (define tip-specs init-tip-specs)
+
     (define/override (tip-y side spec)
       (case spec
         [(default vertical) (super tip-y side '(logical . 0))]
         [else (super tip-y side spec)]))
 
-    (define/override (side-struts? side) #t)
+    (define/override (side-struts? side)
+      (case (cdr (assq side tip-specs))
+        [(default vertical (logical . 0) (physical . 0)) (min-strut-width)]
+        [else (* 3/2 (min-strut-width))]))
 
-    (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))])
+    (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))]
+               [tip-specs tip-specs])
 
-    (inherit-field direction subs tip-specs num-rows)
+    (inherit-field direction subs num-rows)
     (define/override (check-directions)
       (unless (eq? direction (get-field direction (first subs)))
         (raise-arguments-error
@@ -373,10 +378,8 @@
                             inner-up-arc outer-up-arc outer-down-arc inner-down-arc)
       (let* ([bot-sub (second subs)]
              [sub-tip-ys
-              (if (is-a? bot-sub vappend-block-layout%)
-                  (map (λ (r) (+ (second sub-ys) (send bot-sub tip-y side `(logical . ,r))))
-                       (range (cdr (assq side (get-field num-rows (second subs))))))
-                  (list (+ (second sub-ys) (send bot-sub tip-y side))))]
+              (map (λ (r) (+ (second sub-ys) (send bot-sub tip-y side `(logical . ,r))))
+                   (range (cdr (assq side (get-field num-rows (second subs))))))]
              [top-tip-y (+ (first sub-ys) (send (first subs) tip-y side))]
              [bot-tip-y (last sub-tip-ys)])
         (append
@@ -385,20 +388,20 @@
          ; for all subs except top
          (append-map (λ (ty) (list (inner-up-arc ty))) sub-tip-ys)
          ; for the self-tip
-         `((draw-line ,(- bracket-x inner-dx) ,self-tip-y
-                      ,(- bracket-x (* 3/2 inner-dx)) ,self-tip-y))
          (cond
            [(~= self-tip-y top-tip-y)
-            (if (vertical? (cdr (assq side tip-specs)))
-                `((draw-line ,bracket-x ,self-tip-y
-                             ,(+ bracket-x inner-arc-dx (/ arc-size 2)) ,self-tip-y))
-                `((draw-line ,(- bracket-x inner-arc-dx (/ arc-size 2)) ,self-tip-y
-                             ,(+ bracket-x inner-arc-dx (/ arc-size 2)) ,self-tip-y)))]
+            `((draw-line ,(- bracket-x inner-dx) ,self-tip-y
+                         ,(+ bracket-x inner-dx) ,self-tip-y))]
            [(< self-tip-y top-tip-y)
             (list (outer-down-arc self-tip-y)
                   (vline self-tip-y top-tip-y)
-                  (inner-up-arc top-tip-y))]
-           [else (list (outer-up-arc self-tip-y))])
+                  (inner-up-arc top-tip-y)
+                  `(draw-line ,(- bracket-x inner-dx) ,self-tip-y
+                              ,(- bracket-x (* 3/2 inner-dx)) ,self-tip-y))]
+           [else
+            (list (outer-up-arc self-tip-y)
+                  `(draw-line ,(- bracket-x inner-dx) ,self-tip-y
+                              ,(- bracket-x (* 3/2 inner-dx)) ,self-tip-y))])
          ; unconditional vline
          (list (vline top-tip-y bot-tip-y)))))))
 
@@ -420,7 +423,8 @@
                              [(cons 'physical r) (not (= r 1))]
                              [else #f]))))
 
-    (define/override (side-struts? side) (cdr (assq side side-finishing?)))
+    (define/override (side-struts? side)
+      (if (cdr (assq side side-finishing?)) (* 3/2 (min-strut-width)) 0))
 
     (define subs
       (case style
@@ -450,7 +454,7 @@
                                 (maybe-reverse
                                  (append
                                   (if (or (vertical? (cdr (assq tip-side tip-specs)))
-                                          (side-struts? tip-side))
+                                          (not (= 0 (side-struts? tip-side))))
                                       (list (new hspace% [direction init-direction])
                                             (new hstrut%
                                                  [physical-width (- marker-width (min-strut-width))]
@@ -817,10 +821,15 @@
     (super-new [flex init-flex])
 
     (define (maybe-tips-width start-tip end-tip)
-      (for/sum ([tip (list start-tip end-tip)])
-        (match tip
-          [(or 'default (cons 'logical _) (cons 'physical _)) (* 3/2 (min-strut-width))]
-          [else (if (eq? polarity '-) (min-strut-width) 0)])))
+      (if (eq? polarity '-)
+          (for/sum ([tip (list start-tip end-tip)])
+            (case tip
+              [(default vertical (logical . 0) (physical . 0)) (min-strut-width)]
+              [else (* 3/2 (min-strut-width))]))
+          (for/sum ([tip (list start-tip end-tip)])
+            (match tip
+              [(or 'default (cons 'logical _) (cons 'physical _)) (* 3/2 (min-strut-width))]
+              [else 0]))))
 
     (define (-content which start-tip end-tip direction)
       (+ (max (dynamic-send diag-top which 'vertical 'vertical direction)
@@ -863,15 +872,8 @@
              [clamped-available-width (- clamped-width (maybe-tips-width start-tip end-tip))]
              [layout-top (send diag-top lay-out clamped-available-width 'vertical 'vertical direction)]
              [layout-bot
-              (if (eq? polarity '+)
-                  (send diag-bot lay-out clamped-available-width 'vertical 'vertical direction)
-                  (let ([lb (send diag-bot lay-out clamped-available-width 'vertical 'vertical
-                                  (direction-toggle direction))])
-                    (if (is-a? diag-bot stack%) lb
-                        (let ([arrow (new hstrut% [physical-width 0] [always-arrow #t]
-                                          [direction (direction-toggle direction)])])
-                          (new happend-layout% [subs (list arrow lb arrow)]
-                               [fuse? #t] [direction (direction-toggle direction)])))))]
+              (send diag-bot lay-out clamped-available-width 'vertical 'vertical
+                    (if (eq? polarity '+) direction (direction-toggle direction)))]
              [justified-layouts
               (map
                (λ (layout)
