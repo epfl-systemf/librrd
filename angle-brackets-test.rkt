@@ -33,10 +33,10 @@
     (/ (+ (* (- n i) start) (* i end)) n)))
 
 (define (make-layouts diag)
-  (let ([max-content (send diag max-content 'default 'default)]
-        [min-content (send diag min-content 'default 'default)])
+  (let ([max-content (send diag max-content)]
+        [min-content (send diag min-content)])
     (map (λ (width)
-           (let ([layout (send diag lay-out width 'default 'default 'ltr)]
+           (let ([layout (send diag lay-out width)]
                  [optimal-layout (send diag lay-out-global width 'default 'default 'ltr)])
              (list
               (list width (get-field physical-height layout) layout)
@@ -81,30 +81,23 @@
 (define (show! diag width)
   (send my-bitmap-dc erase)
   (for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd))
-            (append
-             (parameterize ([align-items ai-bottom]
+            (send
+             (parameterize ([align-items ai-top]
                             [justify-content jc-start])
-               (let* ([specs '(vertical vertical ltr)]
+               (let* ([specs '()]
                       [l (send/apply diag lay-out width specs)])
                  (displayln (get-field physical-width l))
                  (displayln (send/apply diag min-content specs))
-                 (append
-                  (send l render 10 10)
-                  (list `(draw-line 10 100 ,(+ 10 (get-field physical-width l)) 100)))))
-             #;(send
-              (parameterize (#;[distribute-fun distribute-extreme])
-                (send diag lay-out-global width 'default 'default 'ltr))
-              render 10 200)))
+                 l))
+              render 10 10))
   my-target)
 
 (define my-diagram
   (diagram
-   '(<> - "hello" ("," "and"))
-   ;'("," "and")
-   ;'(+ epsilon ("a" (+ epsilon "a2")) "b")
+   '(<> - "hello" ((+ "," ";") "and"))
    #t #f))
 
-(show! my-diagram 200)
+(show! my-diagram 100)
 
 ;; (render-layouts! (make-layouts compound-select))
 (send my-svg-dc end-page)
