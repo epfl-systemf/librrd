@@ -82,23 +82,29 @@
   (send my-bitmap-dc erase)
   (for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd))
             (append
-             (let ([l (send diag lay-out width 'default 'default 'ltr)])
-               (send l render 10 10))
-             (send
-              (parameterize ([distribute-fun distribute-quadratic])
-                (send diag lay-out width 'default 'default 'ltr))
-              render 10 100)))
+             (parameterize ([align-items ai-bottom]
+                            [justify-content jc-start])
+               (let* ([specs '(vertical vertical ltr)]
+                      [l (send/apply diag lay-out width specs)])
+                 (displayln (get-field physical-width l))
+                 (displayln (send/apply diag min-content specs))
+                 (append
+                  (send l render 10 10)
+                  (list `(draw-line 10 100 ,(+ 10 (get-field physical-width l)) 100)))))
+             #;(send
+              (parameterize (#;[distribute-fun distribute-extreme])
+                (send diag lay-out-global width 'default 'default 'ltr))
+              render 10 200)))
   my-target)
 
 (define my-diagram
   (diagram
-   '((<> - "[common-table-expression]" ",")
-     (+ ("ORDER" "BY" (<> - "[ordering-term]" ","))
-        epsilon)
-     (+ ("LIMIT" "aa") epsilon))
-   #f))
+   '(<> - "hello" ("," "and"))
+   ;'("," "and")
+   ;'(+ epsilon ("a" (+ epsilon "a2")) "b")
+   #t #f))
 
-(show! my-diagram 254)
+(show! my-diagram 200)
 
 ;; (render-layouts! (make-layouts compound-select))
 (send my-svg-dc end-page)
