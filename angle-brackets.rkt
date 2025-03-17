@@ -1029,11 +1029,12 @@
     (init-field subs)
     (unless (> (length subs) 0)
       (raise-arguments-error 'sequence "must sequence at least one diagram"))
+    (init-field [marker (list-ref '("†" "‡" "◊" "¤" "*") (random 5))])
 
     (field [wraps
             (map
              (λ (wrap-spec)
-               (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec]))
+               (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec] [marker marker]))
              (combinations (range (- (length subs) 1))))])
 
     (field
@@ -1043,7 +1044,7 @@
               (λ (x)
                 (let* ([subs (map (λ (wm) (cdr (assq 'wrap wm))) (rest x))]
                        [sub-wrap-specs (map (λ (wm) (cdr (assq 'wrap-specs wm))) (rest x))]
-                       [wrapped (new wrapped-sequence% [wrap-spec (first x)] [subs subs])])
+                       [wrapped (new wrapped-sequence% [wrap-spec (first x)] [subs subs] [marker marker])])
                   (unless (~= (send wrapped max-content 'default 'default 'ltr)
                               (send wrapped min-content 'default 'default 'ltr))
                     (raise-arguments-error
@@ -1138,13 +1139,12 @@
 (define distribute-fun (make-parameter distribute-linear))
 
 (define wrapped-sequence%
-  (class inline-diagram%
-    (init-field subs wrap-spec)
+    (class inline-diagram%
+    (init-field subs wrap-spec marker)
     (unless (andmap (λ (break) (<= 0 break (- (length subs) 2))) wrap-spec)
       (raise-arguments-error
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
     (define wrapped-subs (break-at subs wrap-spec))
-    (define random-label (list-ref '("†" "‡" "◊" "¤" "*") (random 5)))
 
     (super-new [flex #t])
 
@@ -1169,7 +1169,7 @@
       (+ (if (start-vertical-space? start-tip direction) (min-strut-width) 0)
          (if (end-vertical-space? end-tip direction) (min-strut-width) 0)
          (if (empty? wrap-spec) 0
-             (+ (* 2 (get-field physical-width (new text-marker% [label random-label])))
+             (+ (* 2 (get-field physical-width (new text-marker% [label marker])))
                 (+map (λ (tip r) (match tip
                                    [`(physical . ,p) #:when (not (= p r)) (* 3/2 (min-strut-width))]
                                    [else 0]))
@@ -1273,7 +1273,7 @@
              [tip-specs (map cons '(left right)
                              (directional-reverse direction (list start-tip end-tip)))]
              [direction direction] [style 'marker]
-             [marker (new text-marker% [direction direction] [label random-label])]))))))
+             [marker (new text-marker% [direction direction] [label marker])]))))))
 
 (define (desugar expr [splice? #t])
   ; to avoid passing splice? to each call
@@ -1306,7 +1306,7 @@
       [(? list?) (desugar (cons 'seq expr))]
       [_ expr])))
 
-(define (diagram expr [flex-stacks? #t] [splice? #t])
+(define (diagram expr [flex-stacks? #t] [splice? #t] [marker #f])
   (let rec ([expr (desugar expr splice?)] [in-stack? #f])
     (match expr
       ['(epsilon) (new epsilon%)]
@@ -1317,4 +1317,6 @@
        (new stack% [diag-top (rec expr-top #t)] [diag-bot (rec expr-bot #t)]
             [polarity polarity] [flex (or flex-stacks? in-stack?)])]
       [(list* 'seq exprs)
-       (new sequence% [subs (map (λ (e) (rec e #f)) exprs)])])))
+       (if marker
+           (new sequence% [subs (map (λ (e) (rec e #f)) exprs)] [marker marker])
+           (new sequence% [subs (map (λ (e) (rec e #f)) exprs)]))])))
