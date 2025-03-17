@@ -6,7 +6,7 @@
  justify-content jc-space-evenly jc-space-between jc-space-around
  jc-start jc-end jc-left jc-center jc-right
  min-strut-width row-gap min-gap flex-absorb
- the-font the-font-size
+ the-font the-font-size text-width-correction
  the-atom-text-pen the-atom-box-pen the-strut-pen the-atom-box-brush
  arrow-threshold
  layout% text-box% hstrut% happend-layout% ellipsis-marker%
@@ -110,13 +110,14 @@
 (define (min-strut-width) (* (+ (the-font-size) 12) 1/4))
 (define (row-gap) (* (the-font-size) 2/3))
 
-(define text-measurement-dc (new bitmap-dc% [bitmap #f]))
+(define text-measurement-dc (new svg-dc% [width 1000] [height 1000] [output (open-output-nowhere)]))
+(define text-width-correction (make-parameter identity))
 
 (define (text-width text)
   (send text-measurement-dc set-font (the-font))
   (let-values ([(width height descend extra)
                 (send text-measurement-dc get-text-extent text #f #t)])
-    width))
+    ((text-width-correction) width)))
 
 (define (text-height text)
   (send text-measurement-dc set-font (the-font))
@@ -354,8 +355,8 @@
 
     (define/override (side-struts? side)
       (case (cdr (assq side tip-specs))
-        [(default vertical (logical . 0) (physical . 0)) (min-strut-width)]
-        [else (* 3/2 (min-strut-width))]))
+        [(default vertical (logical . 0) (physical . 0)) (* 2 (min-strut-width))]
+        [else (* 5/2 (min-strut-width))]))
 
     (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))]
                [tip-specs tip-specs])
@@ -664,9 +665,12 @@
                   (apply append
                          (map (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
                               init-subs))]
+                 ;; TODO: remove the need for these checks
                  [space? (λ (s) (and (is-a? s hspace%) s))]
-                 [start-space (space? (first (dropf spliced-subs (is-a?/c hstrut%))))]
-                 [end-space (space? (last (dropf-right spliced-subs (is-a?/c hstrut%))))]
+                 [start-space (let ([ss (dropf spliced-subs (is-a?/c hstrut%))])
+                                (and (not (empty? ss)) (space? (first ss))))]
+                 [end-space (let ([ss (dropf-right spliced-subs (is-a?/c hstrut%))])
+                              (and (not (empty? ss)) (space? (last ss))))]
                  [spliced-subs (filter-not space? spliced-subs)])
             (for/fold ([cur-hstrut #f]
                        [subs '()]
@@ -824,8 +828,8 @@
       (if (eq? polarity '-)
           (for/sum ([tip (list start-tip end-tip)])
             (case tip
-              [(default vertical (logical . 0) (physical . 0)) (min-strut-width)]
-              [else (* 3/2 (min-strut-width))]))
+              [(default vertical (logical . 0) (physical . 0)) (* 2 (min-strut-width))]
+              [else (* 5/2 (min-strut-width))]))
           (for/sum ([tip (list start-tip end-tip)])
             (match tip
               [(or 'default (cons 'logical _) (cons 'physical _)) (* 3/2 (min-strut-width))]
@@ -944,6 +948,26 @@
                         (cons 'wrap this)))])
     (define/augride (lay-out width _ #;start-tip __ #;end-tip direction)
       (new hstrut% [physical-width width] [direction direction]))))
+
+(define ellipsis%
+  (class atomic-inline-diagram%
+    (super-new [flex #f])
+    (define init-ellipsis (new ellipsis-marker%))
+    (define (init-layout-width)
+      (+ (min-strut-width) (get-field physical-width init-ellipsis)))
+    (field [height (get-field physical-height init-ellipsis)])
+    (field [global-wraps-measures
+            (list (list (cons 'natural-width init-layout-width)
+                        (cons 'height height)
+                        (cons 'wrap-specs '(() . ()))
+                        (cons 'wrap this)))])
+    (define/augride (min-content _ #;start-tip __ #;end-tip) (init-layout-width))
+    (define/augride (max-content _ #;start-tip __ #;end-tip) (init-layout-width))
+
+    (define/augride (lay-out _ #;width start-tip end-tip direction)
+      (let ([tip-strut (new hstrut% [physical-width (/ (min-strut-width) 2)] [direction direction])]
+            [marker (new ellipsis-marker% [direction direction])])
+        (new happend-layout% [subs (list tip-strut marker tip-strut)] [direction direction])))))
 
 (define (break-at lst idxs)
   (if (empty? idxs)
@@ -1150,12 +1174,13 @@
                       (list start-tip end-tip) '(0 1))))))
 
     (define-values (sub-start-tips sub-end-tips)
-      (let ([sub-tip (cdr (assq 'value (align-items)))])
-        (values
-         (λ (start-tip direction row-len)
+      (values
+       (λ (start-tip direction row-len)
+         (let ([sub-tip (cdr (assq 'value (align-items)))])
            (append (list (if (start-vertical? start-tip direction) 'vertical sub-tip))
-                   (make-list (- row-len 1) sub-tip)))
-         (λ (end-tip direction row-len)
+                   (make-list (- row-len 1) sub-tip))))
+       (λ (end-tip direction row-len)
+         (let ([sub-tip (cdr (assq 'value (align-items)))])
            (append (make-list (- row-len 1) sub-tip)
                    (list (if (end-vertical? end-tip direction) 'vertical sub-tip)))))))
 
@@ -1256,6 +1281,7 @@
                        (list 'nonterm (substring expr 1 (- (string-length expr) 1)))
                        (list 'term expr))]
       ['epsilon '(epsilon)]
+      ['ellipsis '(ellipsis)]
       [(or (list* '<> '+ exprs) (list* '+ exprs))
        (case (length exprs)
          [(0) '(epsilon)]
@@ -1282,6 +1308,7 @@
   (let rec ([expr (desugar expr splice?)] [in-stack? #f])
     (match expr
       ['(epsilon) (new epsilon%)]
+      ['(ellipsis) (new ellipsis%)]
       [(list 'term label) (new station% [terminal? #t] [label label])]
       [(list 'nonterm label) (new station% [terminal? #f] [label label])]
       [(list '<> polarity expr-top expr-bot)
