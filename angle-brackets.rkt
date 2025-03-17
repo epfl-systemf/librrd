@@ -355,7 +355,8 @@
 
     (define/override (side-struts? side)
       (case (cdr (assq side tip-specs))
-        [(default vertical (logical . 0) (physical . 0)) (* 2 (min-strut-width))]
+        [(vertical) (* 2 (min-strut-width))]
+        [(default (logical . 0) (physical . 0)) (min-strut-width)]
         [else (* 5/2 (min-strut-width))]))
 
     (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))]
@@ -828,7 +829,8 @@
       (if (eq? polarity '-)
           (for/sum ([tip (list start-tip end-tip)])
             (case tip
-              [(default vertical (logical . 0) (physical . 0)) (* 2 (min-strut-width))]
+              [(vertical) (* 2 (min-strut-width))]
+              [(default (logical . 0) (physical . 0)) (min-strut-width)]
               [else (* 5/2 (min-strut-width))]))
           (for/sum ([tip (list start-tip end-tip)])
             (match tip
