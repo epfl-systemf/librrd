@@ -355,9 +355,8 @@
 
     (define/override (side-struts? side)
       (case (cdr (assq side tip-specs))
-        [(vertical) (* 2 (min-strut-width))]
-        [(default (logical . 0) (physical . 0)) (min-strut-width)]
-        [else (* 5/2 (min-strut-width))]))
+        [(vertical default (logical . 0) (physical . 0)) (min-strut-width)]
+        [else (displayln "are we ever here") (* 5/2 (min-strut-width))]))
 
     (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))]
                [tip-specs tip-specs])
@@ -392,7 +391,8 @@
          ; for the self-tip
          (cond
            [(~= self-tip-y top-tip-y)
-            `((draw-line ,(- bracket-x inner-dx) ,self-tip-y
+            `((draw-line ,(- bracket-x (if (eq? (cdr (assq side tip-specs)) 'vertical) 0 inner-dx))
+                         ,self-tip-y
                          ,(+ bracket-x inner-dx) ,self-tip-y))]
            [(< self-tip-y top-tip-y)
             (list (outer-down-arc self-tip-y)
@@ -829,8 +829,7 @@
       (if (eq? polarity '-)
           (for/sum ([tip (list start-tip end-tip)])
             (case tip
-              [(vertical) (* 2 (min-strut-width))]
-              [(default (logical . 0) (physical . 0)) (min-strut-width)]
+              [(vertical default (logical . 0) (physical . 0)) (min-strut-width)]
               [else (* 5/2 (min-strut-width))]))
           (for/sum ([tip (list start-tip end-tip)])
             (match tip
