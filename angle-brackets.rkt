@@ -921,12 +921,12 @@
   (class atomic-inline-diagram%
     (super-new [flex #f])
     (init-field terminal? label)
-    (define init-text-box (new text-box% [terminal? terminal?] [label label]))
+    (define (init-text-box) (new text-box% [terminal? terminal?] [label label]))
     (define (init-layout-width)
-      (+ (min-strut-width) (get-field physical-width init-text-box)))
-    (field [height (get-field physical-height init-text-box)])
+      (+ (min-strut-width) (get-field physical-width (init-text-box))))
+    (field [height (get-field physical-height (init-text-box))])
     (field [global-wraps-measures
-            (list (list (cons 'natural-width init-layout-width)
+            (list (list (cons 'natural-width (init-layout-width))
                         (cons 'height height)
                         (cons 'wrap-specs '(() . ()))
                         (cons 'wrap this)))])
