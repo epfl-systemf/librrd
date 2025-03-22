@@ -53,11 +53,11 @@
              (λ (render) (for-each (λ (cmd) (apply dynamic-send dc cmd)) render))
              (let ([ll (parameterize ([distribute-fun distribute-linear]) (send diag lay-out width))]
                    [llqd (parameterize ([distribute-fun distribute-extreme]) (send diag lay-out width))]
-                   [lg (send diag lay-out-global width)])
+                   [lg (send diag lay-out-global width 'default 'default 'ltr)])
                (parameterize ([arrow-threshold this-arrow-threshold])
                  (list
                   (send ll render self-padding self-padding)
-                  (send llqd render self-padding (+ self-padding 250))
+                  #;(send llqd render self-padding (+ self-padding 250))
                   (list
                    (list 'draw-text (measure-desc "requested width" width)
                          (+ self-padding (get-field physical-width ll) self-padding) self-padding)
@@ -85,7 +85,7 @@
                       [interval 10] [just-once? #t]))))]))))
 
   (define p1 (new horizontal-pane% [parent frame] [spacing 10]))
-  (define canvas (new my-canvas% [parent p1] [min-width 1000]))
+  (define canvas (new my-canvas% [parent p1] [min-width 1000] #;[style '(no-autoclear)]))
   (define p2 (new vertical-pane% [parent p1] [spacing 40] [vert-margin 30] [horiz-margin 10]))
 
   (define p3 (new vertical-pane% [parent p2] [spacing 15] [vert-margin 20]))
