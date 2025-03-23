@@ -6,8 +6,10 @@
  justify-content jc-space-evenly jc-space-between jc-space-around
  jc-start jc-end jc-left jc-center jc-right
  min-strut-width row-gap min-gap flex-absorb
- the-font the-font-size text-width-correction
- the-atom-text-pen the-atom-box-pen the-strut-pen the-atom-box-brush
+ the-terminal-font terminal-text-width-correction
+ the-nonterminal-font nonterminal-text-width-correction
+ the-font-size
+ the-atom-text-pen the-atom-box-pen the-nonterminal-atom-box-pen the-strut-pen the-atom-box-brush
  arrow-threshold
  layout% text-box% hstrut% happend-layout% ellipsis-marker%
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
@@ -89,38 +91,41 @@
 (define align-items (make-parameter ai-top))
 (define justify-content (make-parameter jc-space-evenly))
 
-(define the-font
+(define the-terminal-font
   (make-parameter (make-font #:font-list the-font-list
                              #:size 12
                              #:face "Ubuntu Mono"
                              #:family 'modern
                              #:style 'normal
                              #:weight 'normal)))
+(define the-nonterminal-font
+  (make-parameter (the-terminal-font)))
 (define the-font-size
   (make-derived-parameter
-   the-font
+   the-terminal-font
    (lambda (fs) (make-font #:font-list the-font-list
                            #:size fs
-                           #:face (send (the-font) get-face)
-                           #:family (send (the-font) get-family)
-                           #:style (send (the-font) get-style)
-                           #:weight (send (the-font) get-weight)))
+                           #:face (send (the-terminal-font) get-face)
+                           #:family (send (the-terminal-font) get-family)
+                           #:style (send (the-terminal-font) get-style)
+                           #:weight (send (the-terminal-font) get-weight)))
    (lambda (f) (send f get-size))))
 
 (define (min-strut-width) (* (+ (the-font-size) 12) 1/4))
 (define (row-gap) (* (the-font-size) 2/3))
 
 (define text-measurement-dc (new svg-dc% [width 1000] [height 1000] [output (open-output-nowhere)]))
-(define text-width-correction (make-parameter identity))
+(define terminal-text-width-correction (make-parameter identity))
+(define nonterminal-text-width-correction (make-parameter identity))
 
-(define (text-width text)
-  (send text-measurement-dc set-font (the-font))
+(define (text-width text terminal?)
+  (send text-measurement-dc set-font (if terminal? (the-terminal-font) (the-nonterminal-font)))
   (let-values ([(width height descend extra)
                 (send text-measurement-dc get-text-extent text #f #t)])
-    ((text-width-correction) width)))
+    ((if terminal? (terminal-text-width-correction) (nonterminal-text-width-correction)) width)))
 
-(define (text-height text)
-  (send text-measurement-dc set-font (the-font))
+(define (text-height text terminal?)
+  (send text-measurement-dc set-font (if terminal? (the-terminal-font) (the-nonterminal-font)))
   (let-values ([(width height descend extra)
                 (send text-measurement-dc get-text-extent text #f #t)])
     height))
@@ -133,6 +138,8 @@
   (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
 (define the-atom-box-pen
   (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
+(define the-nonterminal-atom-box-pen
+  (make-parameter (the-atom-box-pen)))
 (define the-strut-pen
   (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
 (define the-atom-box-brush
@@ -608,8 +615,8 @@
   (class inline-layout%
     (init-field terminal? label [padding-x (/ (the-font-size) 2)]
                 [padding-y (/ (the-font-size) 3)])
-    (define label-width (text-width label))
-    (define label-height (text-height label))
+    (define label-width (text-width label terminal?))
+    (define label-height (text-height label terminal?))
     (let ([physical-height (+ label-height (* 2 padding-y))])
       (super-new
        [physical-width (+ label-width (* 2 padding-x))]
@@ -631,9 +638,9 @@
              [rstrut-lx (+ x (min-strut-width) box-width)]
              [rstrut-rx (+ rstrut-lx (min-strut-width))])
         `((set-pen ,(the-atom-text-pen))
-          (set-font ,(the-font))
+          (set-font ,(if terminal? (the-terminal-font) (the-nonterminal-font)))
           (draw-text ,label ,text-x ,text-y #t)
-          (set-pen ,(the-atom-box-pen))
+          (set-pen ,(if terminal? (the-atom-box-pen) (the-nonterminal-atom-box-pen)))
           (set-brush ,(the-atom-box-brush))
           (,(if terminal? 'draw-rounded-rectangle 'draw-rectangle)
            ,box-x ,box-y ,box-width ,box-height))))))
@@ -649,7 +656,7 @@
              [text-x (+ box-x padding-x)]
              [text-y (+ box-y y-alignment-magic)])
         `((set-pen ,(the-atom-text-pen))
-          (set-font ,(the-font))
+          (set-font ,(the-terminal-font))
           (draw-text ,label ,text-x ,text-y #t))))))
 
 (define ellipsis-marker%
