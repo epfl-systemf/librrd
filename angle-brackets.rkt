@@ -4,7 +4,7 @@
 (provide
  align-items ai-baseline ai-top ai-center ai-bottom
  justify-content jc-space-evenly jc-space-between jc-space-around
- jc-start jc-end jc-left jc-center jc-right
+ jc-start jc-end jc-left jc-center jc-right jc-start-or-center
  min-strut-width row-gap min-gap flex-absorb
  the-terminal-font terminal-text-width-correction
  the-nonterminal-font nonterminal-text-width-correction
@@ -16,7 +16,7 @@
  diagram% block-diagram% stack%
  inline-diagram% sequence% wrapped-sequence% station% epsilon%
  distribute-fun distribute-linear distribute-quadratic distribute-extreme
- desugar diagram local-wraps-<)
+ desugar diagram local-wraps-< local-wraps-alt-<)
 
 
 (define (display-expr k) (begin (displayln k) k))
@@ -30,7 +30,7 @@
    (if post (if (list? post) post (list post)) '())))
 
 ;; types of align-items
-(define ai-baseline '((name . baseline) (value . default)))
+(define ai-baseline '((name . baseline) (value logical . 0)))
 (define ai-top '((name . top) (value physical . 0)))
 (define ai-center '((name . center) (value physical . 0.5)))
 (define ai-bottom '((name . bottom) (value physical . 1)))
@@ -85,6 +85,10 @@
      each-end-space
      (build-list (- num-subs 1) (λ _ (max (min-gap) 0)))
      each-end-space)))
+
+(define (jc-start-or-center total-space num-subs direction)
+  ((if (and (< total-space 200) (= num-subs 1)) jc-center jc-start)
+   total-space num-subs direction))
 
 
 ;; affect layout
@@ -802,9 +806,10 @@
     (define/pubment (lay-out width
                              [start-tip (cdr (assq 'value (align-items)))]
                              [end-tip (cdr (assq 'value (align-items)))]
-                             [direction 'ltr])
+                             [direction 'ltr]
+                             [depth 0])
       (inner (raise-user-error "lay-out not implemented!")
-             lay-out width start-tip end-tip direction))))
+             lay-out width start-tip end-tip direction depth))))
 
 (define block-diagram%
   (class diagram% (super-new)))
@@ -833,15 +838,27 @@
     (super-new [flex init-flex])
 
     (define (maybe-tips-width start-tip end-tip)
-      (if (eq? polarity '-)
-          (for/sum ([tip (list start-tip end-tip)])
-            (case tip
-              [(vertical default (logical . 0) (physical . 0)) (min-strut-width)]
-              [else (* 5/2 (min-strut-width))]))
-          (for/sum ([tip (list start-tip end-tip)])
-            (match tip
-              [(or 'default (cons 'logical _) (cons 'physical _)) (* 3/2 (min-strut-width))]
-              [else 0]))))
+      (let ([start-tip (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
+                                (eq? polarity '+)
+                                (is-a? diag-top epsilon%)
+                                (not (vertical? start-tip)))
+                           '(logical . 1)
+                           start-tip)]
+            [end-tip (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
+                              (eq? polarity '+)
+                              (is-a? diag-top epsilon%)
+                              (not (vertical? end-tip)))
+                         '(logical . 1)
+                         end-tip)])
+        (if (eq? polarity '-)
+            (for/sum ([tip (list start-tip end-tip)])
+              (case tip
+                [(vertical default (logical . 0) (physical . 0)) (min-strut-width)]
+                [else (* 5/2 (min-strut-width))]))
+            (for/sum ([tip (list start-tip end-tip)])
+              (match tip
+                [(or 'default (cons 'logical _) (cons 'physical _)) (* 3/2 (min-strut-width))]
+                [else 0])))))
 
     (define (-content which start-tip end-tip direction)
       (+ (max (dynamic-send diag-top which 'vertical 'vertical direction)
@@ -861,7 +878,7 @@
           (get-field physical-height (lay-out (max-content 'default 'default 'ltr)))
           'undefined)])
 
-    (field
+    #;(field
      [global-wraps-measures
       (if wrapped?
           'undefined
@@ -876,28 +893,41 @@
                (cons 'wrap-specs (cons '() (map (λ (wm) (cdr (assq 'wrap-specs wm))) (list top-wrap bot-wrap))))
                (cons 'wrap wrapped)))))])
 
-    (define/augride (lay-out width start-tip end-tip direction)
-      (let* ([clamped-width
-              ((if flex (λ (a b) b) min)
-               (max-content start-tip end-tip direction)
-               (max (min-content start-tip end-tip direction) width))]
-             [clamped-available-width (- clamped-width (maybe-tips-width start-tip end-tip))]
-             [layout-top (send diag-top lay-out clamped-available-width 'vertical 'vertical direction)]
-             [layout-bot
-              (send diag-bot lay-out clamped-available-width 'vertical 'vertical
-                    (if (eq? polarity '+) direction (direction-toggle direction)))]
-             [justified-layouts
-              (map
-               (λ (layout)
-                 (justify-layouts-without-zero-hstruts
-                  (- clamped-available-width (get-field physical-width layout))
-                  (list layout)
-                  (get-field direction layout)))
-               (list layout-top layout-bot))])
-        (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
-             [subs justified-layouts] [direction direction]
-             [tip-specs (map cons '(left right)
-                             (directional-reverse direction `(,start-tip ,end-tip)))])))))
+    (define/augride (lay-out width start-tip end-tip direction depth)
+      (let ([start-tip (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
+                                (eq? polarity '+)
+                                (is-a? diag-top epsilon%)
+                                (not (vertical? start-tip)))
+                           '(logical . 1)
+                           start-tip)]
+            [end-tip (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
+                              (eq? polarity '+)
+                              (is-a? diag-top epsilon%)
+                              (not (vertical? end-tip)))
+                         '(logical . 1)
+                         end-tip)])
+        (let* ([clamped-width
+                ((if flex (λ (a b) b) min)
+                 (max-content start-tip end-tip direction)
+                 (max (min-content start-tip end-tip direction) width))]
+               [clamped-available-width (- clamped-width (maybe-tips-width start-tip end-tip))]
+               [layout-top (send diag-top lay-out clamped-available-width 'vertical 'vertical direction (+ 1 depth))]
+               [layout-bot
+                (send diag-bot lay-out clamped-available-width 'vertical 'vertical
+                      (if (eq? polarity '+) direction (direction-toggle direction))
+                      (+ 1 depth))]
+               [justified-layouts
+                (map
+                 (λ (layout)
+                   (justify-layouts-without-zero-hstruts
+                    (- clamped-available-width (get-field physical-width layout))
+                    (list layout)
+                    (get-field direction layout)))
+                 (list layout-top layout-bot))])
+          (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
+               [subs justified-layouts] [direction direction]
+               [tip-specs (map cons '(left right)
+                               (directional-reverse direction `(,start-tip ,end-tip)))]))))))
 
 (define inline-diagram%
   (class diagram% (super-new)))
@@ -911,7 +941,7 @@
       (+ (inner 0 min-content start-tip end-tip) (vertical-tip-space-width start-tip end-tip)))
     (define/augment (max-content start-tip end-tip _ #;direction)
       (+ (inner 0 max-content start-tip end-tip) (vertical-tip-space-width start-tip end-tip)))
-    (define/augment (lay-out width start-tip end-tip direction)
+    (define/augment (lay-out width start-tip end-tip direction _ #;depth)
       (let ([tip-space
              (λ (tip) (and (vertical? tip) (new hspace% [direction direction])))])
         (new happend-layout%
@@ -1024,11 +1054,21 @@
      natural-width)
     #;(λ (gw1 gw2) (< (badness gw1) (badness gw2)))))
 
-(define (local-wraps-< start-tip end-tip direction)
-  (make-lexicographic-<
-   (λ (w) (length (get-field wrap-spec w)))
-   (λ (w) (send w max-content start-tip end-tip direction))
-   (λ (w) (send w min-content start-tip end-tip direction))))
+(define local-wraps-<
+  (make-parameter
+   (λ (start-tip end-tip direction _ __ ___)
+     (make-lexicographic-<
+      (λ (w) (length (get-field wrap-spec w)))
+      (λ (w) (send w max-content start-tip end-tip direction))))))
+
+(define (local-wraps-alt-< start-tip end-tip direction xc width depth)
+  (let ([score
+         (λ (wrap) (+map (λ (wt fn) (* wt (fn wrap)))
+                         (list (/ (expt 2 (* 2 depth)) (length (get-field subs wrap))) (/ 3 xc))
+                         (list
+                          (λ (w) (+ 1 (length (get-field wrap-spec w))))
+                          (λ (w) (- (send w max-content start-tip end-tip direction) width)))))])
+    (λ (w1 w2) (< (score w1) (score w2)))))
 
 (define sequence%
   (class inline-diagram%
@@ -1043,7 +1083,7 @@
                (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec] [marker marker]))
              (combinations (range (- (length subs) 1))))])
 
-    (field
+    #;(field
      [global-wraps-measures
       (let ([measured
              (map
@@ -1072,12 +1112,15 @@
 
     (super-new [flex #t])
 
-    (define (choose-wrap width start-tip end-tip direction)
+    (define (choose-wrap width start-tip end-tip direction depth)
       (let ([fitting
              (filter (λ (w) (<= (send w min-content start-tip end-tip direction) width)) wraps)])
          (if (empty? fitting)
              (argmin (λ (w) (send w min-content start-tip end-tip direction)) wraps)
-             (first (sort fitting (local-wraps-< start-tip end-tip direction))))))
+             (first (sort fitting
+                          ((local-wraps-<) start-tip end-tip direction
+                                           (max-content start-tip end-tip direction)
+                                           width depth))))))
 
     (define/augride (min-content start-tip end-tip direction)
       (apply min (map (λ (w) (send w min-content start-tip end-tip direction)) wraps)))
@@ -1085,16 +1128,16 @@
     (define/augride (max-content start-tip end-tip direction)
       (send (first wraps) max-content start-tip end-tip direction))
 
-    (define/public (lay-out-global width start-tip end-tip direction)
+    #;(define/public (lay-out-global width start-tip end-tip direction)
       (send
        (let* ([natural-width (λ (w) (cdr (assq 'natural-width w)))]
               [fitting (filter (λ (w) (<= (natural-width w) width)) global-wraps-measures)])
          (cdr (assq 'wrap (if (empty? fitting) (argmin natural-width global-wraps-measures) (first fitting)))))
        lay-out width start-tip end-tip direction))
 
-    (define/augride (lay-out width start-tip end-tip direction)
-      (send (choose-wrap width start-tip end-tip direction)
-            lay-out width start-tip end-tip direction))))
+    (define/augride (lay-out width start-tip end-tip direction depth)
+      (send (choose-wrap width start-tip end-tip direction depth)
+            lay-out width start-tip end-tip direction depth))))
 
 (define (+map f . ls) (apply + (apply map f ls)))
 
@@ -1157,8 +1200,10 @@
     (define (start-vertical? start-tip direction)
       (and (empty? wrap-spec)
            (vertical? start-tip)
-           (memq (justify-content)
-                 (list jc-start jc-space-between (if (eq? direction 'ltr) jc-left jc-right)))))
+           (or (memq (justify-content)
+                     (list jc-start jc-space-between (if (eq? direction 'ltr) jc-left jc-right)))
+               (and (eq? (justify-content) jc-start-or-center)
+                    (< 1 (length subs))))))
 
     (define (end-vertical? end-tip direction)
       (and (empty? wrap-spec)
@@ -1208,7 +1253,7 @@
 
     (field [height (get-field physical-height (lay-out (max-content 'default 'default 'ltr)))])
 
-    (define/augride (lay-out width start-tip end-tip direction)
+    (define/augride (lay-out width start-tip end-tip direction depth)
       (let*
           ([available-width (- (max width (min-content start-tip end-tip direction))
                                (extra-width start-tip end-tip direction))]
@@ -1257,7 +1302,7 @@
                                flex-max-contents))]
                      [x-post-flex (- available-width (apply + w-grow-flex))]
                      [w-total (map + w-min-contents w-grow-contents w-grow-flex)]
-                     [sub-layouts (map (λ (s w st et) (send s lay-out w st et direction))
+                     [sub-layouts (map (λ (s w st et) (send s lay-out w st et direction (+ 1 depth)))
                                        row w-total start-tips end-tips)])
                 (justify-layouts-without-zero-hstruts
                  (+ x-initial x-post-flex)
