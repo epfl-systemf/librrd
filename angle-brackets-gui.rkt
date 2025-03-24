@@ -121,38 +121,24 @@
   (define justify-content-radio
     (new radio-box%
          [label "justify-content"]
-         [choices justify-content-choices]
+         [choices (map car justify-content-choices)]
          [parent p4]
          [style '(vertical vertical-label)]
          [callback
           (λ (self e)
             (send canvas set-justify-content
-                  (case (list-ref justify-content-choices (send self get-selection))
-                    [("space-evenly") jc-space-evenly]
-                    [("space-between") jc-space-between]
-                    [("space-around") jc-space-around]
-                    [("start") jc-start]
-                    [("end") jc-end]
-                    [("left") jc-left]
-                    [("center") jc-center]
-                    [("right") jc-right])))]))
+                  (cdr (list-ref justify-content-choices (send self get-selection)))))]))
 
-  (define align-items-choices
-    (list "top" "center" "bottom" "baseline"))
   (define align-items-radio
     (new radio-box%
          [label "align-items"]
-         [choices align-items-choices]
+         [choices (map car align-items-choices)]
          [parent p4]
          [style '(vertical vertical-label)]
          [callback
           (λ (self e)
             (send canvas set-align-items
-                  (case (list-ref align-items-choices (send self get-selection))
-                    [("top") ai-top]
-                    [("center") ai-center]
-                    [("bottom") ai-bottom]
-                    [("baseline") ai-baseline])))]))
+                  (cdr (list-ref align-items-choices (send self get-selection)))))]))
 
   (define p5 (new vertical-pane% [parent p4] [spacing 15] [stretchable-width #f]))
 

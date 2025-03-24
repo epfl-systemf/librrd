@@ -2,8 +2,10 @@
 (require racket/draw racket/help)
 (require (for-syntax racket/syntax))
 (provide
- align-items ai-baseline ai-top ai-center ai-bottom
- justify-content jc-space-evenly jc-space-between jc-space-around
+ align-items align-items-choices
+ ai-baseline ai-top ai-center ai-bottom
+ justify-content justify-content-choices
+ jc-space-evenly jc-space-between jc-space-around
  jc-start jc-end jc-left jc-center jc-right jc-start-or-center
  min-strut-width row-gap min-gap flex-absorb
  the-terminal-font terminal-text-width-correction
@@ -16,7 +18,8 @@
  diagram% block-diagram% stack%
  inline-diagram% sequence% wrapped-sequence% station% epsilon%
  distribute-fun distribute-linear distribute-quadratic distribute-extreme
- desugar diagram local-wraps-< local-wraps-alt-<)
+ desugar diagram local-wraps-< local-wraps-alt-<
+ figure-margin print-layout-pdf! print-layout-svg!)
 
 
 (define (display-expr k) (begin (displayln k) k))
@@ -34,6 +37,12 @@
 (define ai-top '((name . top) (value physical . 0)))
 (define ai-center '((name . center) (value physical . 0.5)))
 (define ai-bottom '((name . bottom) (value physical . 1)))
+
+(define align-items-choices
+  `(("top" . ,ai-top)
+    ("center" . ,ai-center)
+    ("bottom" . ,ai-bottom)
+    ("baseline" . ,ai-baseline)))
 
 (define (directional-reverse direction l)
   (unless (memq direction '(ltr rtl)) (raise-argument-error 'direction "direction?" direction))
@@ -90,6 +99,16 @@
   ((if (and (< total-space 200) (= num-subs 1)) jc-center jc-start)
    total-space num-subs direction))
 
+(define justify-content-choices
+  `(("space-evenly" . ,jc-space-evenly)
+    ("space-between" . ,jc-space-between)
+    ("space-around" . ,jc-space-around)
+    ("start" . ,jc-start)
+    ("end" . ,jc-end)
+    ("left" . ,jc-left)
+    ("center" . ,jc-center)
+    ("right" . ,jc-right)
+    ("start-or-center" . ,jc-start-or-center)))
 
 ;; affect layout
 (define align-items (make-parameter ai-top))
@@ -1371,3 +1390,58 @@
        (if marker
            (new sequence% [subs (map (λ (e) (rec e #f)) exprs)] [marker marker])
            (new sequence% [subs (map (λ (e) (rec e #f)) exprs)]))])))
+
+(define figure-margin (make-parameter 1))
+
+(define ps-setup
+  (let ([pss (new ps-setup%)])
+    (send* pss
+      (set-mode 'file)
+      (set-scaling 0.78 0.78))
+    pss))
+
+(define (ensure-suffix str suffix)
+  (if (string-suffix? str suffix) str (string-append str suffix)))
+
+(define (print-layout-svg! layout filename)
+  (let* ([width (+ (* 2 (figure-margin))
+                   (get-field physical-width layout))]
+         [height (max 5 (+ (* 2 (figure-margin)) (get-field physical-height layout)))]
+         [my-svg-dc (new svg-dc%
+                         [width width]
+                         [height height]
+                         [output (ensure-suffix filename ".svg")]
+                         [exists 'truncate])])
+    (send my-svg-dc start-doc "")
+    (send my-svg-dc start-page)
+    (send my-svg-dc set-smoothing 'smoothed)
+    (for-each (λ (cmd) (apply dynamic-send my-svg-dc cmd))
+              (send layout render (figure-margin)(figure-margin)))
+    (send my-svg-dc end-page)
+    (send my-svg-dc end-doc)))
+
+(define (print-layout-pdf! layout filename [description #f])
+  (parameterize ([current-ps-setup ps-setup])
+    (let* ([description-height (if description 20 0)]
+           [description-width (if description 80 0)]
+           [width (+ (* 2 (figure-margin))
+                     (max (get-field physical-width layout)
+                          description-width))]
+           [height (max 5 (+ (* 2 (figure-margin))
+                             (get-field physical-height layout)
+                             description-height))]
+           [my-pdf-dc (new pdf-dc%
+                           [interactive #f]
+                           [width (* width 0.78)]
+                           [height (* height 0.78)]
+                           [output (ensure-suffix filename ".pdf")])])
+      (send my-pdf-dc start-doc "")
+      (send my-pdf-dc start-page)
+      (send my-pdf-dc set-smoothing 'smoothed)
+      (for-each (λ (cmd) (apply dynamic-send my-pdf-dc cmd))
+                (send layout render (figure-margin) (+ (figure-margin) description-height)))
+      (when description
+        (send my-pdf-dc set-font (the-nonterminal-font))
+        (send my-pdf-dc draw-text description (figure-margin) (figure-margin) #t))
+      (send my-pdf-dc end-page)
+      (send my-pdf-dc end-doc))))

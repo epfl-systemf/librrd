@@ -1,0 +1,63 @@
+#!/usr/bin/env racket
+#lang racket
+
+(require racket/cmdline)
+(require "angle-brackets.rkt")
+
+(define prog "rrd")
+
+(define (opt-flag flag-spec descr argname choices default parameter)
+  (parameter (cdr (assoc default choices)))
+  (let ([choices-str (string-join (map car choices) ", ")])
+    `[,flag-spec
+      ,(lambda (flag choice)
+         (parameter
+          (match (assoc choice choices)
+            [(cons _ val) val]
+            [#f (error (format "Invalid value for “~a”: “~a”.\n  Expecting one of ~a."
+                               flag choice choices-str))])))
+      (,(format "Set ~a (default: ~a)\n     One of ~a." descr default choices-str)
+       ,argname)]))
+
+(define output-fname (make-parameter #f))
+
+(define layout-width (make-parameter 200))
+
+(define printfn (make-parameter print-layout-pdf!))
+
+(define input-fname
+  (parse-command-line
+   prog (current-command-line-arguments)
+   `((once-each
+      ,(opt-flag '("--align-items") "align-items policy" "policy"
+                 align-items-choices "top" align-items)
+      ,(opt-flag '("--justify-content") "justify-content policy" "policy"
+                 justify-content-choices "space-evenly" justify-content)
+      [("--output" "-o")
+       ,(lambda (_flag fname) (output-fname fname))
+       ("Where to save the result (default: input file name + “.svg”)\n     SVG or PDF." "filename")]
+      [("--min-gap")
+       ,(lambda (_flag value) (min-gap value))
+       (,(format "Set the minimum gap between diagram elements (default: ~a)" (min-gap)) "px")] ;; TODO: unit?
+      [("--flex-absorb")
+       ,(lambda (_flag value) (flex-absorb value))
+       (,(format "Set the fraction of leftover space absorbed at each level (default: ~a)" (flex-absorb)) "ratio")]
+      [("--width")
+       ,(lambda (_flag value) (layout-width value)) ;; FIXME unit?
+       (,(format "Set the maximum width of the diagram, in pixels (default: ~a)" (layout-width)) "w")]))
+   (lambda (_flag-accum filename)
+     (output-fname (or (output-fname) (string-append filename ".svg")))
+     (printfn (cond
+                ((string-suffix? (output-fname) ".svg") print-layout-svg!)
+                ((string-suffix? (output-fname) ".pdf") print-layout-pdf!)
+                (#t (error (format "Unrecognized output file format: ~a" (output-fname))))))
+     filename)
+   '("filename")))
+
+;; TODO flex-stacks?
+(with-input-from-file input-fname
+  (lambda ()
+    (let* ([expr (read)]
+           [diag (diagram expr)]
+           [layout (send diag lay-out (layout-width))])
+      ((printfn) layout (output-fname)))))
