@@ -1,0 +1,4 @@
+((+ ("CONSTRAINT" "NAME") ())
+ (+ ((+ ("PRIMARY" "KEY") "UNIQUE") "(" (<> - "[indexed-column]" ",") ")" "[conflict-clause]")
+    (+ ("CHECK" "(" "[expr]" ")")
+       ("FOREIGN" "KEY" "(" (<> - "column-name" ",") ")" "[foreign-key-clause]"))))

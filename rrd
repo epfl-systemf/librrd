@@ -21,7 +21,7 @@
 
 (define output-fname (make-parameter #f))
 
-(define layout-width (make-parameter 200))
+(define layout-width (make-parameter 400))
 
 (define printfn (make-parameter print-layout-pdf!))
 
@@ -43,7 +43,7 @@
        ,(lambda (_flag value) (flex-absorb value))
        (,(format "Set the fraction of leftover space absorbed at each level (default: ~a)" (flex-absorb)) "ratio")]
       [("--width")
-       ,(lambda (_flag value) (layout-width value)) ;; FIXME unit?
+       ,(lambda (_flag value) (layout-width value)) ;; TODO unit?
        (,(format "Set the maximum width of the diagram, in pixels (default: ~a)\n     0 for min-content, -1 for max-content."
                  (layout-width)) "w")]))
    (lambda (_flag-accum filename)
