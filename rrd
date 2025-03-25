@@ -44,7 +44,8 @@
        (,(format "Set the fraction of leftover space absorbed at each level (default: ~a)" (flex-absorb)) "ratio")]
       [("--width")
        ,(lambda (_flag value) (layout-width value)) ;; FIXME unit?
-       (,(format "Set the maximum width of the diagram, in pixels (default: ~a)" (layout-width)) "w")]))
+       (,(format "Set the maximum width of the diagram, in pixels (default: ~a)\n     0 for min-content, -1 for max-content."
+                 (layout-width)) "w")]))
    (lambda (_flag-accum filename)
      (output-fname (or (output-fname) (string-append filename ".svg")))
      (printfn (cond
@@ -59,5 +60,6 @@
   (lambda ()
     (let* ([expr (read)]
            [diag (diagram expr)]
-           [layout (send diag lay-out (layout-width))])
+           [width (match (layout-width) [0 (send diag min-content)] [-1 (send diag max-content)] [v v])]
+           [layout (send diag lay-out width)])
       ((printfn) layout (output-fname)))))
