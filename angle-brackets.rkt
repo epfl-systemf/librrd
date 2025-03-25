@@ -1352,6 +1352,7 @@
       [(? string?) (if (and (string-prefix? expr "[") (string-suffix? expr "]"))
                        (list 'nonterm (substring expr 1 (- (string-length expr) 1)))
                        (list 'term expr))]
+      ['() '(epsilon)]
       ['epsilon '(epsilon)]
       ['ellipsis '(ellipsis)]
       [(or (list* '<> '+ exprs) (list* '+ exprs))
