@@ -4,15 +4,17 @@
 
 (the-font-size 9)
 
+(define initial-example #<<>>#
+("[" (+ "[item]" (- epsilon ("~:~" "[item]"))) "]")
+>>#
+  )
+
 (define (gui)
   (define frame (new frame% [label "angle bracket diagrams"] [width 1200] [height 1000]))
   (define my-canvas%
     (class canvas% (super-new)
       (inherit get-dc refresh-now)
-      (field [expr '((+ ("WITH" (+ epsilon "RECURSIVE") (<> - "[common-table-expression]" ",")) epsilon)
-                     (<> - "[select-core]" (<> + "UNION" ("UNION" "ALL") "INTERSECT" "EXCEPT"))
-                     (+ ("ORDER" "BY" (<> - "[ordering-term]" ",")) epsilon)
-                     (+ ("LIMIT" "[expr]" (+ epsilon ("OFFSET" "[expr]") ("," "[expr]"))) epsilon))]
+      (field [expr (with-input-from-string initial-example (lambda () (read)))]
              [diag (diagram expr #f #f)]
              [width 950] [self-padding 10]
              [this-justify-content jc-space-evenly]
@@ -92,10 +94,7 @@
   (define p3 (new vertical-pane% [parent p2] [spacing 15] [vert-margin 20]))
   (define expr-textbox (new text-field% [label "angle brackets expression"] [parent p3]
                             [style '(multiple vertical-label)]
-                            [init-value #<<>>#
-'("[" (+ "[item]" (- epsilon ("," "[item]"))) "]")
->>#
-                                        ]
+                            [init-value initial-example]
                             [font (make-font #:family 'modern)]))
 
   (define p4 (new horizontal-pane% [parent p3] [spacing 50]
