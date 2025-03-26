@@ -214,7 +214,7 @@
     (define/override (side-struts? side)
       (case (cdr (assq side tip-specs))
         [(vertical default (logical . 0) (physical . 0)) (min-strut-width)]
-        [else (displayln "are we ever here") (* 5/2 (min-strut-width))]))
+        [else (* 5/2 (min-strut-width))]))
     (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))]
                [tip-specs tip-specs])
     (inherit-field direction subs num-rows)
