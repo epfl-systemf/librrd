@@ -43,7 +43,7 @@ Use `./rrd -h` for help on additional flags.
 
 ## GUI usage
 
-Use `./rrd-gui` to launch a graphical diagram explorer.
+Use `./rrd-gui` to launch a graphical diagram explorer.  Input a diagram in the top-right box, then click “submit” to compute breaks and render the resulting layout.  Adjust the target sized by clicking and dragging on the display pane (left).
 
 ## Reproducing the paper's figures
 

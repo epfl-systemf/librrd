@@ -5,7 +5,7 @@
 (the-font-size 9)
 
 (define initial-example #<<>>#
-("[" (+ "[item]" (- epsilon ("~:~" "[item]"))) "]")
+("[" (+ () (- "[item]" ("~:~" "[item]"))) "]")
 >>#
   )
 
