@@ -2,7 +2,7 @@
 #lang racket
 
 (require racket/cmdline)
-(require "angle-brackets.rkt")
+(require "librrd.rkt")
 
 (define prog "rrd")
 
@@ -37,13 +37,13 @@
        ,(lambda (_flag fname) (output-fname fname))
        ("Where to save the result (default: input file name + “.svg”)\n     SVG or PDF." "filename")]
       [("--min-gap")
-       ,(lambda (_flag value) (min-gap value))
-       (,(format "Set the minimum gap between diagram elements (default: ~a)" (min-gap)) "px")] ;; TODO: unit?
+       ,(lambda (_flag value) (min-gap (string->number value)))
+       (,(format "Set the minimum gap between diagram elements (default: ~a)" (min-gap)) "px")]
       [("--flex-absorb")
-       ,(lambda (_flag value) (flex-absorb value))
+       ,(lambda (_flag value) (flex-absorb (string->number value)))
        (,(format "Set the fraction of leftover space absorbed at each level (default: ~a)" (flex-absorb)) "ratio")]
       [("--width")
-       ,(lambda (_flag value) (layout-width value)) ;; TODO unit?
+       ,(lambda (_flag value) (layout-width (string->number value)))
        (,(format "Set the maximum width of the diagram, in pixels (default: ~a)\n     0 for min-content, -1 for max-content."
                  (layout-width)) "w")]))
    (lambda (_flag-accum filename)
@@ -55,11 +55,8 @@
      filename)
    '("filename")))
 
-;; TODO flex-stacks?
-(with-input-from-file input-fname
-  (lambda ()
-    (let* ([expr (read)]
-           [diag (diagram expr)]
-           [width (match (layout-width) [0 (send diag min-content)] [-1 (send diag max-content)] [v v])]
-           [layout (send diag lay-out width)])
-      ((printfn) layout (output-fname)))))
+(let* ([expr (with-input-from-file input-fname (lambda () (read)))]
+       [diag (diagram expr #f)]
+       [width (match (layout-width) [-1 (send diag max-content)] [v v])]
+       [layout (time (send diag lay-out width))])
+  ((printfn) layout (output-fname)))
