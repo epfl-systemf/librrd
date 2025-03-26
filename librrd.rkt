@@ -1354,7 +1354,7 @@
          [(1) (desugar (first exprs))]
          [(2) `(<> + ,(desugar (first exprs)) ,(desugar (second exprs)))]
          [else `(<> + ,(desugar (first exprs)) ,(desugar `(<> + ,@(rest exprs))))])]
-      [(list* '<> '- exprs)
+      [(or (list* '<> '- exprs) (list* '- exprs))
        (case (length exprs)
          [(2) `(<> - ,(desugar (first exprs)) ,(desugar (second exprs)))]
          [else (raise-arguments-error
