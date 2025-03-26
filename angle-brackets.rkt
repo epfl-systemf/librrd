@@ -4,7 +4,7 @@
 (provide
  align-items ai-baseline ai-top ai-center ai-bottom
  justify-content jc-space-evenly jc-space-between jc-space-around
- jc-start jc-end jc-left jc-center jc-right jc-start-or-center
+ jc-start jc-end jc-left jc-center jc-right
  min-strut-width row-gap min-gap flex-absorb
  the-terminal-font terminal-text-width-correction
  the-nonterminal-font nonterminal-text-width-correction
@@ -22,6 +22,9 @@
 (define (display-expr k) (begin (displayln k) k))
 
 (define (~= x y) (> 0.0001 (abs (- x y))))
+
+(define (linear-interpolate xstart ystart xend yend x)
+  (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
 
 (define (pre-post-pend pre mid post)
   (append
@@ -86,10 +89,6 @@
      (build-list (- num-subs 1) (λ _ (max (min-gap) 0)))
      each-end-space)))
 
-(define (jc-start-or-center total-space num-subs direction)
-  ((if (and (< total-space 200) (= num-subs 1)) jc-center jc-start)
-   total-space num-subs direction))
-
 
 ;; affect layout
 (define align-items (make-parameter ai-top))
@@ -116,7 +115,7 @@
    (lambda (f) (send f get-size))))
 
 (define (min-strut-width) (* (+ (the-font-size) 12) 1/4))
-(define (row-gap) (* (the-font-size) 2/3))
+(define (row-gap) 8)
 
 (define text-measurement-dc (new svg-dc% [width 1000] [height 1000] [output (open-output-nowhere)]))
 (define terminal-text-width-correction (make-parameter identity))
@@ -180,9 +179,6 @@
 
 (define (direction-toggle d)
   (case d [(ltr) 'rtl] [(rtl) 'ltr] [else (raise-argument-error 'd "direction?" d)]))
-
-(define (linear-interpolate xstart ystart xend yend x)
-  (+ ystart (* (/ (- x xstart) (- xend xstart)) (- yend ystart))))
 
 (define vappend-block-layout%
   (class layout%
@@ -1064,10 +1060,10 @@
 (define (local-wraps-alt-< start-tip end-tip direction xc width depth)
   (let ([score
          (λ (wrap) (+map (λ (wt fn) (* wt (fn wrap)))
-                         (list (/ (expt 2 (* 2 depth)) (length (get-field subs wrap))) (/ 3 xc))
+                         (list (* 8 (expt 2 (* 2 depth))) 1)
                          (list
                           (λ (w) (+ 1 (length (get-field wrap-spec w))))
-                          (λ (w) (- (send w max-content start-tip end-tip direction) width)))))])
+                          (λ (w) (send w max-content start-tip end-tip direction)))))])
     (λ (w1 w2) (< (score w1) (score w2)))))
 
 (define sequence%
@@ -1200,10 +1196,8 @@
     (define (start-vertical? start-tip direction)
       (and (empty? wrap-spec)
            (vertical? start-tip)
-           (or (memq (justify-content)
-                     (list jc-start jc-space-between (if (eq? direction 'ltr) jc-left jc-right)))
-               (and (eq? (justify-content) jc-start-or-center)
-                    (< 1 (length subs))))))
+           (memq (justify-content)
+                 (list jc-start jc-space-between (if (eq? direction 'ltr) jc-left jc-right)))))
 
     (define (end-vertical? end-tip direction)
       (and (empty? wrap-spec)
@@ -1282,13 +1276,13 @@
                                            distribute-funs
                                            remaining-contents)]
                      #;[check (unless (~= (apply + w-grow-contents) (min available-width total-remaining-contents))
-                              (raise-arguments-error 'distribute "error"
-                                                     "min-contents" w-min-contents
-                                                     "max-contents" max-contents
-                                                     "grow" (apply + w-grow-contents)
-                                                     "grow-contents" w-grow-contents
-                                                     "total" total-remaining-contents
-                                                     "available" available-width))]
+                                (raise-arguments-error 'distribute "error"
+                                                       "min-contents" w-min-contents
+                                                       "max-contents" max-contents
+                                                       "grow" (apply + w-grow-contents)
+                                                       "grow-contents" w-grow-contents
+                                                       "total" total-remaining-contents
+                                                       "available" available-width))]
                      [available-width (- available-width (apply + w-grow-contents))]
                      ; x- bindings will add up to the absorbed space
                      [x-initial (* (flex-absorb) available-width)]
