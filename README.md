@@ -18,11 +18,17 @@ This code supplement was tested on Ubuntu 24.04.2 LTS.
 
 ## Command line usage
 
-Use `./rrd filename.rrd` to render the diagram contained in `filename.rrd`, creating `filename.rrd.svg`.
-Add `--width` to control the width of the layout (try `--width 0` for min-content; `--width -1` for max-content).  For example:
+Use `./rrd filename.rrd` to render the diagram contained in `filename.rrd`, creating `filename.rrd.pdf`.   For example:
 
 ```
-$ ./rrd --width 400 sql-constraint.rrd
+$ ./rrd sql-constraint.rrd
+cpu time: 85 real time: 85 gc time: 4
+```
+
+Add `--width` to control the width of the layout (try `--width 0` for min-content; `--width -1` for max-content).  Add `--output filename.svg` to produce an SVG file.
+
+```
+$ ./rrd --width 400 --output sql.svg sql-constraint.rrd
 cpu time: 80 real time: 80 gc time: 4
 ```
 

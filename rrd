@@ -47,7 +47,7 @@
        (,(format "Set the maximum width of the diagram, in pixels (default: ~a)\n     0 for min-content, -1 for max-content."
                  (layout-width)) "w")]))
    (lambda (_flag-accum filename)
-     (output-fname (or (output-fname) (string-append filename ".svg")))
+     (output-fname (or (output-fname) (string-append filename ".pdf")))
      (printfn (cond
                 ((string-suffix? (output-fname) ".svg") print-layout-svg!)
                 ((string-suffix? (output-fname) ".pdf") print-layout-pdf!)
