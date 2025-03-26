@@ -1,5 +1,6 @@
+#!/usr/bin/env racket
 #lang racket
-(require racket/draw racket/gui/base "angle-brackets.rkt")
+(require racket/draw racket/gui/base "librrd.rkt")
 
 (the-font-size 9)
 
@@ -92,23 +93,7 @@
   (define expr-textbox (new text-field% [label "angle brackets expression"] [parent p3]
                             [style '(multiple vertical-label)]
                             [init-value #<<>>#
-((+ ("WITH"
-     (+ epsilon "RECURSIVE")
-     (<> - "[common-table-expression]" ","))
-    epsilon)
- (<> - "[select-core]"
-       (<> + "UNION"
-             ("UNION" "ALL")
-             "INTERSECT"
-             "EXCEPT"))
- (+ ("ORDER" "BY" (<> - "[ordering-term]" ","))
-    epsilon)
- (+ ("LIMIT"
-     "[expr]"
-     (+ epsilon
-        ("OFFSET" "[expr]")
-        ("," "[expr]")))
-    epsilon))
+'("[" (+ "[item]" (- epsilon ("," "[item]"))) "]")
 >>#
                                         ]
                             [font (make-font #:family 'modern)]))
@@ -116,8 +101,6 @@
   (define p4 (new horizontal-pane% [parent p3] [spacing 50]
                   [alignment '(center center)] [stretchable-height #f]))
 
-  (define justify-content-choices
-    (list "space-evenly" "space-between" "space-around" "start" "end" "left" "center" "right"))
   (define justify-content-radio
     (new radio-box%
          [label "justify-content"]
@@ -183,3 +166,5 @@
             (send canvas set-expr (read (open-input-string (send expr-textbox get-value)))))]))
 
   (send frame show #t))
+
+(gui)

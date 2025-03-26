@@ -691,7 +691,7 @@
                   (apply append
                          (map (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
                               init-subs))]
-                 ;; TODO: remove the need for these checks
+                 ;; remove the need for these checks
                  [space? (λ (s) (and (is-a? s hspace%) s))]
                  [start-space (let ([ss (dropf spliced-subs (is-a?/c hstrut%))])
                                 (and (not (empty? ss)) (space? (first ss))))]

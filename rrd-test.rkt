@@ -1,5 +1,5 @@
 #lang racket
-(require racket/draw "angle-brackets.rkt")
+(require racket/draw "librrd.rkt")
 
 (define my-svg-dc
   (new svg-dc% [width 2500] [height 3500] [output "trial.svg"] [exists 'truncate]))
