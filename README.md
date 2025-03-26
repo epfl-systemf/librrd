@@ -35,8 +35,8 @@ terminal:       "l"
 nonterminal:    "[l]"
 epsilon:        ()
 sequence:       (d...)
-positive stack: (+ d1 d2)
-negative stack: (- d1 d2)
+positive stack: (+ d d...)
+negative stack: (- d d)
 ```
 
 Use `./rrd -h` for help on additional flags.
