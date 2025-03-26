@@ -5,7 +5,7 @@ Thanks for taking a look at our code supplement!
 ## Requirements
 
 - To run the scripts: Racket version 8.10 or greater (`apt install racket` on Ubuntu).
-- To reproduce figures exactly: Linux Libertine fonts (`apt install fonts-linuxlibertine` on Ubuntu).
+- To reproduce figures exactly: Linux Libertine, Inconsolata, and DejaVu fonts (`apt install fonts-linuxlibertine fonts-inconsolata fonts-dejavu` on Ubuntu).
 
 This code supplement was tested on Ubuntu 24.04.2 LTS.
 
