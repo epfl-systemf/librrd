@@ -52,8 +52,8 @@
             (for-each
              (λ (render) (for-each (λ (cmd) (apply dynamic-send dc cmd)) render))
              (let ([ll (parameterize ([distribute-fun distribute-linear]) (send diag lay-out width))]
-                   [llqd (parameterize ([distribute-fun distribute-extreme]) (send diag lay-out width))]
-                   [lg (send diag lay-out-global width 'default 'default 'ltr)])
+                   #;[llqd (parameterize ([distribute-fun distribute-extreme]) (send diag lay-out width))]
+                   #;[lg (send diag lay-out-global width 'default 'default 'ltr)])
                (parameterize ([arrow-threshold this-arrow-threshold])
                  (list
                   (send ll render self-padding self-padding)
@@ -63,10 +63,10 @@
                          (+ self-padding (get-field physical-width ll) self-padding) self-padding)
                    (list 'draw-text (measure-desc "heuristic height" (get-field physical-height ll))
                          (+ self-padding (get-field physical-width ll) self-padding) (+ self-padding 20)))
-                  (parameterize ([the-atom-box-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
+                  #;(parameterize ([the-atom-box-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
                                  [the-strut-pen (make-pen #:color "red" #:width 1 #:style 'solid)])
                     (send lg render self-padding (+ self-padding 500)))
-                  (list (list 'draw-text (measure-desc "optimal height" (get-field physical-height lg))
+                  #;(list (list 'draw-text (measure-desc "optimal height" (get-field physical-height lg))
                               (+ self-padding (get-field physical-width lg) self-padding) (+ self-padding 500))))))))))
       (define/override (on-event event)
         (cond
