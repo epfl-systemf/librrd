@@ -8,11 +8,11 @@
  jc-space-evenly jc-space-between jc-space-around
  jc-start jc-end jc-left jc-center jc-right
  min-strut-width row-gap min-gap flex-absorb
- the-terminal-font terminal-text-width-correction
- the-nonterminal-font nonterminal-text-width-correction
- the-font-size
- the-atom-text-pen the-atom-box-pen the-nonterminal-atom-box-pen the-strut-pen the-atom-box-brush
- arrow-threshold
+ the-terminal-font the-default-terminal-font the-terminal-text-width-correction
+ the-terminal-text-pen the-terminal-box-pen the-terminal-box-brush
+ the-nonterminal-font the-default-nonterminal-font the-nonterminal-text-width-correction
+ the-nonterminal-text-pen the-nonterminal-box-pen the-nonterminal-box-brush
+ the-default-font the-font-size the-strut-pen arrow-threshold
  layout% text-box% hstrut% happend-layout% ellipsis-marker%
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
  diagram% block-diagram% stack%
@@ -112,38 +112,49 @@
 (define align-items (make-parameter ai-top))
 (define justify-content (make-parameter jc-space-evenly))
 
-(define the-terminal-font
-  (make-parameter (make-font #:font-list the-font-list
-                             #:size 12
-                             #:face "Ubuntu Mono"
-                             #:family 'modern
-                             #:style 'normal
-                             #:weight 'normal)))
-(define the-nonterminal-font
-  (make-parameter (the-terminal-font)))
-(define the-font-size
-  (make-derived-parameter
-   the-terminal-font
-   (lambda (fs) (make-font #:font-list the-font-list
-                           #:size fs
-                           #:face (send (the-terminal-font) get-face)
-                           #:family (send (the-terminal-font) get-family)
-                           #:style (send (the-terminal-font) get-style)
-                           #:weight (send (the-terminal-font) get-weight)))
-   (lambda (f) (send f get-size))))
+(current-font-list the-font-list)
+(define font-properties '(#:face #:family #:feature-settings #:hinting #:smoothing
+                          #:style #:underlined? #:weight))
+(define font-property-getters
+  (map (λ (fp) (string->symbol (string-append "get-" (string-trim (keyword->string fp) "?"))))
+       font-properties))
+(define copy-font
+  (make-keyword-procedure
+   (lambda (kws kwargs original . #;args _)
+     (keyword-apply
+      make-font
+      font-properties
+      (map (λ (p pg) (let ([pidx (index-of kws p)])
+                       (if pidx (list-ref kwargs pidx) (dynamic-send original pg))))
+           font-properties font-property-getters)
+      '()))))
 
-(define (min-strut-width) (* (+ (the-font-size) 12) 1/4))
-(define (row-gap) 8)
+(define the-default-font (make-font #;defaults))
+(define the-default-terminal-font
+  (copy-font the-default-font #:family 'modern #:face "Ubuntu Mono"))
+(define the-default-nonterminal-font
+  (copy-font the-default-font #:family 'swiss #:face "Ubuntu Sans" #:style 'italic))
+(define the-font-size
+  (make-parameter
+   (send the-default-font get-size)
+   (λ (fs)
+     (the-terminal-font (copy-font the-terminal-font #:size fs))
+     (the-nonterminal-font (copy-font the-nonterminal-font #:size fs))
+     fs)))
+(define the-terminal-font
+  (make-parameter the-default-terminal-font (λ (f) (copy-font f #:size (the-font-size)))))
+(define the-nonterminal-font
+  (make-parameter the-default-nonterminal-font (λ (f) (copy-font f #:size (the-font-size)))))
 
 (define text-measurement-dc (new svg-dc% [width 1000] [height 1000] [output (open-output-nowhere)]))
-(define terminal-text-width-correction (make-parameter identity))
-(define nonterminal-text-width-correction (make-parameter identity))
+(define the-terminal-text-width-correction (make-parameter identity))
+(define the-nonterminal-text-width-correction (make-parameter identity))
 
 (define (text-width text terminal?)
   (send text-measurement-dc set-font (if terminal? (the-terminal-font) (the-nonterminal-font)))
   (let-values ([(width height descend extra)
                 (send text-measurement-dc get-text-extent text #f #t)])
-    ((if terminal? (terminal-text-width-correction) (nonterminal-text-width-correction)) width)))
+    ((if terminal? (the-terminal-text-width-correction) (the-nonterminal-text-width-correction)) width)))
 
 (define (text-height text terminal?)
   (send text-measurement-dc set-font (if terminal? (the-terminal-font) (the-nonterminal-font)))
@@ -151,20 +162,21 @@
                 (send text-measurement-dc get-text-extent text #f #t)])
     height))
 
+(define (min-strut-width) (* (+ (the-font-size) 12) 1/4))
+(define (row-gap) 8)
 (define min-gap (make-parameter 0))
 (define flex-absorb (make-parameter 0.0))
 
 ;; affect rendering
-(define the-atom-text-pen
-  (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
-(define the-atom-box-pen
-  (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
-(define the-nonterminal-atom-box-pen
-  (make-parameter (the-atom-box-pen)))
-(define the-strut-pen
-  (make-parameter (make-pen #:color "black" #:width 1 #:style 'solid)))
-(define the-atom-box-brush
-  (make-parameter (make-brush #:style 'transparent)))
+(define the-default-pen (make-pen #:color "black" #:width 1 #:style 'solid))
+(define the-default-brush (make-brush #:style 'transparent))
+(define the-terminal-text-pen (make-parameter the-default-pen))
+(define the-terminal-box-pen (make-parameter the-default-pen))
+(define the-terminal-box-brush (make-parameter the-default-brush))
+(define the-nonterminal-text-pen (make-parameter the-default-pen))
+(define the-nonterminal-box-pen (make-parameter the-default-pen))
+(define the-nonterminal-box-brush (make-parameter the-default-brush))
+(define the-strut-pen (make-parameter the-default-pen))
 
 (define arrow-threshold (make-parameter 5))
 
@@ -635,13 +647,12 @@
                 [padding-y (/ (the-font-size) 3)])
     (define label-width (text-width label terminal?))
     (define label-height (text-height label terminal?))
-    (let ([physical-height (+ label-height (* 2 padding-y))])
-      (super-new
-       [physical-width (+ label-width (* 2 padding-x))]
-       [physical-height physical-height]
-       [tips `((left default . ,(/ physical-height 2))
-               (right default . ,(/ physical-height 2)))]))
-    (inherit-field physical-height)
+    (define physical-height (+ label-height (* 2 padding-y)))
+    (super-new
+     [physical-width (+ label-width (* 2 padding-x))]
+     [physical-height physical-height]
+     [tips `((left default . ,(/ physical-height 2))
+             (right default . ,(/ physical-height 2)))])
 
     (define/override (render x y)
       (let* ([box-width (+ label-width (* 2 padding-x))]
@@ -654,18 +665,26 @@
              [lstrut-lx x]
              [lstrut-rx (+ lstrut-lx (min-strut-width))]
              [rstrut-lx (+ x (min-strut-width) box-width)]
-             [rstrut-rx (+ rstrut-lx (min-strut-width))])
-        `((set-pen ,(the-atom-text-pen))
-          (set-font ,(if terminal? (the-terminal-font) (the-nonterminal-font)))
-          (draw-text ,label ,text-x ,text-y #t)
-          (set-pen ,(if terminal? (the-atom-box-pen) (the-nonterminal-atom-box-pen)))
-          (set-brush ,(the-atom-box-brush))
-          (,(if terminal? 'draw-rounded-rectangle 'draw-rectangle)
-           ,box-x ,box-y ,box-width ,box-height))))))
+             [rstrut-rx (+ rstrut-lx (min-strut-width))]
+             [draw-text-cmd `(draw-text ,label ,text-x ,text-y #t)]
+             [draw-box-cmd-args (list box-x box-y box-width box-height)])
+        (if terminal?
+            `((set-pen ,(the-terminal-text-pen))
+              (set-font ,(the-terminal-font))
+              ,draw-text-cmd
+              (set-pen ,(the-terminal-box-pen))
+              (set-brush ,(the-terminal-box-brush))
+              (draw-rounded-rectangle ,@draw-box-cmd-args))
+            `((set-pen ,(the-nonterminal-text-pen))
+              (set-font ,(the-nonterminal-font))
+              ,draw-text-cmd
+              (set-pen ,(the-nonterminal-box-pen))
+              (set-brush ,(the-nonterminal-box-brush))
+              (draw-rectangle ,@draw-box-cmd-args)))))))
 
 (define text-marker%
   (class text-box%
-    (super-new [terminal? #f] [padding-x (min-strut-width)])
+    (super-new [terminal? #t] [padding-x (min-strut-width)])
     (init-field [y-alignment-magic (* (the-font-size) 0.23)])
     (inherit-field label padding-x)
     (define/override (render x y)
@@ -673,7 +692,7 @@
              [box-y y]
              [text-x (+ box-x padding-x)]
              [text-y (+ box-y y-alignment-magic)])
-        `((set-pen ,(the-atom-text-pen))
+        `((set-pen ,(the-terminal-text-pen))
           (set-font ,(the-terminal-font))
           (draw-text ,label ,text-x ,text-y #t))))))
 
@@ -972,10 +991,10 @@
   (class atomic-inline-diagram%
     (super-new [flex #f])
     (init-field terminal? label)
-    (define (init-text-box) (new text-box% [terminal? terminal?] [label label]))
+    (define init-text-box (new text-box% [terminal? terminal?] [label label]))
     (define (init-layout-width)
-      (+ (min-strut-width) (get-field physical-width (init-text-box))))
-    (field [height (get-field physical-height (init-text-box))])
+      (+ (min-strut-width) (get-field physical-width init-text-box)))
+    (field [height (get-field physical-height init-text-box)])
     (field [global-wraps-measures
             (list (list (cons 'natural-width (init-layout-width))
                         (cons 'height height)
