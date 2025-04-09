@@ -6,7 +6,7 @@
  ai-baseline ai-top ai-center ai-bottom
  justify-content justify-content-choices
  jc-space-evenly jc-space-between jc-space-around jc-start jc-end jc-left jc-center jc-right
- min-strut-width row-gap min-gap flex-absorb
+ min-strut-width row-gap min-gap flex-absorb flex-stacks?
  the-terminal-font the-default-terminal-font the-terminal-text-width-correction
  the-terminal-text-pen the-terminal-box-pen the-terminal-box-brush
  the-nonterminal-font the-default-nonterminal-font the-nonterminal-text-width-correction
@@ -16,7 +16,9 @@
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
  diagram% block-diagram% stack%
  inline-diagram% sequence% wrapped-sequence% station% epsilon%
- desugar diagram local-wraps-< local-wraps-alt-<
+ make-lexicographic-<
+ local-wraps-< lw<-default-lexicographic lw<-make-numerical lw<-default-numerical
+ desugar diagram
  figure-margin print-layout-pdf! print-layout-svg!)
 
 
@@ -111,8 +113,8 @@
 (define justify-content (make-parameter jc-space-evenly))
 
 (current-font-list the-font-list)
-(define font-properties '(#:face #:family #:feature-settings #:hinting #:smoothing
-                          #:style #:underlined? #:weight))
+(define font-properties '(#:face #:family #:feature-settings #:hinting #:size
+                          #:smoothing #:style #:underlined? #:weight))
 (define font-property-getters
   (map (λ (fp) (string->symbol (string-append "get-" (string-trim (keyword->string fp) "?"))))
        font-properties))
@@ -133,12 +135,16 @@
 (define the-default-nonterminal-font
   (copy-font the-default-font #:family 'swiss #:face "Ubuntu Sans" #:style 'italic))
 (define the-font-size
-  (make-parameter
-   (send the-default-font get-size)
-   (λ (fs)
-     (the-terminal-font (copy-font the-terminal-font #:size fs))
-     (the-nonterminal-font (copy-font the-nonterminal-font #:size fs))
-     fs)))
+  (chaperone-procedure
+   (make-parameter
+    (send the-default-font get-size))
+   (case-lambda
+     [() (values)]
+     [(fs) (values
+            (λ _ ; refresh the font sizes with the guards below
+              (the-terminal-font (the-terminal-font))
+              (the-nonterminal-font (the-nonterminal-font)))
+            fs)])))
 (define the-terminal-font
   (make-parameter the-default-terminal-font (λ (f) (copy-font f #:size (the-font-size)))))
 (define the-nonterminal-font
@@ -164,6 +170,7 @@
 (define (row-gap) 8)
 (define min-gap (make-parameter 0))
 (define flex-absorb (make-parameter 0.0))
+(define flex-stacks? (make-parameter #t))
 
 ;; affect rendering
 (define the-default-pen (make-pen #:color "black" #:width 1 #:style 'solid))
@@ -205,15 +212,18 @@
 
 (define (vertical? tip-spec) (eq? tip-spec 'vertical))
 
-(define (direction-toggle d)
-  (case d [(ltr) 'rtl] [(rtl) 'ltr] [else (raise-argument-error 'd "direction?" d)]))
+(define (direction-toggle d . conds)
+  (case d
+    [(ltr) (if (andmap identity conds) 'rtl 'ltr)]
+    [(rtl) (if (andmap identity conds) 'ltr 'rtl)]
+    [else (raise-argument-error 'd "direction?" d)]))
 
 (define vappend-block-layout%
   (class layout%
     (init-field tip-specs subs)
 
     (define/public (side-struts? side)
-      (if (not (vertical? (cdr (assq side tip-specs)))) (* 3/2 (min-strut-width)) 0))
+      (if (vertical? (cdr (assq side tip-specs))) 0 (* 3/2 (min-strut-width))))
 
     (define ((get-rows side) sub)
       (if (and (is-a? sub vappend-block-layout%)
@@ -390,7 +400,8 @@
 
     (define/override (side-struts? side)
       (case (cdr (assq side tip-specs))
-        [(vertical default (logical . 0) (physical . 0)) (min-strut-width)]
+        [(vertical) 0]
+        [(default (logical . 0) (physical . 0)) (min-strut-width)]
         [else (* 5/2 (min-strut-width))]))
 
     (super-new [subs internal-subs] [num-rows '((left . 1) (right . 1))]
@@ -426,7 +437,7 @@
          ; for the self-tip
          (cond
            [(~= self-tip-y top-tip-y)
-            `((draw-line ,(- bracket-x (if (eq? (cdr (assq side tip-specs)) 'vertical) 0 inner-dx))
+            `((draw-line ,(- bracket-x (if (vertical? (cdr (assq side tip-specs))) 0 inner-dx))
                          ,self-tip-y
                          ,(+ bracket-x inner-dx) ,self-tip-y))]
            [(< self-tip-y top-tip-y)
@@ -482,9 +493,8 @@
                              [(mid-subs last-subs) (split-at-right rest-subs 1)])
                  (let ([struct-sub-markers
                         (for/list ([sub (list (first first-subs) (first last-subs))]
-                                   [maybe-reverse (if (eq? init-direction 'rtl)
-                                                      (list reverse identity)
-                                                      (list identity reverse))]
+                                   [maybe-reverse
+                                    (directional-reverse init-direction (list identity reverse))]
                                    [tip-side (list start-side end-side)])
                           (new happend-layout% [fuse? #t] [direction init-direction]
                                [subs
@@ -860,31 +870,28 @@
         (new happend-layout% [subs layouts-and-struts] [fuse? #t] [direction direction]))))
 
 (define stack%
-  (class block-diagram%
+  (class block-diagram% (super-new [flex 'undefined])
     (init-field diag-top diag-bot polarity)
-    (init [(init-flex flex) #t] [wrapped? #f])
+    (init [wrapped? #f])
     (unless (memq polarity '(+ -))
       (raise-arguments-error 'stack "polarity must be '+ or '-" "polarity" polarity))
 
-    (super-new [flex init-flex])
+    (define (baseline-epsilon-adjust tip)
+      (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
+               (eq? polarity '+)
+               (is-a? diag-top epsilon%)
+               (not (vertical? tip)))
+          '(logical . 1)
+          tip))
 
     (define (maybe-tips-width start-tip end-tip)
-      (let ([start-tip (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
-                                (eq? polarity '+)
-                                (is-a? diag-top epsilon%)
-                                (not (vertical? start-tip)))
-                           '(logical . 1)
-                           start-tip)]
-            [end-tip (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
-                              (eq? polarity '+)
-                              (is-a? diag-top epsilon%)
-                              (not (vertical? end-tip)))
-                         '(logical . 1)
-                         end-tip)])
+      (let ([start-tip (baseline-epsilon-adjust start-tip)]
+            [end-tip (baseline-epsilon-adjust end-tip)])
         (if (eq? polarity '-)
             (for/sum ([tip (list start-tip end-tip)])
               (case tip
-                [(vertical default (logical . 0) (physical . 0)) (min-strut-width)]
+                [(vertical) (min-strut-width)]
+                [(default (logical . 0) (physical . 0)) (* 2 (min-strut-width))]
                 [else (* 5/2 (min-strut-width))]))
             (for/sum ([tip (list start-tip end-tip)])
               (match tip
@@ -900,8 +907,6 @@
       (-content 'min-content start-tip end-tip direction))
     (define/augride (max-content start-tip end-tip direction)
       (-content 'max-content start-tip end-tip direction))
-
-    (inherit-field flex)
 
     (field
      [height
@@ -925,40 +930,50 @@
                (cons 'wrap wrapped)))))])
 
     (define/augride (lay-out width start-tip end-tip direction depth)
-      (let ([start-tip (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
-                                (eq? polarity '+)
-                                (is-a? diag-top epsilon%)
-                                (not (vertical? start-tip)))
-                           '(logical . 1)
-                           start-tip)]
-            [end-tip (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
-                              (eq? polarity '+)
-                              (is-a? diag-top epsilon%)
-                              (not (vertical? end-tip)))
-                         '(logical . 1)
-                         end-tip)])
-        (let* ([clamped-width
-                ((if flex (λ (a b) b) min)
-                 (max-content start-tip end-tip direction)
-                 (max (min-content start-tip end-tip direction) width))]
-               [clamped-available-width (- clamped-width (maybe-tips-width start-tip end-tip))]
-               [layout-top (send diag-top lay-out clamped-available-width 'vertical 'vertical direction (+ 1 depth))]
-               [layout-bot
-                (send diag-bot lay-out clamped-available-width 'vertical 'vertical
-                      (if (eq? polarity '+) direction (direction-toggle direction))
-                      (+ 1 depth))]
-               [justified-layouts
-                (map
-                 (λ (layout)
-                   (justify-layouts-without-zero-hstruts
-                    (- clamped-available-width (get-field physical-width layout))
-                    (list layout)
-                    (get-field direction layout)))
-                 (list layout-top layout-bot))])
-          (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
-               [subs justified-layouts] [direction direction]
-               [tip-specs (map cons '(left right)
-                               (directional-reverse direction `(,start-tip ,end-tip)))]))))))
+      (let ([start-tip (baseline-epsilon-adjust start-tip)]
+            [end-tip (baseline-epsilon-adjust end-tip)])
+        (let-values
+            ([(available-width clamped-width)
+              (let ([nc (min-content start-tip end-tip direction)]
+                    [xc (max-content start-tip end-tip direction)]
+                    [tw (maybe-tips-width start-tip end-tip)])
+                (apply values
+                       ((λ (ws) (list (- (first ws) tw) (- (second ws) tw)))
+                            (cond
+                              [(<= width nc) (list nc nc)]
+                              [(<= width xc) (list width width)]
+                              [(flex-stacks?)
+                               (list (+ xc (* (- 1 (flex-absorb)) (- width xc))) width)]
+                              [else (list xc xc)]))))])
+          (let* ([ai-tip (cdr (assq 'value (align-items)))]
+                 [layouts
+                  (map
+                   (λ (diag dir)
+                     (if (if (is-a? diag stack%)
+                             (eq? (get-field polarity diag) '+)
+                             (get-field flex diag))
+                         (send diag lay-out clamped-width 'vertical 'vertical dir (+ 1 depth))
+                         (let ([layout
+                                (if (and (is-a? diag stack%) #;(must be '-))
+                                    (send diag lay-out available-width
+                                          'vertical 'vertical dir (+ 1 depth))
+                                    (send diag lay-out (- available-width (* 2 (min-strut-width)))
+                                          ai-tip ai-tip dir (+ 1 depth)))])
+                           (new happend-layout%
+                                [subs (list (new hspace% [direction dir])
+                                            (justify-layouts-without-zero-hstruts
+                                             (- clamped-width
+                                                (get-field physical-width layout)
+                                                (* 2 (min-strut-width)))
+                                             (list layout) dir)
+                                            (new hspace% [direction dir]))]
+                                [fuse? #t] [direction dir]))))
+                   (list diag-top diag-bot)
+                   (list direction (direction-toggle direction (eq? polarity '-))))])
+            (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
+                 [subs layouts] [direction direction]
+                 [tip-specs (map cons '(left right)
+                                 (directional-reverse direction `(,start-tip ,end-tip)))])))))))
 
 (define inline-diagram%
   (class diagram% (super-new)))
@@ -1047,10 +1062,14 @@
           ['() (list lst)]
           [(cons idx rests) (cons (take lst idx) (helper (drop lst idx) rests))]))))
 
-(define (wrap-specs-badness wrap-specs depth-f)
+(define (wrap-spec-badness wrap-spec depth wrap-length-penalty depth-penalty)
+  (* (depth-penalty depth) (wrap-length-penalty (length wrap-spec))))
+
+(define (wrap-specs-badness wrap-specs wrap-length-penalty depth-penalty)
   (let rec ([ws wrap-specs] [depth 0])
     (let ([self-ws (first ws)] [subs-ws (rest ws)])
-      (apply + (* (depth-f depth) (length self-ws)) (map (λ (sws) (rec sws (+ 1 depth))) subs-ws)))))
+      (+ (wrap-spec-badness self-ws depth wrap-length-penalty depth-penalty)
+         (+map (λ (sws) (rec sws (+ 1 depth))) subs-ws)))))
 
 (define ((make-lexicographic-< . accessors) x1 x2)
   (let loop ([accs accessors])
@@ -1085,24 +1104,30 @@
      natural-width)
     #;(λ (gw1 gw2) (< (badness gw1) (badness gw2)))))
 
-(define local-wraps-<
-  (make-parameter
-   (λ (start-tip end-tip direction _ __ ___)
-     (make-lexicographic-<
-      (λ (w) (length (get-field wrap-spec w)))
-      (λ (w) (send w max-content start-tip end-tip direction))))))
+(define (lw<-default-lexicographic start-tip end-tip direction width depth)
+  (make-lexicographic-<
+   (λ (w) (wrap-spec-badness (get-field wrap-spec w) depth identity (λ (_) 1)))
+   (λ (w) (send w max-content start-tip end-tip direction))
+   ; TODO: study the effect of this last one more closely!
+   (λ (w) (send w min-content start-tip end-tip direction))))
 
-(define (local-wraps-alt-< start-tip end-tip direction xc width depth)
+(define ((lw<-make-numerical wrap-length-penalty depth-penalty wrap-weight xc-weight)
+         start-tip end-tip direction width depth)
   (let ([score
-         (λ (wrap) (+map (λ (wt fn) (* wt (fn wrap)))
-                         (list (* 8 (expt 2 (* 2 depth))) 1)
-                         (list
-                          (λ (w) (+ 1 (length (get-field wrap-spec w))))
-                          (λ (w) (send w max-content start-tip end-tip direction)))))])
+         (λ (w)
+           (+ (* wrap-weight (wrap-spec-badness (get-field wrap-spec w) depth
+                                                wrap-length-penalty depth-penalty))
+              (* xc-weight (send w max-content start-tip end-tip direction))))])
     (λ (w1 w2) (< (score w1) (score w2)))))
+
+(define lw<-default-numerical
+  (lw<-make-numerical (λ (wl) (+ 1 wl)) (λ (d) (expt 2 (* 2 d))) 8 1))
+
+(define local-wraps-< (make-parameter lw<-default-lexicographic))
 
 (define sequence%
   (class inline-diagram%
+    (super-new [flex #t])
     (init-field subs)
     (unless (> (length subs) 0)
       (raise-arguments-error 'sequence "must sequence at least one diagram"))
@@ -1141,17 +1166,12 @@
         (sort measured
               (global-wraps-< (argmin (λ (w) (cdr (assq 'natural-width w))) measured) (first wraps))))])
 
-    (super-new [flex #t])
-
     (define (choose-wrap width start-tip end-tip direction depth)
       (let ([fitting
              (filter (λ (w) (<= (send w min-content start-tip end-tip direction) width)) wraps)])
          (if (empty? fitting)
              (argmin (λ (w) (send w min-content start-tip end-tip direction)) wraps)
-             (first (sort fitting
-                          ((local-wraps-<) start-tip end-tip direction
-                                           (max-content start-tip end-tip direction)
-                                           width depth))))))
+             (first (sort fitting ((local-wraps-<) start-tip end-tip direction width depth))))))
 
     (define/augride (min-content start-tip end-tip direction)
       (apply min (map (λ (w) (send w min-content start-tip end-tip direction)) wraps)))
@@ -1173,14 +1193,13 @@
 (define (+map f . ls) (apply + (apply map f ls)))
 
 (define wrapped-sequence%
-    (class inline-diagram%
+  (class inline-diagram%
+    (super-new [flex #t])
     (init-field subs wrap-spec marker)
     (unless (andmap (λ (break) (<= 0 break (- (length subs) 2))) wrap-spec)
       (raise-arguments-error
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
     (define wrapped-subs (break-at subs wrap-spec))
-
-    (super-new [flex #t])
 
     (define (start-vertical? start-tip direction)
       (and (empty? wrap-spec)
@@ -1265,7 +1284,9 @@
                      [x-initial (* (flex-absorb) available-width)]
                      [available-width (- available-width x-initial)]
                      [flex-max-contents
-                      (map (λ (s xc) (if (get-field flex s) xc 0)) row max-contents)]
+                      (map (λ (s xc)
+                             (if (if (is-a? s stack%) (flex-stacks?) (get-field flex s)) xc 0))
+                           row max-contents)]
                      [total-flex-max-contents (apply + flex-max-contents)]
                      [w-grow-flex
                       (if (= total-flex-max-contents 0) (make-list (length row) 0)
@@ -1273,8 +1294,9 @@
                                flex-max-contents))]
                      [x-post-flex (- available-width (apply + w-grow-flex))]
                      [w-total (map + w-min-contents w-grow-contents w-grow-flex)]
-                     [sub-layouts (map (λ (s w st et) (send s lay-out w st et direction (+ 1 depth)))
-                                       row w-total start-tips end-tips)])
+                     [sub-layouts
+                      (map (λ (s w st et) (send s lay-out w st et direction (+ 1 depth)))
+                           row w-total start-tips end-tips)])
                 (justify-layouts-without-zero-hstruts
                  (+ x-initial x-post-flex)
                  (directional-reverse direction sub-layouts)
@@ -1297,52 +1319,48 @@
              [direction direction] [style 'marker]
              [marker (new text-marker% [direction direction] [label marker])]))))))
 
-(define (desugar expr [splice? #t])
-  ; to avoid passing splice? to each call
-  (let desugar ([expr expr])
-    (match expr
-      [(? string?) (if (and (string-prefix? expr "[") (string-suffix? expr "]"))
-                       (list 'nonterm (substring expr 1 (- (string-length expr) 1)))
-                       (list 'term expr))]
-      ['() '(epsilon)]
-      ['epsilon '(epsilon)]
-      ['ellipsis '(ellipsis)]
-      [(or (list* '<> '+ exprs) (list* '+ exprs))
-       (case (length exprs)
-         [(0) '(epsilon)]
-         [(1) (desugar (first exprs))]
-         [(2) `(<> + ,(desugar (first exprs)) ,(desugar (second exprs)))]
-         [else `(<> + ,(desugar (first exprs)) ,(desugar `(<> + ,@(rest exprs))))])]
-      [(or (list* '<> '- exprs) (list* '- exprs))
-       (case (length exprs)
-         [(2) `(<> - ,(desugar (first exprs)) ,(desugar (second exprs)))]
-         [else (raise-arguments-error
-                'desugar "negative polarity stack takes exactly two arguments"
-                "exprs" exprs)])]
-      [(list* 'seq exprs)
-       (cons 'seq
-             (if splice?
-                 (append-map (λ (e) (match (desugar e)
-                                      [(list* 'seq exprs) exprs]
-                                      [exprs (list exprs)])) exprs)
-                 (map desugar exprs)))]
-      [(? list?) (desugar (cons 'seq expr))]
-      [_ expr])))
+(define (desugar expr)
+  (match expr
+    [(? string?) (if (and (string-prefix? expr "[") (string-suffix? expr "]"))
+                     (list 'nonterm (substring expr 1 (- (string-length expr) 1)))
+                     (list 'term expr))]
+    ['() '(epsilon)]
+    ['epsilon '(epsilon)]
+    ['ellipsis '(ellipsis)]
+    [(or (list* '<> '+ exprs) (list* '+ exprs))
+     (case (length exprs)
+       [(0) '(epsilon)]
+       [(1) (desugar (first exprs))]
+       [(2) `(<> + ,(desugar (first exprs)) ,(desugar (second exprs)))]
+       [else `(<> + ,(desugar (first exprs)) ,(desugar `(<> + ,@(rest exprs))))])]
+    [(or (list* '<> '- exprs) (list* '- exprs))
+     (case (length exprs)
+       [(2) `(<> - ,(desugar (first exprs)) ,(desugar (second exprs)))]
+       [else (raise-arguments-error
+              'desugar "negative polarity stack takes exactly two arguments"
+              "exprs" exprs)])]
+    [(list* 'seq exprs)
+     (cons 'seq
+           (append-map (λ (e) (match (desugar e)
+                                [(list* 'seq exprs) exprs]
+                                [exprs (list exprs)])) exprs))]
+    [(? list?) (desugar (cons 'seq expr))]
+    [_ expr]))
 
-(define (diagram expr [flex-stacks? #t] [splice? #t] [marker #f])
-  (let rec ([expr (desugar expr splice?)] [in-stack? #f])
+(define (diagram expr [marker #f])
+  (let rec ([expr (desugar expr)])
     (match expr
       ['(epsilon) (new epsilon%)]
       ['(ellipsis) (new ellipsis%)]
       [(list 'term label) (new station% [terminal? #t] [label label])]
       [(list 'nonterm label) (new station% [terminal? #f] [label label])]
       [(list '<> polarity expr-top expr-bot)
-       (new stack% [diag-top (rec expr-top #t)] [diag-bot (rec expr-bot #t)]
-            [polarity polarity] [flex (or flex-stacks? in-stack?)])]
+       (new stack% [diag-top (rec expr-top)] [diag-bot (rec expr-bot)]
+            [polarity polarity])]
       [(list* 'seq exprs)
        (if marker
-           (new sequence% [subs (map (λ (e) (rec e #f)) exprs)] [marker marker])
-           (new sequence% [subs (map (λ (e) (rec e #f)) exprs)]))])))
+           (new sequence% [subs (map (λ (e) (rec e)) exprs)] [marker marker])
+           (new sequence% [subs (map (λ (e) (rec e)) exprs)]))])))
 
 (define figure-margin (make-parameter 1))
 

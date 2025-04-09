@@ -1,3 +1,13 @@
+2025-04-09
+==========
+
+stacks do not need to know nesting to flex.
+a containing stack gives its non-vertical-tip-stack subdiagrams less of the available width
+  (absorbing some for itself per flex-absorb),
+  and its vertical-tip-stack subdiagrams the full available width, which they can further distribute.
+
+what if a - has + top?
+
 2025-02-25
 ==========
 
