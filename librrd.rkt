@@ -186,16 +186,6 @@
 (define arrow-threshold (make-parameter 5))
 
 
-;; A layout can have a tip at height:
-;;   * 'top                 an upwards tip
-;;   * (logical . [0,H])    integers are exactly at logical rows, and other
-;;                          numbers are logically interpolated such that 0.5
-;;                          is halfway between the sublayouts on rows 0 and 1
-;;                          (always a horizontal tip)
-;;   * 'bot                 a downwards tip
-;;   * 'default             the default among the above
-;;
-;; These are on both sides (left and right) of the layout.
 (define layout%
   (class object% (super-new)
     (init-field physical-width physical-height
@@ -237,7 +227,7 @@
 
     (define/augride (tip-y side spec)
       (match spec
-        ; is this one really needed?
+        ; TODO: is this one really needed?
         ['vertical (send (first subs) tip-y side spec)]
         [(cons 'logical (? number? row-num))
          (let* ([num-rows (- (cdr (assq side init-num-rows)) 1)])
@@ -286,7 +276,6 @@
         [else #f]))
 
     (let ([sub-widths (map (lambda (s) (get-field physical-width s)) subs)])
-      ; inexact equality
       (unless (~= (apply max sub-widths) (apply min sub-widths))
         (raise-arguments-error 'vappend-layout "subs must have equal widths"
                                "sub-widths" sub-widths))
@@ -817,6 +806,7 @@
   (class object% (super-new)
     (init-field flex)
 
+    ; TODO: memoize, see if makes a perf difference
     (define/pubment (min-content [start-tip (cdr (assq 'value (align-items)))]
                                  [end-tip (cdr (assq 'value (align-items)))]
                                  [direction 'ltr])
@@ -828,11 +818,6 @@
       (inner (raise-user-error "max-content not implemented!")
              max-content start-tip end-tip direction))
 
-    ;; Attempt to lay out the diagram with the requested tips and width. Will
-    ;; always succeed, but the resulting tips and widths may not be what were
-    ;; requested, even if it would have been possible.
-    ;
-    ; to SVG? HTML? TiKZ? how to have different backends?
     (define/pubment (lay-out width
                              [start-tip (cdr (assq 'value (align-items)))]
                              [end-tip (cdr (assq 'value (align-items)))]
