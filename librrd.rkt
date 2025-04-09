@@ -714,30 +714,19 @@
     (field
      [subs
       (if fuse?
-          (let* ([spliced-subs
-                  (apply append
-                         (map (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
-                              init-subs))]
-                 ;; remove the need for these checks
-                 [space? (λ (s) (and (is-a? s hspace%) s))]
-                 [start-space (let ([ss (dropf spliced-subs (is-a?/c hstrut%))])
-                                (and (not (empty? ss)) (space? (first ss))))]
-                 [end-space (let ([ss (dropf-right spliced-subs (is-a?/c hstrut%))])
-                              (and (not (empty? ss)) (space? (last ss))))]
-                 [spliced-subs (filter-not space? spliced-subs)])
-            (for/fold ([cur-hstrut #f]
-                       [subs '()]
-                       #:result (pre-post-pend start-space
-                                               (reverse (if cur-hstrut (cons cur-hstrut subs) subs))
-                                               end-space))
-                      ([cur-sub spliced-subs])
-              (if cur-hstrut
-                  (if (is-a? cur-sub hstrut%)
-                      (values (send cur-hstrut fuse cur-sub) subs)
-                      (values #f (cons cur-sub (cons cur-hstrut subs))))
-                  (if (is-a? cur-sub hstrut%)
-                      (values cur-sub subs)
-                      (values #f (cons cur-sub subs))))))
+          (for/fold ([cur-hstrut #f]
+                     [subs '()]
+                     #:result (reverse (if cur-hstrut (cons cur-hstrut subs) subs)))
+                    ([cur-sub (append-map
+                               (λ (s) (if (is-a? s happend-layout%) (get-field subs s) (list s)))
+                               init-subs)])
+            (if cur-hstrut
+                (if (is-a? cur-sub hstrut%)
+                    (values (send cur-hstrut fuse cur-sub) subs)
+                    (values #f (cons cur-sub (cons cur-hstrut subs))))
+                (if (is-a? cur-sub hstrut%)
+                    (values cur-sub subs)
+                    (values #f (cons cur-sub subs)))))
           init-subs)])
 
     (define expose-first-left-tips?
