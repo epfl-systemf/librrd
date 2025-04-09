@@ -5,8 +5,7 @@
  align-items align-items-choices
  ai-baseline ai-top ai-center ai-bottom
  justify-content justify-content-choices
- jc-space-evenly jc-space-between jc-space-around
- jc-start jc-end jc-left jc-center jc-right
+ jc-space-evenly jc-space-between jc-space-around jc-start jc-end jc-left jc-center jc-right
  min-strut-width row-gap min-gap flex-absorb
  the-terminal-font the-default-terminal-font the-terminal-text-width-correction
  the-terminal-text-pen the-terminal-box-pen the-terminal-box-brush
@@ -17,7 +16,6 @@
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
  diagram% block-diagram% stack%
  inline-diagram% sequence% wrapped-sequence% station% epsilon%
- distribute-fun distribute-linear distribute-quadratic distribute-extreme
  desugar diagram local-wraps-< local-wraps-alt-<
  figure-margin print-layout-pdf! print-layout-svg!)
 
@@ -1174,52 +1172,6 @@
 
 (define (+map f . ls) (apply + (apply map f ls)))
 
-(define (distribute-linear max-contents remaining-proportions)
-  (make-list (length max-contents) (λ (t) t)))
-
-(define (distribute-quadratic max-contents remaining-proportions)
-  (let* ([k 2]
-         [remaining-contents (map * max-contents remaining-proportions)]
-         [remaining-proportions-pow (map (λ (p) (expt p k)) remaining-proportions)]
-         [basis (/ (apply + remaining-contents)
-                   3 (apply + (map * remaining-contents remaining-proportions-pow)))])
-    (map (λ (pp) (λ (t) (+ (expt t 3) (* 2 (- 1 t) (expt t 2)) (* 3 basis pp (expt (- 1 t) 2) t))))
-         remaining-proportions-pow)))
-
-(define (second-last l) (list-ref l (- (length l) 2)))
-(define ((piecewise-linear-interpolate xs ys) x)
-  (cond
-    [(< x (first xs))
-     (linear-interpolate (first xs) (first ys) (second xs) (second ys) x)]
-    [(<= (last xs) x)
-     (linear-interpolate (second-last xs) (second-last ys) (last xs) (last ys) x)]
-    [else
-     (let loop ([xis (map cons (drop-right xs 1) (rest xs))]
-                [yis (map cons (drop-right ys 1) (rest ys))])
-       (let ([xlo (caar xis)] [xhi (cdar xis)] [ylo (caar yis)] [yhi (cdar yis)])
-         (if (and (<= xlo x) (< x xhi))
-             (linear-interpolate xlo ylo xhi yhi x)
-             (loop (cdr xis) (cdr yis)))))]))
-
-(define (distribute-extreme max-contents remaining-proportions)
-  (if (andmap zero? remaining-proportions)
-      (make-list (length remaining-proportions) (λ (t) (linear-interpolate 0 0 1 1 t)))
-      (let* ([ctrl-ys (map (λ (p)
-                             (append
-                              (map (λ (q) (max 0 (- 1 (/ q p))))
-                                   (sort (filter-not zero? remaining-proportions) >))
-                              '(1)))
-                           remaining-proportions)]
-             [ctrl-ys-transpose (apply map list ctrl-ys)]
-             [ctrl-xs (map (λ (ys) (+map * ys max-contents remaining-proportions))
-                           ctrl-ys-transpose)]
-             [ctrl-xs (map (λ (x) (/ x (last ctrl-xs))) ctrl-xs)])
-        (map
-         (λ (ys) (piecewise-linear-interpolate ctrl-xs ys))
-         ctrl-ys))))
-
-(define distribute-fun (make-parameter distribute-linear))
-
 (define wrapped-sequence%
     (class inline-diagram%
     (init-field subs wrap-spec marker)
@@ -1301,25 +1253,13 @@
                      [max-contents (map (λ (s st et) (send s max-content st et direction))
                                         row start-tips end-tips)]
                      [remaining-contents (map - max-contents w-min-contents)]
-                     [remaining-proportions (map (λ (rc mc) (if (= 0 mc) 0 (/ rc mc)))
-                                                 remaining-contents max-contents)]
                      [total-remaining-contents (apply + remaining-contents)]
                      [available-remaining-proportion
                       (if (~= total-remaining-contents 0) 0
                           (/ (min available-width total-remaining-contents)
                              total-remaining-contents))]
-                     [distribute-funs ((distribute-fun) max-contents remaining-proportions)]
-                     [w-grow-contents (map (λ (f rc) (* rc (f available-remaining-proportion)))
-                                           distribute-funs
-                                           remaining-contents)]
-                     #;[check (unless (~= (apply + w-grow-contents) (min available-width total-remaining-contents))
-                                (raise-arguments-error 'distribute "error"
-                                                       "min-contents" w-min-contents
-                                                       "max-contents" max-contents
-                                                       "grow" (apply + w-grow-contents)
-                                                       "grow-contents" w-grow-contents
-                                                       "total" total-remaining-contents
-                                                       "available" available-width))]
+                     [w-grow-contents
+                      (map (λ (rc) (* rc available-remaining-proportion)) remaining-contents)]
                      [available-width (- available-width (apply + w-grow-contents))]
                      ; x- bindings will add up to the absorbed space
                      [x-initial (* (flex-absorb) available-width)]
