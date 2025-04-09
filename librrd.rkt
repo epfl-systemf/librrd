@@ -869,6 +869,15 @@
         (first layouts-and-struts) ; only one layout, and completely fills space
         (new happend-layout% [subs layouts-and-struts] [fuse? #t] [direction direction]))))
 
+(define (surround-with-spaces layout start-tip end-tip direction)
+  (let ([tip-space
+         (λ (tip) (and (or (vertical? tip) (eq? tip #t)) (new hspace% [direction direction])))])
+    (new happend-layout%
+         [subs (directional-reverse
+                direction
+                (pre-post-pend (tip-space start-tip) layout (tip-space end-tip)))]
+         [fuse? #t] [direction direction])))
+
 (define stack%
   (class block-diagram% (super-new [flex 'undefined])
     (init-field diag-top diag-bot polarity)
@@ -890,8 +899,7 @@
         (if (eq? polarity '-)
             (for/sum ([tip (list start-tip end-tip)])
               (case tip
-                [(vertical) (min-strut-width)]
-                [(default (logical . 0) (physical . 0)) (* 2 (min-strut-width))]
+                [(vertical default (logical . 0) (physical . 0)) (min-strut-width)]
                 [else (* 5/2 (min-strut-width))]))
             (for/sum ([tip (list start-tip end-tip)])
               (match tip
@@ -930,50 +938,44 @@
                (cons 'wrap wrapped)))))])
 
     (define/augride (lay-out width start-tip end-tip direction depth)
-      (let ([start-tip (baseline-epsilon-adjust start-tip)]
-            [end-tip (baseline-epsilon-adjust end-tip)])
-        (let-values
-            ([(available-width clamped-width)
-              (let ([nc (min-content start-tip end-tip direction)]
-                    [xc (max-content start-tip end-tip direction)]
-                    [tw (maybe-tips-width start-tip end-tip)])
-                (apply values
-                       ((λ (ws) (list (- (first ws) tw) (- (second ws) tw)))
-                            (cond
-                              [(<= width nc) (list nc nc)]
-                              [(<= width xc) (list width width)]
-                              [(flex-stacks?)
-                               (list (+ xc (* (- 1 (flex-absorb)) (- width xc))) width)]
-                              [else (list xc xc)]))))])
-          (let* ([ai-tip (cdr (assq 'value (align-items)))]
-                 [layouts
-                  (map
-                   (λ (diag dir)
-                     (if (if (is-a? diag stack%)
-                             (eq? (get-field polarity diag) '+)
-                             (get-field flex diag))
-                         (send diag lay-out clamped-width 'vertical 'vertical dir (+ 1 depth))
-                         (let ([layout
-                                (if (and (is-a? diag stack%) #;(must be '-))
-                                    (send diag lay-out available-width
-                                          'vertical 'vertical dir (+ 1 depth))
-                                    (send diag lay-out (- available-width (* 2 (min-strut-width)))
-                                          ai-tip ai-tip dir (+ 1 depth)))])
-                           (new happend-layout%
-                                [subs (list (new hspace% [direction dir])
-                                            (justify-layouts-without-zero-hstruts
-                                             (- clamped-width
-                                                (get-field physical-width layout)
-                                                (* 2 (min-strut-width)))
-                                             (list layout) dir)
-                                            (new hspace% [direction dir]))]
-                                [fuse? #t] [direction dir]))))
-                   (list diag-top diag-bot)
-                   (list direction (direction-toggle direction (eq? polarity '-))))])
-            (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
-                 [subs layouts] [direction direction]
-                 [tip-specs (map cons '(left right)
-                                 (directional-reverse direction `(,start-tip ,end-tip)))])))))))
+      (let* ([start-tip (baseline-epsilon-adjust start-tip)]
+             [end-tip (baseline-epsilon-adjust end-tip)]
+             [flex? (or (and (vertical? start-tip) (vertical? end-tip) (not (eq? polarity '-)))
+                        (flex-stacks?))]
+             [layouts
+              (map
+               (λ (diag dir)
+                 (let* ([xc (max-content start-tip end-tip direction)]
+                        [tips-width (maybe-tips-width start-tip end-tip)]
+                        [clamped-width (- (max (min-content start-tip end-tip direction)
+                                               (if flex? width (min width xc)))
+                                          tips-width)]
+                        [available-width
+                         (if (and (> width xc) flex?)
+                             (+ xc (* (- 1 (flex-absorb)) (- width xc)) (- tips-width))
+                             clamped-width)])
+                   (if (or (is-a? diag stack%) (get-field flex diag))
+                       (send diag lay-out
+                             (if (and (is-a? diag stack%) (eq? (get-field polarity diag) '-))
+                                 available-width
+                                 clamped-width)
+                             'vertical 'vertical dir (+ 1 depth))
+                       (let* ([spaces-width (* 2 (min-strut-width))]
+                              [ai-tip (cdr (assq 'value (align-items)))]
+                              [layout (send diag lay-out (- available-width spaces-width)
+                                            ai-tip ai-tip dir (+ 1 depth))])
+                         (surround-with-spaces
+                          (justify-layouts-without-zero-hstruts
+                           (- clamped-width (get-field physical-width layout) spaces-width)
+                           (list layout) dir) #t #t dir)))))
+               (list diag-top diag-bot)
+               (list direction (direction-toggle direction (eq? polarity '-))))]
+             [layout
+              (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
+                   [subs layouts] [direction direction]
+                   [tip-specs (map cons '(left right)
+                                   (directional-reverse direction `(,start-tip ,end-tip)))])])
+        (if (eq? polarity '+) layout (surround-with-spaces layout start-tip end-tip direction))))))
 
 (define inline-diagram%
   (class diagram% (super-new)))
@@ -988,17 +990,10 @@
     (define/augment (max-content start-tip end-tip _ #;direction)
       (+ (inner 0 max-content start-tip end-tip) (vertical-tip-space-width start-tip end-tip)))
     (define/augment (lay-out width start-tip end-tip direction _ #;depth)
-      (let ([tip-space
-             (λ (tip) (and (vertical? tip) (new hspace% [direction direction])))])
-        (new happend-layout%
-             [subs (directional-reverse
-                    direction
-                    (pre-post-pend
-                     (tip-space start-tip)
-                     (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
-                            start-tip end-tip direction)
-                     (tip-space end-tip)))]
-             [fuse? #t] [direction direction])))))
+      (surround-with-spaces
+       (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
+              start-tip end-tip direction)
+       start-tip end-tip direction))))
 
 (define station%
   (class atomic-inline-diagram%
@@ -1302,22 +1297,16 @@
                  (directional-reverse direction sub-layouts)
                  direction)))])
         (if (empty? wrap-spec)
-            (new happend-layout%
-                 [subs (directional-reverse
-                        direction
-                        (pre-post-pend (and (start-vertical-space? start-tip direction)
-                                            (new hspace% [direction direction]))
-                                       (lay-out-row (first wrapped-subs))
-                                       (and (end-vertical-space? end-tip direction)
-                                            (new hspace% [direction direction]))))]
-                 [fuse? #t] [direction direction])
-            (new
-             vappend-inline-layout%
-             [subs (map lay-out-row wrapped-subs)]
-             [tip-specs (map cons '(left right)
-                             (directional-reverse direction (list start-tip end-tip)))]
-             [direction direction] [style 'marker]
-             [marker (new text-marker% [direction direction] [label marker])]))))))
+            (surround-with-spaces (lay-out-row (first wrapped-subs))
+                                  (start-vertical-space? start-tip direction)
+                                  (end-vertical-space? end-tip direction)
+                                  direction)
+            (new vappend-inline-layout%
+                 [subs (map lay-out-row wrapped-subs)]
+                 [tip-specs (map cons '(left right)
+                                 (directional-reverse direction (list start-tip end-tip)))]
+                 [direction direction] [style 'marker]
+                 [marker (new text-marker% [direction direction] [label marker])]))))))
 
 (define (desugar expr)
   (match expr
