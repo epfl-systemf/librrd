@@ -108,9 +108,31 @@
     ("center" . ,jc-center)
     ("right" . ,jc-right)))
 
+(define (make-guarded-parameter initial guard expected name)
+  (make-parameter
+   initial
+   (λ (value)
+     (unless (guard value)
+       (raise-user-error
+        name "invalid parameter value: expected ~a, got ~a"
+        (or expected (object-name guard)) value))
+     value)
+   name))
+
+(define (make-list-guarded-parameter initial list_ name)
+  (make-guarded-parameter
+   initial
+   (λ (v) (memq v (map cdr list_)))
+   (format "one of [~a]" (string-join (map car list_) ","))
+   name))
+
+(define (make-type-guarded-parameter initial type name)
+  (make-guarded-parameter initial (is-a?/c type) (format "instance of ~a" (object-name type)) name))
+
 ;; affect layout
-(define align-items (make-parameter ai-top))
-(define justify-content (make-parameter jc-space-evenly))
+(define align-items (make-list-guarded-parameter ai-top align-items-choices 'align-items))
+(define justify-content
+  (make-list-guarded-parameter jc-space-evenly justify-content-choices 'justify-content))
 
 (current-font-list the-font-list)
 (define font-properties '(#:face #:family #:feature-settings #:hinting #:size
@@ -136,8 +158,8 @@
   (copy-font the-default-font #:family 'swiss #:face "Ubuntu Sans" #:style 'italic))
 (define the-font-size
   (chaperone-procedure
-   (make-parameter
-    (send the-default-font get-size))
+   (make-guarded-parameter
+    (inexact->exact (send the-default-font get-size)) exact-positive-integer? #f 'the-font-size)
    (case-lambda
      [() (values)]
      [(fs) (values
@@ -145,14 +167,26 @@
               (the-terminal-font (the-terminal-font))
               (the-nonterminal-font (the-nonterminal-font)))
             fs)])))
+(define ((font-guard name) font)
+  (unless (is-a? font% font)
+    (raise-user-error name "invalid parameter value: expected a font, got ~a") font)
+  (copy-font font #:size (the-font-size)))
 (define the-terminal-font
-  (make-parameter the-default-terminal-font (λ (f) (copy-font f #:size (the-font-size)))))
+  (make-parameter
+   the-default-terminal-font (font-guard 'the-terminal-font) 'the-terminal-font))
 (define the-nonterminal-font
-  (make-parameter the-default-nonterminal-font (λ (f) (copy-font f #:size (the-font-size)))))
+  (make-parameter
+   the-default-nonterminal-font (font-guard 'the-nonterminal-font) 'the-nonterminal-font))
 
 (define text-measurement-dc (new svg-dc% [width 1000] [height 1000] [output (open-output-nowhere)]))
-(define the-terminal-text-width-correction (make-parameter identity))
-(define the-nonterminal-text-width-correction (make-parameter identity))
+(define (text-width-correction? f)
+  (and (procedure? f) (arity=? 1 (procedure-arity f))))
+(define the-terminal-text-width-correction
+  (make-guarded-parameter (λ (tw) tw) text-width-correction? "a function from numbers to numbers"
+                          'the-terminal-text-width-correction))
+(define the-nonterminal-text-width-correction
+  (make-guarded-parameter (λ (tw) tw) text-width-correction? "a function from numbers to numbers"
+                          'the-nonterminal-text-width-correction))
 
 (define (text-width text terminal?)
   (send text-measurement-dc set-font (if terminal? (the-terminal-font) (the-nonterminal-font)))
@@ -168,23 +202,41 @@
 
 (define (min-strut-width) (* (+ (the-font-size) 12) 1/4))
 (define (row-gap) 8)
-(define min-gap (make-parameter 0))
-(define flex-absorb (make-parameter 0.0))
-(define flex-stacks? (make-parameter #t))
+(define min-gap (make-guarded-parameter 0 (not/c negative?) "nonnegative?" 'min-gap))
+(define flex-absorb
+  (make-guarded-parameter 0.0 (λ (v) (and (real? v) (<= 0 v 1))) "a real in [0,1]" 'flex-absorb))
+(define flex-stacks? (make-guarded-parameter #t boolean? #f 'flex-stacks?))
+
+(define layout-parameters
+  (list align-items justify-content the-font-size min-gap flex-absorb flex-stacks?
+        the-terminal-font the-terminal-text-width-correction
+        the-nonterminal-font the-nonterminal-text-width-correction))
 
 ;; affect rendering
 (define the-default-pen (make-pen #:color "black" #:width 1 #:style 'solid))
 (define the-default-brush (make-brush #:style 'transparent))
-(define the-terminal-text-pen (make-parameter the-default-pen))
-(define the-terminal-box-pen (make-parameter the-default-pen))
-(define the-terminal-box-brush (make-parameter the-default-brush))
-(define the-nonterminal-text-pen (make-parameter the-default-pen))
-(define the-nonterminal-box-pen (make-parameter the-default-pen))
-(define the-nonterminal-box-brush (make-parameter the-default-brush))
-(define the-strut-pen (make-parameter the-default-pen))
+(define the-terminal-text-pen
+  (make-type-guarded-parameter the-default-pen pen% 'the-terminal-text-pen))
+(define the-terminal-box-pen
+  (make-type-guarded-parameter the-default-pen pen% 'the-terminal-box-pen))
+(define the-terminal-box-brush
+  (make-type-guarded-parameter the-default-brush brush% 'the-terminal-box-brush))
+(define the-nonterminal-text-pen
+  (make-type-guarded-parameter the-default-pen pen% 'the-nonterminal-text-pen))
+(define the-nonterminal-box-pen
+  (make-type-guarded-parameter the-default-pen pen% 'the-nonterminal-box-pen))
+(define the-nonterminal-box-brush
+  (make-type-guarded-parameter the-default-brush brush% 'the-nonterminal-box-brush))
+(define the-strut-pen (make-type-guarded-parameter the-default-pen pen% 'the-strut-pen))
 
-(define arrow-threshold (make-parameter 5))
+(define arrow-threshold (make-guarded-parameter 5 (not/c negative?) "nonnegative?" 'arrow-threshold))
 
+(define rendering-parameters
+  (list the-terminal-text-pen the-terminal-box-pen the-terminal-box-brush
+        the-nonterminal-text-pen the-nonterminal-box-pen the-nonterminal-box-brush
+        the-strut-pen arrow-threshold))
+
+;;;
 
 (define layout%
   (class object% (super-new)
@@ -1281,6 +1333,22 @@
                                  (directional-reverse direction (list start-tip end-tip)))]
                  [direction direction] [style 'marker]
                  [marker (new text-marker% [direction direction] [label marker])]))))))
+
+; technically impossible?
+#;(define-syntax (dynamic-parameterize stx)
+  (syntax-case stx ()
+    [(_ bindings body) #'#`(parameterize #,bindings body)]))
+
+; recursive parameterize by lookup in layout-parameters list
+
+#;(define (lay-out-with bindings)
+  (mixin (class->interface diagram%) ()
+    (define/override (min-content . args)
+      (super min-content args))
+    (define/override (max-content . args)
+      (super max-content args))
+    (define/override (lay-out . args)
+      (super lay-out args))))
 
 (define (desugar expr)
   (match expr
