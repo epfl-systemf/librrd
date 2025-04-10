@@ -1341,14 +1341,27 @@
 
 ; recursive parameterize by lookup in layout-parameters list
 
-#;(define (lay-out-with bindings)
-  (mixin (class->interface diagram%) ()
+(define ((dynamic-parameterize parameter-list bindings) body-thunk)
+  (let loop ([bindings bindings])
+    (if (empty? bindings)
+        (body-thunk)
+        (let ([parameter-name (caar bindings)]
+              [value (cadar bindings)]
+              [bindings (cdr bindings)])
+          (parameterize ([(findf (λ (p) (eq? (object-name p) parameter-name))
+                                 parameter-list) value])
+            (loop bindings))))))
+
+(define (lay-out-with bindings)
+  (mixin ((class->interface diagram%)) ()
+    (define this-parameterize (dynamic-parameterize layout-parameters bindings))
+    (this-parameterize (thunk (super-new)))
     (define/override (min-content . args)
-      (super min-content args))
+      (this-parameterize (thunk (super min-content . args))))
     (define/override (max-content . args)
-      (super max-content args))
+      (this-parameterize (thunk (super max-content . args))))
     (define/override (lay-out . args)
-      (super lay-out args))))
+      (this-parameterize (thunk (super lay-out . args))))))
 
 (define (desugar expr)
   (match expr
@@ -1375,23 +1388,27 @@
            (append-map (λ (e) (match (desugar e)
                                 [(list* 'seq exprs) exprs]
                                 [exprs (list exprs)])) exprs))]
+    [(list 'lay-out-with bindings expr) (list 'lay-out-with bindings (desugar expr))]
     [(? list?) (desugar (cons 'seq expr))]
     [_ expr]))
 
 (define (diagram expr [marker #f])
-  (let rec ([expr (desugar expr)])
+  (let rec ([expr (desugar expr)] [cur-mixin identity])
     (match expr
       ['(epsilon) (new epsilon%)]
       ['(ellipsis) (new ellipsis%)]
-      [(list 'term label) (new station% [terminal? #t] [label label])]
-      [(list 'nonterm label) (new station% [terminal? #f] [label label])]
+      [(list 'term label) (new (cur-mixin station%) [terminal? #t] [label label])]
+      [(list 'nonterm label) (new (cur-mixin station%) [terminal? #f] [label label])]
       [(list '<> polarity expr-top expr-bot)
-       (new stack% [diag-top (rec expr-top)] [diag-bot (rec expr-bot)]
+       (new (cur-mixin stack%) [diag-top (rec expr-top identity)]
+            [diag-bot (rec expr-bot identity)]
             [polarity polarity])]
       [(list* 'seq exprs)
        (if marker
-           (new sequence% [subs (map (λ (e) (rec e)) exprs)] [marker marker])
-           (new sequence% [subs (map (λ (e) (rec e)) exprs)]))])))
+           (new (cur-mixin sequence%) [subs (map (λ (e) (rec e identity)) exprs)] [marker marker])
+           (new (cur-mixin sequence%) [subs (map (λ (e) (rec e identity)) exprs)]))]
+      [(list 'lay-out-with (list (list parameter-name value) ...) expr)
+       (rec expr (compose cur-mixin (lay-out-with (map list parameter-name value))))])))
 
 (define figure-margin (make-parameter 1))
 
