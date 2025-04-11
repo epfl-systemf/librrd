@@ -858,21 +858,23 @@
   (class object% (super-new)
     (init-field flex)
 
+    (define/public (default-tip) (cdr (assq 'value (align-items))))
+
     ; TODO: memoize, see if makes a perf difference
-    (define/pubment (min-content [start-tip (cdr (assq 'value (align-items)))]
-                                 [end-tip (cdr (assq 'value (align-items)))]
+    (define/pubment (min-content [start-tip (default-tip)]
+                                 [end-tip (default-tip)]
                                  [direction 'ltr])
       (inner (raise-user-error "min-content not implemented!")
              min-content start-tip end-tip direction))
-    (define/pubment (max-content [start-tip (cdr (assq 'value (align-items)))]
-                                 [end-tip (cdr (assq 'value (align-items)))]
+    (define/pubment (max-content [start-tip (default-tip)]
+                                 [end-tip (default-tip)]
                                  [direction 'ltr])
       (inner (raise-user-error "max-content not implemented!")
              max-content start-tip end-tip direction))
 
     (define/pubment (lay-out width
-                             [start-tip (cdr (assq 'value (align-items)))]
-                             [end-tip (cdr (assq 'value (align-items)))]
+                             [start-tip (default-tip)]
+                             [end-tip (default-tip)]
                              [direction 'ltr]
                              [depth 0])
       (inner (raise-user-error "lay-out not implemented!")
@@ -1353,9 +1355,10 @@
             (loop bindings))))))
 
 (define (lay-out-with bindings)
-  (mixin ((class->interface diagram%)) ()
+  (mixin ((class->interface diagram%)) () (super-new)
     (define this-parameterize (dynamic-parameterize layout-parameters bindings))
-    (this-parameterize (thunk (super-new)))
+    (define/override (default-tip)
+      (this-parameterize (thunk (super default-tip))))
     (define/override (min-content . args)
       (this-parameterize (thunk (super min-content . args))))
     (define/override (max-content . args)
