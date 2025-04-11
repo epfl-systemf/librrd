@@ -694,6 +694,9 @@
   (class inline-layout%
     (init-field terminal? label [padding-x (/ (the-font-size) 2)]
                 [padding-y (/ (the-font-size) 3)])
+    ; parametric for lay-out, not render
+    (define this-terminal-font (the-terminal-font))
+    (define this-nonterminal-font (the-nonterminal-font))
     (define label-width (text-width label terminal?))
     (define label-height (text-height label terminal?))
     (define physical-height (+ label-height (* 2 padding-y)))
@@ -719,13 +722,13 @@
              [draw-box-cmd-args (list box-x box-y box-width box-height)])
         (if terminal?
             `((set-pen ,(the-terminal-text-pen))
-              (set-font ,(the-terminal-font))
+              (set-font ,this-terminal-font)
               ,draw-text-cmd
               (set-pen ,(the-terminal-box-pen))
               (set-brush ,(the-terminal-box-brush))
               (draw-rounded-rectangle ,@draw-box-cmd-args))
             `((set-pen ,(the-nonterminal-text-pen))
-              (set-font ,(the-nonterminal-font))
+              (set-font ,this-nonterminal-font)
               ,draw-text-cmd
               (set-pen ,(the-nonterminal-box-pen))
               (set-brush ,(the-nonterminal-box-brush))
@@ -736,13 +739,14 @@
     (super-new [terminal? #t] [padding-x (min-strut-width)])
     (init-field [y-alignment-magic (* (the-font-size) 0.23)])
     (inherit-field label padding-x)
+    (define this-terminal-font (the-terminal-font))
     (define/override (render x y)
       (let* ([box-x x]
              [box-y y]
              [text-x (+ box-x padding-x)]
              [text-y (+ box-y y-alignment-magic)])
         `((set-pen ,(the-terminal-text-pen))
-          (set-font ,(the-terminal-font))
+          (set-font ,this-terminal-font)
           (draw-text ,label ,text-x ,text-y #t))))))
 
 (define ellipsis-marker%
@@ -856,7 +860,7 @@
 
 (define diagram%
   (class object% (super-new)
-    (init-field flex)
+    (init-field flex [parameterize-rendering identity])
 
     (define/public (default-tip) (cdr (assq 'value (align-items))))
 
@@ -883,7 +887,8 @@
 (define block-diagram%
   (class diagram% (super-new)))
 
-(define (justify-layouts-without-zero-hstruts justify-space layouts direction)
+(define (justify-layouts-without-zero-hstruts
+         justify-space layouts direction parameterize-rendering)
   (let* ([justify-lengths ((justify-content) justify-space (length layouts) direction)]
          [layouts-and-struts
           (let loop ([los layouts] [jls justify-lengths])
@@ -891,16 +896,18 @@
                 (let ([rests (if (empty? los) '()
                                  (cons (car los) (loop (cdr los) (cdr jls))))])
                   (if (~= 0 (car jls)) rests
-                      (cons (new hstrut% [physical-width (car jls)] [direction direction])
+                      (cons (new (parameterize-rendering hstrut%)
+                                 [physical-width (car jls)] [direction direction])
                             rests)))))])
     (if (= 1 (length layouts-and-struts))
         (first layouts-and-struts) ; only one layout, and completely fills space
-        (new happend-layout% [subs layouts-and-struts] [fuse? #t] [direction direction]))))
+        (new (parameterize-rendering happend-layout%)
+             [subs layouts-and-struts] [fuse? #t] [direction direction]))))
 
-(define (surround-with-spaces layout start-tip end-tip direction)
-  (let ([tip-space
-         (λ (tip) (and (or (vertical? tip) (eq? tip #t)) (new hspace% [direction direction])))])
-    (new happend-layout%
+(define (surround-with-spaces layout start-tip end-tip direction parameterize-rendering)
+  (let ([tip-space (λ (tip) (and (or (vertical? tip) (eq? tip #t))
+                                 (new (parameterize-rendering hspace%) [direction direction])))])
+    (new (parameterize-rendering happend-layout%)
          [subs (directional-reverse
                 direction
                 (pre-post-pend (tip-space start-tip) layout (tip-space end-tip)))]
@@ -912,6 +919,7 @@
     (init [wrapped? #f])
     (unless (memq polarity '(+ -))
       (raise-arguments-error 'stack "polarity must be '+ or '-" "polarity" polarity))
+    (inherit-field parameterize-rendering)
 
     (define (baseline-epsilon-adjust tip)
       (if (and (eq? (cdr (assq 'name (align-items))) 'baseline)
@@ -995,21 +1003,27 @@
                          (surround-with-spaces
                           (justify-layouts-without-zero-hstruts
                            (- clamped-width (get-field physical-width layout) spaces-width)
-                           (list layout) dir) #t #t dir)))))
+                           (list layout) dir parameterize-rendering)
+                          #t #t dir parameterize-rendering)))))
                (list diag-top diag-bot)
                (list direction (direction-toggle direction (eq? polarity '-))))]
              [layout
-              (new (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%)
+              (new (parameterize-rendering
+                    (if (eq? polarity '+) vappend-block-layout% vappend-forward-backward-layout%))
                    [subs layouts] [direction direction]
                    [tip-specs (map cons '(left right)
                                    (directional-reverse direction `(,start-tip ,end-tip)))])])
-        (if (eq? polarity '+) layout (surround-with-spaces layout start-tip end-tip direction))))))
+        (if (eq? polarity '+)
+            layout
+            (surround-with-spaces
+             layout start-tip end-tip direction parameterize-rendering))))))
 
 (define inline-diagram%
   (class diagram% (super-new)))
 
 (define atomic-inline-diagram%
   (class inline-diagram% (super-new)
+    (inherit-field parameterize-rendering)
     (define (vertical-tip-space-width start-tip end-tip)
       (+ (if (vertical? start-tip) (min-strut-width) 0)
          (if (vertical? end-tip) (min-strut-width) 0)))
@@ -1021,13 +1035,16 @@
       (surround-with-spaces
        (inner #f lay-out (- width (vertical-tip-space-width start-tip end-tip))
               start-tip end-tip direction)
-       start-tip end-tip direction))))
+       start-tip end-tip direction
+       parameterize-rendering))))
 
 (define station%
   (class atomic-inline-diagram%
     (super-new [flex #f])
     (init-field terminal? label)
-    (define init-text-box (new text-box% [terminal? terminal?] [label label]))
+    (inherit-field parameterize-rendering)
+    (define init-text-box
+      (new (parameterize-rendering text-box%) [terminal? terminal?] [label label]))
     (define (init-layout-width)
       (+ (min-strut-width) (get-field physical-width init-text-box)))
     (field [height (get-field physical-height init-text-box)])
@@ -1040,13 +1057,17 @@
     (define/augride (max-content _ #;start-tip __ #;end-tip) (init-layout-width))
 
     (define/augride (lay-out _ #;width start-tip end-tip direction)
-      (let ([tip-strut (new hstrut% [physical-width (/ (min-strut-width) 2)] [direction direction])]
-            [text-box (new text-box% [terminal? terminal?] [label label] [direction direction])])
-        (new happend-layout% [subs (list tip-strut text-box tip-strut)] [direction direction])))))
+      (let ([tip-strut (new (parameterize-rendering hstrut%)
+                            [physical-width (/ (min-strut-width) 2)] [direction direction])]
+            [text-box (new (parameterize-rendering text-box%)
+                           [terminal? terminal?] [label label] [direction direction])])
+        (new (parameterize-rendering happend-layout%)
+             [subs (list tip-strut text-box tip-strut)] [direction direction])))))
 
 (define epsilon%
   (class atomic-inline-diagram%
     (super-new [flex #t])
+    (inherit-field parameterize-rendering)
     (field [height 0])
     (field [global-wraps-measures
             (list (list (cons 'natural-width 0)
@@ -1054,12 +1075,13 @@
                         (cons 'wrap-specs '(() . ()))
                         (cons 'wrap this)))])
     (define/augride (lay-out width _ #;start-tip __ #;end-tip direction)
-      (new hstrut% [physical-width width] [direction direction]))))
+      (new (parameterize-rendering hstrut%) [physical-width width] [direction direction]))))
 
 (define ellipsis%
   (class atomic-inline-diagram%
     (super-new [flex #f])
-    (define init-ellipsis (new ellipsis-marker%))
+    (inherit-field parameterize-rendering)
+    (define init-ellipsis (new (parameterize-rendering ellipsis-marker%)))
     (define (init-layout-width)
       (+ (min-strut-width) (get-field physical-width init-ellipsis)))
     (field [height (get-field physical-height init-ellipsis)])
@@ -1072,9 +1094,11 @@
     (define/augride (max-content _ #;start-tip __ #;end-tip) (init-layout-width))
 
     (define/augride (lay-out _ #;width start-tip end-tip direction)
-      (let ([tip-strut (new hstrut% [physical-width (/ (min-strut-width) 2)] [direction direction])]
-            [marker (new ellipsis-marker% [direction direction])])
-        (new happend-layout% [subs (list tip-strut marker tip-strut)] [direction direction])))))
+      (let ([tip-strut (new (parameterize-rendering hstrut%)
+                            [physical-width (/ (min-strut-width) 2)] [direction direction])]
+            [marker (new (parameterize-rendering ellipsis-marker%) [direction direction])])
+        (new (parameterize-rendering happend-layout%)
+             [subs (list tip-strut marker tip-strut)] [direction direction])))))
 
 (define (break-at lst idxs)
   (if (empty? idxs)
@@ -1155,11 +1179,13 @@
     (unless (> (length subs) 0)
       (raise-arguments-error 'sequence "must sequence at least one diagram"))
     (init-field [marker (list-ref '("†" "‡" "◊" "¤" "*") (random 5))])
+    (inherit-field parameterize-rendering)
 
     (field [wraps
             (map
              (λ (wrap-spec)
-               (new wrapped-sequence% [subs subs] [wrap-spec wrap-spec] [marker marker]))
+               (new wrapped-sequence% [parameterize-rendering parameterize-rendering]
+                    [subs subs] [wrap-spec wrap-spec] [marker marker]))
              (combinations (range (- (length subs) 1))))])
 
     #;(field
@@ -1222,6 +1248,7 @@
     (unless (andmap (λ (break) (<= 0 break (- (length subs) 2))) wrap-spec)
       (raise-arguments-error
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
+    (inherit-field parameterize-rendering)
     (define wrapped-subs (break-at subs wrap-spec))
 
     (define (start-vertical? start-tip direction)
@@ -1245,7 +1272,8 @@
       (+ (if (start-vertical-space? start-tip direction) (min-strut-width) 0)
          (if (end-vertical-space? end-tip direction) (min-strut-width) 0)
          (if (empty? wrap-spec) 0
-             (+ (* 2 (get-field physical-width (new text-marker% [label marker])))
+             (+ (* 2 (get-field physical-width (new (parameterize-rendering text-marker%)
+                                                    [label marker])))
                 (+map (λ (tip r) (match tip
                                    [`(physical . ,p) #:when (not (= p r)) (* 3/2 (min-strut-width))]
                                    [else 0]))
@@ -1323,25 +1351,22 @@
                 (justify-layouts-without-zero-hstruts
                  (+ x-initial x-post-flex)
                  (directional-reverse direction sub-layouts)
-                 direction)))])
+                 direction
+                 parameterize-rendering)))])
         (if (empty? wrap-spec)
             (surround-with-spaces (lay-out-row (first wrapped-subs))
                                   (start-vertical-space? start-tip direction)
                                   (end-vertical-space? end-tip direction)
-                                  direction)
-            (new vappend-inline-layout%
+                                  direction
+                                  parameterize-rendering)
+            (new (parameterize-rendering vappend-inline-layout%)
                  [subs (map lay-out-row wrapped-subs)]
                  [tip-specs (map cons '(left right)
                                  (directional-reverse direction (list start-tip end-tip)))]
                  [direction direction] [style 'marker]
-                 [marker (new text-marker% [direction direction] [label marker])]))))))
+                 [marker (new (parameterize-rendering text-marker%)
+                              [direction direction] [label marker])]))))))
 
-; technically impossible?
-#;(define-syntax (dynamic-parameterize stx)
-  (syntax-case stx ()
-    [(_ bindings body) #'#`(parameterize #,bindings body)]))
-
-; recursive parameterize by lookup in layout-parameters list
 
 (define ((dynamic-parameterize parameter-list bindings) body-thunk)
   (let loop ([bindings bindings])
@@ -1355,24 +1380,31 @@
             (loop bindings))))))
 
 (define (lay-out-with bindings)
-  (mixin ((class->interface diagram%)) () (super-new)
-    (define this-parameterize (dynamic-parameterize layout-parameters bindings))
+  (mixin ((class->interface diagram%)) ()
+    (super-new)
+    (define parameterize-layout (dynamic-parameterize layout-parameters bindings))
     (define/override (default-tip)
-      (this-parameterize (thunk (super default-tip))))
+      (parameterize-layout (thunk (super default-tip))))
     (define/override (min-content . args)
-      (this-parameterize (thunk (super min-content . args))))
+      (parameterize-layout (thunk (super min-content . args))))
     (define/override (max-content . args)
-      (this-parameterize (thunk (super max-content . args))))
+      (parameterize-layout (thunk (super max-content . args))))
     (define/override (lay-out . args)
-      (this-parameterize (thunk (super lay-out . args))))))
+      (parameterize-layout (thunk (super lay-out . args))))))
+
+(define (render-with bindings)
+  (mixin ((class->interface layout%)) ()
+    (super-new)
+    (define parameterize-rendering (dynamic-parameterize rendering-parameters bindings))
+    (define/override (render . args)
+      (parameterize-rendering (thunk (super render . args))))))
 
 (define (desugar expr)
   (match expr
     [(? string?) (if (and (string-prefix? expr "[") (string-suffix? expr "]"))
                      (list 'nonterm (substring expr 1 (- (string-length expr) 1)))
                      (list 'term expr))]
-    ['() '(epsilon)]
-    ['epsilon '(epsilon)]
+    [(or '() 'epsilon) '(epsilon)]
     ['ellipsis '(ellipsis)]
     [(or (list* '<> '+ exprs) (list* '+ exprs))
      (case (length exprs)
@@ -1391,27 +1423,39 @@
            (append-map (λ (e) (match (desugar e)
                                 [(list* 'seq exprs) exprs]
                                 [exprs (list exprs)])) exprs))]
-    [(list 'lay-out-with bindings expr) (list 'lay-out-with bindings (desugar expr))]
+    [(list (and with (or 'lay-out-with 'render-with)) bindings expr)
+     (list with bindings (desugar expr))]
     [(? list?) (desugar (cons 'seq expr))]
     [_ expr]))
 
 (define (diagram expr [marker #f])
-  (let rec ([expr (desugar expr)] [cur-mixin identity])
+  (let rec ([expr (desugar expr)] [layout-mixin identity] [rendering-mixin identity])
     (match expr
-      ['(epsilon) (new epsilon%)]
-      ['(ellipsis) (new ellipsis%)]
-      [(list 'term label) (new (cur-mixin station%) [terminal? #t] [label label])]
-      [(list 'nonterm label) (new (cur-mixin station%) [terminal? #f] [label label])]
+      ['(epsilon) (new (layout-mixin epsilon%) [parameterize-rendering rendering-mixin])]
+      ['(ellipsis) (new (layout-mixin ellipsis%) [parameterize-rendering rendering-mixin])]
+      [(list 'term label) (new (layout-mixin station%) [parameterize-rendering rendering-mixin]
+                               [terminal? #t] [label label])]
+      [(list 'nonterm label) (new (layout-mixin station%) [parameterize-rendering rendering-mixin]
+                                  [terminal? #f] [label label])]
       [(list '<> polarity expr-top expr-bot)
-       (new (cur-mixin stack%) [diag-top (rec expr-top identity)]
-            [diag-bot (rec expr-bot identity)]
+       (new (layout-mixin stack%) [parameterize-rendering rendering-mixin]
+            [diag-top (rec expr-top identity identity)]
+            [diag-bot (rec expr-bot identity identity)]
             [polarity polarity])]
       [(list* 'seq exprs)
        (if marker
-           (new (cur-mixin sequence%) [subs (map (λ (e) (rec e identity)) exprs)] [marker marker])
-           (new (cur-mixin sequence%) [subs (map (λ (e) (rec e identity)) exprs)]))]
+           (new (layout-mixin sequence%) [parameterize-rendering rendering-mixin]
+                [subs (map (λ (e) (rec e identity identity)) exprs)] [marker marker])
+           (new (layout-mixin sequence%) [parameterize-rendering rendering-mixin]
+                [subs (map (λ (e) (rec e identity identity)) exprs)]))]
       [(list 'lay-out-with (list (list parameter-name value) ...) expr)
-       (rec expr (compose cur-mixin (lay-out-with (map list parameter-name value))))])))
+       (rec expr
+            (compose layout-mixin (lay-out-with (map list parameter-name value)))
+            rendering-mixin)]
+      [(list 'render-with (list (list parameter-name value) ...) expr)
+       (rec expr
+            layout-mixin
+            (compose rendering-mixin (render-with (map list parameter-name value))))])))
 
 (define figure-margin (make-parameter 1))
 
