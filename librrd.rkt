@@ -168,7 +168,7 @@
               (the-nonterminal-font (the-nonterminal-font)))
             fs)])))
 (define ((font-guard name) font)
-  (unless (is-a? font% font)
+  (unless (is-a? font font%)
     (raise-user-error name "invalid parameter value: expected a font, got ~a") font)
   (copy-font font #:size (the-font-size)))
 (define the-terminal-font
@@ -1245,6 +1245,9 @@
   (class inline-diagram%
     (super-new [flex #t])
     (init-field subs wrap-spec marker)
+    (define init-marker (if (eq? marker 'ellipsis)
+                            (new (parameterize-rendering ellipsis-marker%))
+                            (new (parameterize-rendering text-marker%) [label marker])))
     (unless (andmap (λ (break) (<= 0 break (- (length subs) 2))) wrap-spec)
       (raise-arguments-error
        'wrapped-sequence "wrap-spec breaks must be in [0, (- (length subs) 2)]"))
@@ -1272,8 +1275,7 @@
       (+ (if (start-vertical-space? start-tip direction) (min-strut-width) 0)
          (if (end-vertical-space? end-tip direction) (min-strut-width) 0)
          (if (empty? wrap-spec) 0
-             (+ (* 2 (get-field physical-width (new (parameterize-rendering text-marker%)
-                                                    [label marker])))
+             (+ (* 2 (get-field physical-width init-marker))
                 (+map (λ (tip r) (match tip
                                    [`(physical . ,p) #:when (not (= p r)) (* 3/2 (min-strut-width))]
                                    [else 0]))
@@ -1364,8 +1366,10 @@
                  [tip-specs (map cons '(left right)
                                  (directional-reverse direction (list start-tip end-tip)))]
                  [direction direction] [style 'marker]
-                 [marker (new (parameterize-rendering text-marker%)
-                              [direction direction] [label marker])]))))))
+                 [marker (if (eq? marker 'ellipsis)
+                             (new (parameterize-rendering ellipsis-marker%) [direction direction])
+                             (new (parameterize-rendering text-marker%)
+                                  [direction direction] [label marker]))]))))))
 
 
 (define ((dynamic-parameterize parameter-list bindings) body-thunk)
