@@ -1165,10 +1165,12 @@
            (+ (* wrap-weight (wrap-spec-badness (get-field wrap-spec w) depth
                                                 wrap-length-penalty depth-penalty))
               (* xc-weight (send w max-content start-tip end-tip direction))))])
-    (λ (w1 w2) (< (score w1) (score w2)))))
+    (λ (w1 w2) (or (empty? (get-field wrap-spec w1))
+                   (and (not (empty? (get-field wrap-spec w2)))
+                        (< (score w1) (score w2)))))))
 
 (define lw<-default-numerical
-  (lw<-make-numerical (λ (wl) (+ 1 wl)) (λ (d) (expt 2 (* 2 d))) 8 1))
+  (lw<-make-numerical (λ (wl) (+ 1 wl)) (λ (d) (expt 2 (* 2 d))) 10 1))
 
 (define local-wraps-< (make-parameter lw<-default-lexicographic))
 
