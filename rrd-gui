@@ -50,11 +50,13 @@
           (parameterize ([justify-content this-justify-content]
                          [align-items this-align-items]
                          [flex-absorb this-flex-absorb]
-                         [flex-stacks? this-flex-stacks?])
+                         [flex-stacks? this-flex-stacks?]
+                         [local-wraps-< (lw<-make-numerical (λ (wl) (+ 1 wl)) (λ (d) (expt 2 (* d))) 1 2)])
             (for-each
              (λ (render) (for-each (λ (cmd) (apply dynamic-send dc cmd)) render))
              (let ([ll (send diag lay-out width)]
-                   #;[lg (send diag lay-out-global width 'default 'default 'ltr)])
+                   [lg (parameterize ([local-wraps-< lw<-default-lexicographic])
+                         (send diag lay-out width))])
                (parameterize ([arrow-threshold this-arrow-threshold])
                  (list
                   (send ll render self-padding self-padding)
@@ -63,7 +65,7 @@
                          (+ self-padding (get-field physical-width ll) self-padding) self-padding)
                    (list 'draw-text (measure-desc "heuristic height" (get-field physical-height ll))
                          (+ self-padding (get-field physical-width ll) self-padding) (+ self-padding 20)))
-                  #;(parameterize ([the-atom-box-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
+                  (parameterize ([the-nonterminal-box-pen (make-pen #:color "red" #:width 1 #:style 'solid)]
                                  [the-strut-pen (make-pen #:color "red" #:width 1 #:style 'solid)])
                     (send lg render self-padding (+ self-padding 500)))
                   #;(list (list 'draw-text (measure-desc "optimal height" (get-field physical-height lg))

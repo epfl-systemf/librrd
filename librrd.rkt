@@ -12,7 +12,7 @@
  the-nonterminal-font the-default-nonterminal-font the-nonterminal-text-width-correction
  the-nonterminal-text-pen the-nonterminal-box-pen the-nonterminal-box-brush
  the-default-font the-font-size the-strut-pen arrow-threshold
- layout% text-box% hstrut% happend-layout% ellipsis-marker%
+ layout% text-box% hspace% hstrut% happend-layout% ellipsis-marker%
  vappend-inline-layout% vappend-block-layout% vappend-forward-backward-layout%
  diagram% block-diagram% stack%
  inline-diagram% sequence% wrapped-sequence% station% epsilon%
@@ -825,7 +825,7 @@
 
     (define/augride (tip-y side spec)
       (match spec
-        [(cons 'logical _)
+        [(or (cons 'logical _) (cons 'physical _))
          (cond
            [(and (eq? side 'left) expose-first-left-tips?)
             (+ (first sub-ys) (send (first subs) tip-y side spec))]
@@ -1162,15 +1162,15 @@
          start-tip end-tip direction width depth)
   (let ([score
          (λ (w)
-           (+ (* wrap-weight (wrap-spec-badness (get-field wrap-spec w) depth
-                                                wrap-length-penalty depth-penalty))
-              (* xc-weight (send w max-content start-tip end-tip direction))))])
-    (λ (w1 w2) (or (empty? (get-field wrap-spec w1))
-                   (and (not (empty? (get-field wrap-spec w2)))
-                        (< (score w1) (score w2)))))))
+           (expt
+            (* (expt (wrap-spec-badness (get-field wrap-spec w) depth
+                                        wrap-length-penalty depth-penalty) wrap-weight)
+               (expt (send w max-content start-tip end-tip direction) xc-weight))
+            (/ (+ wrap-weight xc-weight))))])
+    (λ (w1 w2) (< (score w1) (score w2)))))
 
 (define lw<-default-numerical
-  (lw<-make-numerical (λ (wl) (+ 1 wl)) (λ (d) (expt 2 (* 2 d))) 10 1))
+  (lw<-make-numerical (λ (wl) (+ 1 wl)) (λ (d) (expt 2 (* 2 d))) 1 2))
 
 (define local-wraps-< (make-parameter lw<-default-lexicographic))
 
@@ -1427,7 +1427,7 @@
     [(list* 'seq exprs)
      (cons 'seq
            (append-map (λ (e) (match (desugar e)
-                                [(list* 'seq exprs) exprs]
+                                #;[(list* 'seq exprs) exprs]
                                 [exprs (list exprs)])) exprs))]
     [(list (and with (or 'lay-out-with 'render-with)) bindings expr)
      (list with bindings (desugar expr))]
