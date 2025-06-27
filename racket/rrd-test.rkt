@@ -28,6 +28,16 @@
              (+ ("LIMIT" "[expr]" (+ epsilon ("OFFSET" "[expr]") ("," "[expr]")))
                 epsilon))))
 
+#;(define create-table
+  (diagram '("CREATE"
+             (+ (+ () "TEMP") "TEMPORARY") "TABLE"
+             (+ ("IF" "NOT" "EXISTS") ())
+             (+ ("schema-name" ".") ()) "table-name"
+             (+ ("AS" "[select-stmt]")
+                ("(" (- "[column-def]" ",")
+                     (- () ("," "[table-constraint]")) ")"
+                     (+ () "[table-options]"))))))
+
 (define (divide-evenly start end n)
   (for/list ([i (range (+ n 1))])
     (/ (+ (* (- n i) start) (* i end)) n)))
@@ -82,22 +92,24 @@
   (send my-bitmap-dc erase)
   (for-each (lambda (cmd) (apply dynamic-send my-bitmap-dc cmd))
             (send
-             (parameterize ([align-items ai-top]
-                            [justify-content jc-start])
+             (parameterize ([align-items ai-baseline]
+                            [justify-content jc-end]
+                            [local-wraps-< lw<-default-numerical]
+                            [flex-stacks? #f])
                (let* ([specs '()]
                       [l (send/apply diag lay-out width specs)])
                  (displayln (get-field physical-width l))
                  (displayln (send/apply diag min-content specs))
+                 (displayln (send/apply diag max-content specs))
                  l))
-              render 10 10))
+             render 10 10))
   my-target)
 
 (define my-diagram
   (diagram
-   '(<> - "hello" ((+ "," ";") "and"))
-   #t #f))
+   '(+ ((+ "recursive" ()) (- "[common-table-expression]" ",")) epsilon)))
 
-(show! my-diagram 100)
+(show! my-diagram 555)
 
 ;; (render-layouts! (make-layouts compound-select))
 (send my-svg-dc end-page)
