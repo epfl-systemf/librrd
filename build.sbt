@@ -1,21 +1,25 @@
 enablePlugins(ScalaJSPlugin)
 
+import sbt.Keys.streams
+
 ThisBuild / scalaVersion := "3.3.6"
 val deploy = taskKey[Unit]("copy JS modules to www")
 
 lazy val root = project.in(file("."))
   .settings(
     Global / onChangedBuildSource := ReloadOnSourceChanges,
+
     name := "librrd",
     scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
 
     libraryDependencies ++= Seq(
       "org.creativescala" %%% "doodle" % "0.30.0",
-      "com.lihaoyi" %%% "scalatags" % "0.11.0",
+      "org.scala-js" %%% "scalajs-dom" % "2.8.0",
     ),
 
     Compile / deploy := {
+      streams.value.log.info("copying output js files and sourcemaps…")
       import java.nio.file.*
       val targetPath = target.value.toPath()
         .resolve("scala-" + scalaVersion.value)
