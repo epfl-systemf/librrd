@@ -21,7 +21,21 @@ object UI:
     case Rendering extends InputsPresets(
       "rendering-input",
       "rendering-preset",
-      Map("JSON" -> "foo"))
+      Map(
+        "JSON" -> "foo",
+        "default" -> """.librrd-rail, .librrd-station rect {
+                       |  stroke-width: 1px;
+                       |  stroke: black;
+                       |}
+                       |
+                       |.librrd-station rect {
+                       |  fill: none;
+                       |}
+                       |
+                       |.librrd-station text {
+                       |  fill: black;
+                       |  stroke: none;
+                       |}""".stripMargin))
 
   class InputPresetState(val ip: InputsPresets, val onDone: () => Unit):
     def presetState(suppressDone: Boolean = false): Unit =
@@ -54,9 +68,13 @@ object UI:
     InputPresetState(InputsPresets.Layout, reLayOut).register()
     InputPresetState(InputsPresets.Rendering, reRender).register()
 
-  def reLayOut(): Unit = println("relaidout")
+  def reLayOut(): Unit =
+    outputCanvas.appendChild(Station("hello", false, Direction.LTR).render.render)
+    println("relaidout")
 
+  lazy val customStyleElement = document.getElementById("custom-style")
   def reRender(): Unit =
+    customStyleElement.innerHTML = InputsPresets.Rendering.input.value
     println("rerendered")
 
   @main def main(): Unit =

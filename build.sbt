@@ -14,8 +14,8 @@ lazy val root = project.in(file("."))
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
 
     libraryDependencies ++= Seq(
-      "org.creativescala" %%% "doodle" % "0.30.0",
       "org.scala-js" %%% "scalajs-dom" % "2.8.0",
+      "com.lihaoyi" %%% "scalatags" % "0.13.1",
     ),
 
     Compile / deploy := {
