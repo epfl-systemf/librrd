@@ -1,27 +1,9 @@
 package librrd
 
-import org.scalajs.dom.{SVGTextElement, document}
-import scalatags.JsDom.all.*
-import scalatags.JsDom.svgTags.*
-import scalatags.JsDom.svgAttrs
-import scalatags.JsDom.svgAttrs.{cx, cy, r, x, y, radius, x1, x2, y1, y2, d, rx, ry, style}
+trait Layouts[T]:
 
-trait LayoutInfo:
-  val `class`: String
-
-enum Direction { case LTR ; case RTL }
-
-abstract class Layout(
-    val dir: Direction,
-    val classes: Seq[String] = Seq.empty,
-    val ID: String = freshID()):
-  final def render: Tag =
-    renderInner(`class`:=(classes :+ Layout.`class`).mkString(" "), id:=ID)
-  def renderInner: Tag
-
-object Layout:
-  val unitWidth = 4
-  val `class` = "librrd"
+  def measure(text: String): (Double, Double)
+  def render(layout: Layout): T
 
   private var lastID = 0
   val generatedIDPrefix = "librrd-generated-"
@@ -32,67 +14,115 @@ object Layout:
 
   def resetID(): Unit = lastID = 0
 
-  lazy val textMetricsElement =
-    document.createElementNS("http://www.w3.org/2000/svg", "text").asInstanceOf[SVGTextElement]
-  textMetricsElement.style.setProperty("visibility", "hidden")
-  textMetricsElement.style.setProperty("fill", "black")
-  document.getElementById("output-canvas").appendChild(textMetricsElement)
 
-  def measure(text: String) =
-    textMetricsElement.textContent = text
-    textMetricsElement.getBBox()
+  enum Direction { case LTR, RTL }
+  enum Side { case Left, Right }
+  enum RelativeSide:
+    case Start, End
+    def absolute(dir: Direction): Side =
+      (this, dir) match
+        case (Start, Direction.LTR) | (End, Direction.RTL) => Side.Left
+        case (End, Direction.LTR) | (Start, Direction.RTL) => Side.Right
 
+  enum TipSpecification:
+    case Vertical
+    case Physical(p: Double)
+    case Logical(r: Int)
 
-object Rail extends LayoutInfo:
-  val `class` = "librrd-rail"
-
-class Rail(val width: Double,
-           direction: Direction,
-           classes: Seq[String] = Seq.empty,
-           ID: String = Layout.freshID())
-    extends Layout(direction, classes :+ Rail.`class`, ID):
-  override val renderInner =
-    line(x1:=0, y1:=0, x2:=width, y2:=0)
+  import Side.*
+  import TipSpecification.*
 
 
-object Space extends LayoutInfo:
-  val `class` = "librrd-space"
+  sealed trait Layout:
+    val direction: Direction
+    val id: String
+    def width: Double
+    def height: Double
+    def classes: Seq[String]
+    val tipSpec: Side => TipSpecification
+    def tipHeight(s: Side, ts: TipSpecification): Double
+    def tipHeight(s: Side): Double = tipHeight(s, tipSpec(s))
 
-class Space(val width: Double,
-            direction: Direction,
-            classes: Seq[String] = Seq.empty,
-            ID: String = Layout.freshID())
-    extends Layout(direction, classes :+ Space.`class`, ID):
-  override val renderInner = path(d:="none")
+  object Layout:
+    val unitWidth = 4
+    val `class` = "librrd"
 
 
-object Station extends LayoutInfo:
-  val `class` = "librrd-station"
-  val terminalClass = "librrd-terminal"
-  val nonterminalClass = "librrd-nonterminal"
+  trait InlineLayout extends Layout:
+    val tipSpec = Map(Left -> Logical(0), Right -> Logical(0))
 
-  val paddingX = Layout.unitWidth
-  val paddingY = Layout.unitWidth
 
-class Station(val label: String,
-              val isTerminal: Boolean,
-              direction: Direction,
-              classes: Seq[String] = Seq.empty,
-              ID: String = Layout.freshID())
-    extends Layout(
-      direction,
-      classes
-        :+ Station.`class`
-        :+ (if isTerminal then Station.terminalClass else Station.nonterminalClass),
-      ID):
-  val textBBox = Layout.measure(label)
-  val width = textBBox.width + 4*Station.paddingX
-  val height = textBBox.height + 2*Station.paddingY
+  object Rail:
+    val `class` = "librrd-rail"
 
-  override val renderInner =
-    g(
-      rect(x:=Station.paddingX, y:=0, svgAttrs.width:=textBBox.width + 2*Station.paddingX, svgAttrs.height:=height),
-      text("hello", x:=2*Station.paddingX, y:=Station.paddingY + textBBox.height),
-      line(x1:=0, y1:=height/2, x2:=Station.paddingX, y2:=height/2, `class`:=Rail.`class`),
-      line(x1:=width - Station.paddingX, y1:=height/2, x2:=width, y2:=height/2, `class`:=Rail.`class`),
-    )
+  case class Rail(
+      val width: Double,
+      val direction: Direction,
+      initClasses: Seq[String] = Seq.empty,
+      val id: String = freshID()) extends InlineLayout:
+    val classes = initClasses :+ Rail.`class`
+    val height = 0
+    def tipHeight(s: Side, ts: TipSpecification) = 0
+
+
+  object Space:
+    val `class` = "librrd-space"
+
+  case class Space(
+      val width: Double,
+      val direction: Direction,
+      initClasses: Seq[String] = Seq.empty,
+      val id: String = freshID()) extends InlineLayout:
+    val classes = initClasses :+ Space.`class`
+    val height = 0
+    def tipHeight(s: Side, ts: TipSpecification) = 0
+
+
+  object Station:
+    val `class` = "librrd-station"
+    val terminalClass = "librrd-terminal"
+    val nonterminalClass = "librrd-nonterminal"
+
+    val paddingX = Layout.unitWidth
+    val paddingY = Layout.unitWidth
+
+  case class Station(
+      val label: String,
+      val isTerminal: Boolean,
+      val direction: Direction,
+      initClasses: Seq[String] = Seq.empty,
+      val id: String = freshID()) extends InlineLayout:
+    val (textWidth, textHeight) = measure(label)
+    val width = textWidth + 4*Station.paddingX
+    val height = textHeight + 2*Station.paddingY
+
+    val classes = initClasses
+      :+ Station.`class`
+      :+ (if isTerminal then Station.terminalClass else Station.nonterminalClass)
+
+    def tipHeight(s: Side, ts: TipSpecification) = height/2
+
+
+  object HorizontalConcatenation:
+    val `class` = "librrd-hconcat"
+
+  case class HorizontalConcatenation(
+      val sublayouts: Seq[Layout],
+      initClasses: Seq[String] = Seq.empty,
+      val id: String = freshID()) extends InlineLayout:
+
+    val width = sublayouts.map(_.width).sum
+    val height = ???
+    val classes = initClasses :+ HorizontalConcatenation.`class`
+
+    assert(!sublayouts.isEmpty, "horizontal concatenation must have at least 1 sublayout")
+    assert(
+      sublayouts.forall(_.direction == sublayouts(0).direction),
+      "sublayouts of horizontal concatenation must all have same direction")
+    val direction = sublayouts(0).direction
+
+    def sidemost(s: Side) = s match
+      case Left => sublayouts.head
+      case Right => sublayouts.last
+
+    def tipHeight(s: Side, ts: TipSpecification) = sidemost(s).tipHeight(s, ts)

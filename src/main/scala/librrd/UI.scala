@@ -23,19 +23,7 @@ object UI:
       "rendering-preset",
       Map(
         "JSON" -> "foo",
-        "default" -> """.librrd-rail, .librrd-station rect {
-                       |  stroke-width: 1px;
-                       |  stroke: black;
-                       |}
-                       |
-                       |.librrd-station rect {
-                       |  fill: none;
-                       |}
-                       |
-                       |.librrd-station text {
-                       |  fill: black;
-                       |  stroke: none;
-                       |}""".stripMargin))
+        "default" -> "@import url(librrd-default.css)"))
 
   class InputPresetState(val ip: InputsPresets, val onDone: () => Unit):
     def presetState(suppressDone: Boolean = false): Unit =
@@ -69,7 +57,8 @@ object UI:
     InputPresetState(InputsPresets.Rendering, reRender).register()
 
   def reLayOut(): Unit =
-    outputCanvas.appendChild(Station("hello", false, Direction.LTR).render.render)
+    import LayoutsSVG.*
+    outputCanvas.appendChild(render(Station("hello", false, Direction.LTR)).render)
     println("relaidout")
 
   lazy val customStyleElement = document.getElementById("custom-style")
