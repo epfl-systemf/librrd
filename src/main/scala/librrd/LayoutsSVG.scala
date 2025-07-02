@@ -36,10 +36,6 @@ object LayoutsSVG extends Layouts[Tag]:
       case hc: HorizontalConcatenation => ???
     g(
       inner,
-      rect(x:= -Layout.unitWidth, y:= -Layout.unitWidth,
-           svgAttrs.width:=layout.width + 2*Layout.unitWidth,
-           svgAttrs.height:=layout.height + 2*Layout.unitWidth,
-           `class`:="librrd-group"),
+      rect(x:=0, y:=0, svgAttrs.width:=layout.width, svgAttrs.height:=layout.height, `class`:="librrd-group"),
       `class`:=(layout.classes :+ Layout.`class`).mkString(" "), id:=layout.id,
-      transform:="translate(10,10)"
     )
