@@ -29,11 +29,14 @@ object LayoutsSVG extends Layouts[Tag]:
         val height = station.height
         g(
           rect(x:=Station.paddingX, y:=0, svgAttrs.width:=width - 2*Station.paddingX, svgAttrs.height:=height),
-          text("hello", x:=2*Station.paddingX, y:=height - Station.paddingY),
+          text(station.label, x:=2*Station.paddingX, y:=height - Station.paddingY),
           line(x1:=0, y1:=height/2, x2:=Station.paddingX, y2:=height/2, `class`:=Rail.`class`),
           line(x1:=width - Station.paddingX, y1:=height/2, x2:=width, y2:=height/2, `class`:=Rail.`class`),
         )
-      case hc: HorizontalConcatenation => ???
+      case hc: HorizontalConcatenation =>
+        g(hc.sublayouts.zip(hc.subXs.zip(hc.subYs)).map{ case (sub, (subX, subY)) =>
+          g(render(sub), transform:=s"translate($subX,$subY)")
+        })
     g(
       inner,
       rect(x:=0, y:=0, svgAttrs.width:=layout.width, svgAttrs.height:=layout.height, `class`:="librrd-group"),

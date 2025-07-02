@@ -23,7 +23,7 @@ object UI:
       "rendering-preset",
       Map(
         "JSON" -> "foo",
-        "default" -> "@import url(librrd-default.css)"))
+        "default" -> "@import url(librrd-default.css);"))
 
   class InputPresetState(val ip: InputsPresets, val onDone: () => Unit):
     def presetState(suppressDone: Boolean = false): Unit =
@@ -58,7 +58,11 @@ object UI:
 
   def reLayOut(): Unit =
     import LayoutsSVG.*
-    outputCanvas.appendChild(render(Station("hello", false, Direction.LTR)).render)
+    val l1 = Station("hello", false, Direction.LTR)
+    val l2 = Station("world", false, Direction.LTR)
+    val l3 = Station("!", true, Direction.LTR)
+    val l4 = HorizontalConcatenation(Seq(l1, l2, l3))
+    outputCanvas.appendChild(render(l4).render)
     println("relaidout")
 
   lazy val customStyleElement = document.getElementById("custom-style")

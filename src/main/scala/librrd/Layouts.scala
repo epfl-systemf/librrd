@@ -40,15 +40,15 @@ trait Layouts[T]:
     def height: Double
     def classes: Seq[String]
     val tipSpec: Side => TipSpecification
-    def tipHeight(s: Side, ts: TipSpecification): Double
-    def tipHeight(s: Side): Double = tipHeight(s, tipSpec(s))
+    def tipY(s: Side, ts: TipSpecification): Double
+    def tipY(s: Side): Double = tipY(s, tipSpec(s))
 
   object Layout:
     val unitWidth = 4
     val `class` = "librrd"
 
 
-  trait InlineLayout extends Layout:
+  trait InlineLayout:
     val tipSpec = Map(Left -> Logical(0), Right -> Logical(0))
 
 
@@ -59,10 +59,10 @@ trait Layouts[T]:
       val width: Double,
       val direction: Direction,
       initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends InlineLayout:
+      val id: String = freshID()) extends Layout with InlineLayout:
     val classes = initClasses :+ Rail.`class`
     val height = 0
-    def tipHeight(s: Side, ts: TipSpecification) = 0
+    def tipY(s: Side, ts: TipSpecification) = 0
 
 
   object Space:
@@ -72,10 +72,10 @@ trait Layouts[T]:
       val width: Double,
       val direction: Direction,
       initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends InlineLayout:
+      val id: String = freshID()) extends Layout with InlineLayout:
     val classes = initClasses :+ Space.`class`
     val height = 0
-    def tipHeight(s: Side, ts: TipSpecification) = 0
+    def tipY(s: Side, ts: TipSpecification) = 0
 
 
   object Station:
@@ -91,7 +91,7 @@ trait Layouts[T]:
       val isTerminal: Boolean,
       val direction: Direction,
       initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends InlineLayout:
+      val id: String = freshID()) extends Layout with InlineLayout:
     val (textWidth, textHeight) = measure(label)
     val width = textWidth + 4*Station.paddingX
     val height = textHeight + 2*Station.paddingY
@@ -100,7 +100,7 @@ trait Layouts[T]:
       :+ Station.`class`
       :+ (if isTerminal then Station.terminalClass else Station.nonterminalClass)
 
-    def tipHeight(s: Side, ts: TipSpecification) = height/2
+    def tipY(s: Side, ts: TipSpecification) = height/2
 
 
   object HorizontalConcatenation:
@@ -109,10 +109,8 @@ trait Layouts[T]:
   case class HorizontalConcatenation(
       val sublayouts: Seq[Layout],
       initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends InlineLayout:
+      val id: String = freshID()) extends Layout with InlineLayout:
 
-    val width = sublayouts.map(_.width).sum
-    val height = ???
     val classes = initClasses :+ HorizontalConcatenation.`class`
 
     assert(!sublayouts.isEmpty, "horizontal concatenation must have at least 1 sublayout")
@@ -121,8 +119,30 @@ trait Layouts[T]:
       "sublayouts of horizontal concatenation must all have same direction")
     val direction = sublayouts(0).direction
 
-    def sidemost(s: Side) = s match
-      case Left => sublayouts.head
-      case Right => sublayouts.last
+    val (rightTipY, height, subXs, width) =
+      sublayouts.foldLeft((0.0, 0.0, List(0.0))){ (acc, sub) => acc match
+        case (prevRightTipY, prevHeight, prevWidths) =>
+          (sub.tipY(Right) + Math.max(0, prevRightTipY - sub.tipY(Left)),
+           prevHeight
+             + Math.max(0, sub.tipY(Left) - prevRightTipY)
+             + Math.max(0, (sub.height - sub.tipY(Left)) - (prevHeight - prevRightTipY)),
+           (sub.width + prevWidths.head) :: prevWidths)
+      } match
+        case (rty, h, widths) => (rty, h, widths.tail.reverse, widths.head)
 
-    def tipHeight(s: Side, ts: TipSpecification) = sidemost(s).tipHeight(s, ts)
+    val (leftTipY, subYs) =
+      sublayouts.foldRight((rightTipY, List(0.0))){ (sub, acc) => acc match
+        case (prevLeftTipY, prevYs) =>
+          val subY = prevLeftTipY - sub.tipY(Right)
+          (subY + sub.tipY(Left), subY :: prevYs)
+      }
+
+    def tipY(s: Side, ts: TipSpecification) =
+      (s match
+        case Left => sublayouts.head
+        case Right => sublayouts.last)
+      .tipY(s, ts)
+
+    override def tipY(s: Side) = s match
+      case Left => leftTipY
+      case Right => rightTipY
