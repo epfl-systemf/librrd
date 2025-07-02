@@ -70,7 +70,19 @@ object UI:
     customStyleElement.innerHTML = InputsPresets.Rendering.input.value
     println("rerendered")
 
+  def registerOutputResize(): Unit =
+    dom.ResizeObserver{ (entries, o) =>
+      entries.foreach{ entry =>
+        if entry.target.id == "output" then
+          val height = entry.borderBoxSize(0).blockSize
+          val width = entry.borderBoxSize(0).inlineSize
+          val ypad = 10.0 * height/width
+          entry.target.setAttribute("viewbox", s"-10 -$ypad ${width + 10} ${height + ypad}")
+      }
+    }.observe(document.getElementById("output"))
+
   @main def main(): Unit =
     document.addEventListener("DOMContentLoaded", (event) => {
       registerInputsPresets()
+      registerOutputResize()
     })
