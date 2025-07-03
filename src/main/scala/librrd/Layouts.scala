@@ -1,5 +1,12 @@
 package librrd
 
+import Side.*
+import TipSpecification.*
+
+def linearInterpolate(xStart: Double, yStart: Double,
+                      xEnd: Double, yEnd: Double, x: Double): Double =
+  yStart + (yEnd - yStart) * (x - xStart)/(xEnd - xStart)
+
 trait Layouts[T]:
 
   def measure(text: String): (Double, Double)
@@ -15,41 +22,39 @@ trait Layouts[T]:
   def resetID(): Unit = lastID = 0
 
 
-  enum Direction { case LTR, RTL }
-  enum Side { case Left, Right }
-  enum RelativeSide:
-    case Start, End
-    def absolute(dir: Direction): Side =
-      (this, dir) match
-        case (Start, Direction.LTR) | (End, Direction.RTL) => Side.Left
-        case (End, Direction.LTR) | (Start, Direction.RTL) => Side.Right
-
-  enum TipSpecification:
-    case Vertical
-    case Physical(p: Double)
-    case Logical(r: Int)
-
-  import Side.*
-  import TipSpecification.*
-
-
   sealed trait Layout:
     val direction: Direction
     val id: String
     def width: Double
     def height: Double
     def classes: Seq[String]
+    val numRows: Side => Int
     val tipSpec: Side => TipSpecification
-    def tipY(s: Side, ts: TipSpecification): Double
+
+    final def tipY(s: Side, ts: TipSpecification): Double =
+      ts match
+        case Vertical => ()
+        case Physical(p) =>
+          assert(0 <= p && p <= 1,
+            "if tip specification is physical, proportion must be between 0 and 1")
+        case Logical(r) =>
+          assert(1 <= r && r <= numRows(s),
+            "if tip specification is logical, row number must be between 1 and "
+            + "number of rows")
+      tipYInner(s, ts)
+
+    def tipYInner(s: Side, ts: TipSpecification): Double
     def tipY(s: Side): Double = tipY(s, tipSpec(s))
 
   object Layout:
-    val unitWidth = 4
+    val unitWidth = 4.0
     val `class` = "librrd"
+    val rowGap = 2*unitWidth
 
 
   trait InlineLayout:
-    val tipSpec = Map(Left -> Logical(0), Right -> Logical(0))
+    val numRows: Side => Int = { case _ => 1 }
+    val tipSpec: Side => TipSpecification = { case _ => Logical(1) }
 
 
   object Rail:
@@ -62,7 +67,7 @@ trait Layouts[T]:
       val id: String = freshID()) extends Layout with InlineLayout:
     val classes = initClasses :+ Rail.`class`
     val height = 0
-    def tipY(s: Side, ts: TipSpecification) = 0
+    def tipYInner(s: Side, ts: TipSpecification) = 0
 
 
   object Space:
@@ -75,7 +80,7 @@ trait Layouts[T]:
       val id: String = freshID()) extends Layout with InlineLayout:
     val classes = initClasses :+ Space.`class`
     val height = 0
-    def tipY(s: Side, ts: TipSpecification) = 0
+    def tipYInner(s: Side, ts: TipSpecification) = 0
 
 
   object Station:
@@ -100,7 +105,7 @@ trait Layouts[T]:
       :+ Station.`class`
       :+ (if isTerminal then Station.terminalClass else Station.nonterminalClass)
 
-    def tipY(s: Side, ts: TipSpecification) = height/2
+    def tipYInner(s: Side, ts: TipSpecification) = height/2
 
 
   object HorizontalConcatenation:
@@ -137,7 +142,7 @@ trait Layouts[T]:
           (subY + sub.tipY(Left), subY :: prevYs)
       }
 
-    def tipY(s: Side, ts: TipSpecification) =
+    def tipYInner(s: Side, ts: TipSpecification) =
       (s match
         case Left => sublayouts.head
         case Right => sublayouts.last)
@@ -146,3 +151,58 @@ trait Layouts[T]:
     override def tipY(s: Side) = s match
       case Left => leftTipY
       case Right => rightTipY
+
+
+  object InlineVerticalConcatenation:
+    val `class` = "librrd-vconcat-inline"
+    val markerPadding = Layout.unitWidth
+
+  case class InlineVerticalConcatenation(
+      val sublayouts: Seq[Layout],
+      val marker: String,
+      val tipSpec: Side => TipSpecification,
+      initClasses: Seq[String] = Seq.empty,
+      val id: String = freshID()) extends Layout:
+
+    val classes = initClasses :+ InlineVerticalConcatenation.`class`
+
+    assert(sublayouts.length >= 2,
+      "inline vertical concatenation must have at least 2 sublayouts")
+    assert(
+      sublayouts.forall(_.direction == sublayouts(0).direction),
+      "sublayouts of inline vertical concatenation must all have same direction")
+    val direction = sublayouts(0).direction
+    val startSide = RelativeSide.Start.absolute(direction)
+    val endSide = RelativeSide.End.absolute(direction)
+
+    val markerWidth = measure(marker)._1 + 2*InlineVerticalConcatenation.markerPadding
+    val innerWidth = sublayouts.head.width + markerWidth
+    val width = innerWidth
+      + (tipSpec(startSide) match
+          case Physical(p) if p != 0 => 3*Layout.unitWidth
+          case _ => 0)
+      + (tipSpec(endSide) match
+          case Physical(p) if p != 1 => 3*Layout.unitWidth
+          case _ => 0)
+    assert(sublayouts.head.width == sublayouts.last.width,
+      "first and last sublayout of inline vertical concatenation must have same width")
+    assert(sublayouts.drop(1).dropRight(1).forall(_.width + 2*markerWidth == innerWidth),
+      "middle sublayouts of inline vertical concatenation must all have width "
+      + "equal to the first minus the marker width")
+
+    val height = sublayouts.map(_.height).sum + Layout.rowGap * (sublayouts.length - 1)
+    val numRows: Side => Int = { s =>
+      (if s == startSide then sublayouts.head else sublayouts.last).numRows(s)
+    }
+
+    override def tipYInner(s: Side, ts: TipSpecification): Double =
+      ts match
+        case Vertical => Double.NaN
+        case Physical(p) =>
+          linearInterpolate(0, sublayouts.head.tipY(startSide, Physical(0)),
+                            1, sublayouts.last.tipY(endSide, Physical(1)), p)
+        case Logical(r) =>
+          if s == startSide then
+            sublayouts.head.tipY(s, ts)
+          else
+            height - sublayouts.last.height + sublayouts.last.tipY(s, ts)
