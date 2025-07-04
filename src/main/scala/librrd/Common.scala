@@ -5,9 +5,9 @@ enum Direction:
   def reverse: Direction = this match
     case LTR => RTL
     case RTL => LTR
-  def reverse[T](list: List[T]): List[T] = this match
-    case LTR => list
-    case RTL => list.reverse
+  def reverse[T](seq: Seq[T]): Seq[T] = this match
+    case LTR => seq
+    case RTL => seq.reverse
 
 enum Side { case Left, Right }
 enum RelativeSide:
@@ -30,3 +30,12 @@ def absoluteTipSpec(relativeTipSpec: RelativeSide => TipSpecification, direction
 def assertSingletonList[T](list: List[T]): T =
   assert(list.length == 1, "list must have exactly 1 element")
   list(0)
+
+val TOLERANCE = 0.0001
+extension (self: Double)
+  def ~=(other: Double): Boolean =
+    Math.abs(self - other) < TOLERANCE
+  def ~<=(other: Double): Boolean =
+    self - other < TOLERANCE
+  def ~>=(other: Double): Boolean =
+    other - self < TOLERANCE
