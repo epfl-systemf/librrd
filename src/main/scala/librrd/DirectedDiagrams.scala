@@ -7,10 +7,10 @@ object DirectedDiagrams:
   trait DirectedDiagramFields extends ParameterizedDiagrams.ParameterizedDiagramFields:
     val direction: Direction
     def toDirectedDiagram: DirectedDiagram
+    def toDiagram = toParameterizedDiagram.toDiagram
 
   sealed trait DirectedDiagram extends DirectedDiagramFields:
     def toDirectedDiagram = this
-    def toDiagram = toParameterizedDiagram.toDiagram
 
   case class Station(label: String,
                      isTerminal: Boolean,

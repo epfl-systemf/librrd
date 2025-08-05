@@ -8,13 +8,12 @@ object AlignedDiagrams:
   object NumRows extends SidedPropertyCompanion[Int]
 
   trait AlignedDiagramFields extends DirectedDiagrams.DirectedDiagramFields:
-    val numRows: NumRows
     def toAlignedDiagram: AlignedDiagram
+    def toParameterizedDiagram = toDirectedDiagram.toParameterizedDiagram
 
   sealed trait AlignedDiagram extends AlignedDiagramFields:
+    val numRows: NumRows
     def toAlignedDiagram = this
-    def toDiagram = toDirectedDiagram.toDiagram
-    def toParameterizedDiagram = toDirectedDiagram.toParameterizedDiagram
 
   case class Station(label: String,
                      isTerminal: Boolean,
@@ -49,6 +48,13 @@ object AlignedDiagrams:
     val numRows = NumRows.forEach(s =>
       if justifyContent.flush(s, direction) then sidemosts(s).numRows(s) else 1)
 
+    Side.values.foreach(s =>
+      assert(tipSpecs(s) match
+          case TipSpecification.Logical(r) => 1 == r
+          case TipSpecification.Physical(p) => 0 <= p && p <= 1
+          case _ => true,
+        s"invalid tip specification ${tipSpecs(s)} on side $s"))
+
     def toDirectedDiagram =
       DirectedDiagrams.Sequence(subdiagrams.map(_.toDirectedDiagram),
                                 direction, properties, classes, id)
@@ -69,6 +75,13 @@ object AlignedDiagrams:
         case TipSpecification.Vertical => bottomSubdiagram.numRows(s)
           + (polarity match { case Polarity.+ => topSubdiagram.numRows(s); case _ => 1 })
         case _ => 1)
+
+    Side.values.foreach(s =>
+      assert(tipSpecs(s) match
+          case TipSpecification.Logical(r) => 1 <= r && r <= numRows(s)
+          case TipSpecification.Physical(p) => 0 <= p && p <= 1
+          case _ => true,
+        s"invalid tip specification ${tipSpecs(s)} on side $s with ${numRows(s)} rows"))
 
     def toDirectedDiagram =
       DirectedDiagrams.Stack(topSubdiagram.toDirectedDiagram, bottomSubdiagram.toDirectedDiagram,
@@ -102,7 +115,7 @@ object AlignedDiagrams:
           val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
           val subdiagrams = subs.toVector
           val alignedSubdiagrams = subdiagrams.length match
-            case 0 => List(Side.Left, Side.Right).flatMap(s =>
+            case 0 => Side.values.toList.flatMap(s =>
               if connectability(s) != Neither then Some(Space(direction)) else None)
 
             case 1 => List(assertSingletonList(rec(subdiagrams(0), connectability)))
