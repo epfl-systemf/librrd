@@ -172,8 +172,7 @@ trait Layouts[T]:
       sublayouts.forall(_.direction == sublayouts(0).direction),
       "sublayouts of inline vertical concatenation must all have same direction")
     val direction = sublayouts(0).direction
-    val startSide = RelativeSide.Start.absolute(direction)
-    val endSide = RelativeSide.End.absolute(direction)
+    val (startSide, endSide) = direction.swap(Left, Right)
 
     val markerWidth = measure(marker)._1 + 2*InlineVerticalConcatenation.markerPadding
     val innerWidth = sublayouts.head.width + markerWidth

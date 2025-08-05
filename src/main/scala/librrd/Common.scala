@@ -13,12 +13,6 @@ enum Direction:
     case RTL => t.swap
 
 enum Side { case Left, Right }
-enum RelativeSide:
-  case Start, End
-  def absolute(dir: Direction): Side =
-    (this, dir) match
-      case (Start, Direction.LTR) | (End, Direction.RTL) => Side.Left
-      case (End, Direction.LTR) | (Start, Direction.RTL) => Side.Right
 
 enum Polarity { case +, - }
 
@@ -37,14 +31,7 @@ trait SidedPropertyCompanion[T] extends SidedPropertyCommon:
 object SidedProperty extends SidedPropertyCommon
 
 type TipSpecifications = SidedProperty[TipSpecification]
-object TipSpecifications extends SidedPropertyCompanion[TipSpecification]:
-  val default = TipSpecifications(TipSpecification.Logical(1), TipSpecification.Logical(1))
-
-case class RelativeTipSpecifications(start: TipSpecification, end: TipSpecification):
-  import RelativeSide.*
-  def get(s: RelativeSide) = s match { case Start => start; case End => end }
-  def toAbsolute(direction: Direction) =
-    TipSpecifications.apply.tupled(direction.swap((start, end)))
+object TipSpecifications extends SidedPropertyCompanion[TipSpecification]
 
 def assertSingletonList[T](list: List[T]): T =
   assert(list.length == 1, "list must have exactly 1 element")
