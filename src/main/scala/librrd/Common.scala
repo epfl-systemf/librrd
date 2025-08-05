@@ -30,9 +30,11 @@ enum TipSpecification:
 case class SidedProperty[T](left: T, right: T):
   def apply(s: Side) = s match { case Side.Left => left; case _ => right }
   def map[U](f: T => U) = SidedProperty(f(left), f(right))
-trait SidedPropertyCompanion[T]:
-  def apply(left: T, right: T) = SidedProperty(left, right)
+trait SidedPropertyCommon:
   def forEach[U](f: Side => U) = SidedProperty(f(Side.Left), f(Side.Right))
+trait SidedPropertyCompanion[T] extends SidedPropertyCommon:
+  def apply(left: T, right: T) = SidedProperty(left, right)
+object SidedProperty extends SidedPropertyCommon
 
 type TipSpecifications = SidedProperty[TipSpecification]
 object TipSpecifications extends SidedPropertyCompanion[TipSpecification]:
@@ -104,25 +106,4 @@ enum JustifyContentPolicy:
 
 
 enum AlignItemsPolicy:
-  import TipSpecification.*
-  import Diagrams.*
   case Top, Center, Bottom, Baseline
-  def defaultTipSpecification
-      (diagram: Diagram, JCPolicy: JustifyContentPolicy, direction: Direction)
-      (side: Side): TipSpecification =
-    (this, diagram) match
-      case (_, _: (TerminalToken | NonterminalToken)) => Logical(1)
-      case (Top, _) => Physical(0)
-      case (Bottom, _) => Physical(1)
-      case (Baseline, stack: Stack)
-          if stack.topSubdiagram == Sequence(Seq.empty)
-            /* && numRows(stack.bottomSubdiagram, JCPolicy, direction, side) == 1 */ =>
-        Logical(2)
-      case (_, stack: Stack) =>
-       Logical(/*numRows(stack, JCPolicy, direction, side)/2 + 1*/ 1)
-      case (Baseline, sequence: Sequence) =>
-        if JCPolicy.flush(side, direction)
-        then Baseline.defaultTipSpecification
-          (sidemost(sequence, side, direction), JCPolicy, direction)(side)
-        else Logical(1)
-      case (Center, _: Sequence) => Physical(0.5)

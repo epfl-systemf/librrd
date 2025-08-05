@@ -78,39 +78,76 @@ object AlignedDiagrams:
   def align(diagram: DirectedDiagrams.DirectedDiagram): AlignedDiagram =
     enum Connectable { case Up, Down, Neither }
     import Connectable.*
+
     def maybeSurroundSpaces(ad: AlignedDiagram, conditions: SidedProperty[Boolean])
-        : AlignedDiagram =
-      val withSpaces = ((if conditions.left then List(Space(ad.direction)) else List()) :+ ad)
-        ++ (if conditions.right then List(Space(ad.direction)) else List())
-      if withSpaces.length == 1 then withSpaces(0)
-      else Sequence(withSpaces, ad.direction, ad.properties, ???, Set.empty, None)
+        : List[AlignedDiagram] =
+      val maybeSpaces = conditions.map(c => if c then List(Space(ad.direction)) else List())
+      maybeSpaces.left ++ (ad +: maybeSpaces.right)
+
+    def singletonWithSpaces(ads: List[AlignedDiagram], properties: PropertyMap) =
+      if ads.length == 1 then ads(0)
+      else Sequence(ads, ads(0).direction, properties,
+        TipSpecifications(TipSpecification.Vertical, TipSpecification.Vertical), Set.empty, None)
 
     def rec(diagram: DirectedDiagrams.DirectedDiagram, connectability: SidedProperty[Connectable])
-        : AlignedDiagram =
+        : List[AlignedDiagram] =
       diagram match
         case DirectedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
           maybeSurroundSpaces(
             Station(label, isTerminal, direction, properties, classes, id),
             connectability.map(_ != Neither))
 
+
         case DirectedDiagrams.Sequence(subs, direction, properties, classes, id) =>
+          val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
           val subdiagrams = subs.toVector
-          val alignedSubdiagrams =
-            if subdiagrams.length >= 2 then
+          val alignedSubdiagrams = subdiagrams.length match
+            case 0 => List(Side.Left, Side.Right).flatMap(s =>
+              if connectability(s) != Neither then Some(Space(direction)) else None)
+
+            case 1 => List(assertSingletonList(rec(subdiagrams(0), connectability)))
+
+            case _ =>
               val (firsts, rest) = subdiagrams.splitAt(1)
               val (mids, lasts) = rest.splitAt(rest.length - 1)
               val (first, last) = (firsts(0), lasts(0))
-              // TODO: only if flush!
-              rec(first, SidedProperty(connectability.left, Neither))
-              +: mids.map(rec(_, SidedProperty(Neither, Neither)))
-              :+ rec(last, SidedProperty(Neither, connectability.right))
-            else subdiagrams.map(rec(_, connectability))
-          Sequence(alignedSubdiagrams, direction, properties, ???, classes, id)
+
+              val alignedFirst =
+                if justifyContent.flush(Side.Left, direction) then
+                  rec(first, SidedProperty(connectability.left, Neither))
+                else
+                  maybeSurroundSpaces(
+                    assertSingletonList(rec(first, SidedProperty(Neither, Neither))),
+                    SidedProperty(connectability.left != Neither, false))
+
+              val alignedLast =
+                if justifyContent.flush(Side.Right, direction) then
+                  rec(last, SidedProperty(Neither, connectability.right))
+                else
+                  maybeSurroundSpaces(
+                    assertSingletonList(rec(last, SidedProperty(Neither, Neither))),
+                    SidedProperty(false, connectability.right != Neither))
+
+              alignedFirst
+              ++ mids.map(d => assertSingletonList(rec(d, SidedProperty(Neither, Neither))))
+              ++ alignedLast
+
+          val tipSpecs = connectability.map(_ match
+            case Neither => properties.get(LayoutStylesheets.AlignItems) match
+              case AlignItemsPolicy.Top => TipSpecification.Physical(0)
+              case AlignItemsPolicy.Center => TipSpecification.Physical(0.5)
+              case AlignItemsPolicy.Bottom => TipSpecification.Physical(1)
+              case AlignItemsPolicy.Baseline => /* doesn't matter */ TipSpecification.Logical(1)
+            case _ => TipSpecification.Vertical)
+          List(Sequence(alignedSubdiagrams, direction, properties, tipSpecs, classes, id))
+
 
         case DirectedDiagrams.Stack(topSubdiagram, bottomSubdiagram,
                                     direction, polarity, properties, classes, id) =>
-          val alignedTop = rec(topSubdiagram, SidedProperty(Down, Down))
-          val alignedBottom = rec(bottomSubdiagram, SidedProperty(Up, Up))
+          val alignedTop =
+            singletonWithSpaces(rec(topSubdiagram, SidedProperty(Down, Down)), properties)
+          val alignedBottom =
+            singletonWithSpaces(rec(bottomSubdiagram, SidedProperty(Up, Up)), properties)
 
           val tipSpecs = TipSpecifications.forEach(s => (connectability(s), polarity) match
             case (Neither, _) | (_, Polarity.-) => properties.get(LayoutStylesheets.AlignItems) match
@@ -132,50 +169,5 @@ object AlignedDiagrams:
               alignedTop, alignedBottom, direction, polarity, properties, tipSpecs, classes, id),
             tipSpecs.map(_ != TipSpecification.Vertical))
 
-    rec(diagram, SidedProperty(Neither,Neither))
 
-/*
-def align(diagram: Diagram, alignItems: AlignItemsPolicy, justifyContent: JustifyContentPolicy,
-          direction: Direction = Direction.LTR): AlignedDiagram =
-  val defaultTipSpec = alignItems.defaultTipSpecification(diagram, justifyContent, direction)
-  def rec(diagram: Diagram, direction: Direction,
-          tipSpec: PartialFunction[Side, TipSpecification])
-      : List[AlignedDiagram] =
-    import Side.*
-    val tipSpecWithDefault = tipSpec.orElse(defaultTipSpec(_))
-    diagram match
-      case token: (Diagram.TerminalToken | Diagram.NonterminalToken) =>
-        def maybeSpace(s: Side) =
-          if tipSpecWithDefault(s) == Vertical
-          then List(AlignedDiagram.Space(direction))
-          else List()
-        maybeSpace(Left)
-          ++ List(token match
-            case Diagram.TerminalToken(label) => AlignedDiagram.Station(direction, true, label)
-            case Diagram.NonterminalToken(label) => AlignedDiagram.Station(direction, false, label))
-          ++ maybeSpace(Right)
-
-      case Diagram.Sequence(subdiagrams) =>
-        val maybeReversed = direction.reverse(subdiagrams)
-        def maybeTipSpec(S: Side): PartialFunction[Side, TipSpecification] =
-          { case S if justifyContent.flush(S, direction) => tipSpecWithDefault(S) }
-        val subAligned =
-          rec(maybeReversed.head, direction, maybeTipSpec(Left))
-          ++ maybeReversed.drop(1).dropRight(1).map(d =>
-               assertSingletonList(rec(d, direction, PartialFunction.empty)))
-          ++ rec(maybeReversed.last, direction, maybeTipSpec(Right))
-        List(AlignedDiagram.Sequence(direction, tipSpecWithDefault, subAligned))
-
-      case Diagram.Stack(topSubdiagram, bottomSubdiagram, polarity) =>
-        List(AlignedDiagram.BlockVerticalConcatenation(
-          direction,
-          tipSpecWithDefault,
-          polarity,
-          assertSingletonList(rec(topSubdiagram, direction, _ => Vertical)),
-          assertSingletonList(rec(bottomSubdiagram,
-              if polarity == Polarity.+ then direction else direction.reverse,
-              PartialFunction.empty))
-        ))
-
-  assertSingletonList(rec(diagram, direction, PartialFunction.empty))
-*/
+    assertSingletonList(rec(diagram, SidedProperty(Neither, Neither)))
