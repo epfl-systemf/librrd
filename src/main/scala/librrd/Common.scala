@@ -27,9 +27,15 @@ enum TipSpecification:
   case Physical(p: Double)
   case Logical(r: Int)
 
-case class TipSpecifications(left: TipSpecification, right: TipSpecification):
-  def get(s: Side) = s match { case Side.Left => left; case _ => right }
-object TipSpecifications:
+case class SidedProperty[T](left: T, right: T):
+  def apply(s: Side) = s match { case Side.Left => left; case _ => right }
+  def map[U](f: T => U) = SidedProperty(f(left), f(right))
+trait SidedPropertyCompanion[T]:
+  def apply(left: T, right: T) = SidedProperty(left, right)
+  def forEach[U](f: Side => U) = SidedProperty(f(Side.Left), f(Side.Right))
+
+type TipSpecifications = SidedProperty[TipSpecification]
+object TipSpecifications extends SidedPropertyCompanion[TipSpecification]:
   val default = TipSpecifications(TipSpecification.Logical(1), TipSpecification.Logical(1))
 
 case class RelativeTipSpecifications(start: TipSpecification, end: TipSpecification):
