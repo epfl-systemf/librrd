@@ -27,9 +27,9 @@ trait Layouts[T]:
     val id: String
     def width: Double
     def height: Double
-    def classes: Seq[String]
+    def classes: Set[String]
     val numRows: Side => Int
-    val tipSpec: Side => TipSpecification
+    val tipSpecs: TipSpecifications
 
     final def tipY(s: Side, ts: TipSpecification): Double =
       ts match
@@ -44,7 +44,7 @@ trait Layouts[T]:
       tipYInner(s, ts)
 
     def tipYInner(s: Side, ts: TipSpecification): Double
-    def tipY(s: Side): Double = tipY(s, tipSpec(s))
+    def tipY(s: Side): Double = tipY(s, tipSpecs(s))
 
   object Layout:
     val unitWidth = 4.0
@@ -54,7 +54,7 @@ trait Layouts[T]:
 
   trait InlineLayout:
     val numRows: Side => Int = { case _ => 1 }
-    val tipSpec: Side => TipSpecification = { case _ => Logical(1) }
+    val tipSpecs = TipSpecifications(Logical(1), Logical(1))
 
 
   object Rail:
@@ -63,9 +63,10 @@ trait Layouts[T]:
   case class Rail(
       val width: Double,
       val direction: Direction,
-      initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends Layout with InlineLayout:
-    val classes = initClasses :+ Rail.`class`
+      initClasses: Set[String] = Set.empty,
+      initId: Option[String] = None) extends Layout with InlineLayout:
+    val classes = initClasses + Rail.`class`
+    val id = initId.getOrElse(freshID())
     val height = 0
     def tipYInner(s: Side, ts: TipSpecification) = 0
 
@@ -76,9 +77,10 @@ trait Layouts[T]:
   case class Space(
       val width: Double,
       val direction: Direction,
-      initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends Layout with InlineLayout:
-    val classes = initClasses :+ Space.`class`
+      initClasses: Set[String] = Set.empty,
+      initId: Option[String] = None) extends Layout with InlineLayout:
+    val classes = initClasses + Space.`class`
+    val id = initId.getOrElse(freshID())
     val height = 0
     def tipYInner(s: Side, ts: TipSpecification) = 0
 
@@ -95,15 +97,16 @@ trait Layouts[T]:
       val label: String,
       val isTerminal: Boolean,
       val direction: Direction,
-      initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends Layout with InlineLayout:
+      initClasses: Set[String] = Set.empty,
+      initId: Option[String] = None) extends Layout with InlineLayout:
     val (textWidth, textHeight) = measure(label)
     val width = textWidth + 4*Station.paddingX
     val height = textHeight + 2*Station.paddingY
 
     val classes = initClasses
-      :+ Station.`class`
-      :+ (if isTerminal then Station.terminalClass else Station.nonterminalClass)
+    val id = initId.getOrElse(freshID())
+      + Station.`class`
+      + (if isTerminal then Station.terminalClass else Station.nonterminalClass)
 
     def tipYInner(s: Side, ts: TipSpecification) = height/2
 
@@ -113,10 +116,11 @@ trait Layouts[T]:
 
   case class HorizontalConcatenation(
       val sublayouts: Seq[Layout],
-      initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends Layout with InlineLayout:
+      initClasses: Set[String] = Set.empty,
+      initId: Option[String] = None) extends Layout with InlineLayout:
 
-    val classes = initClasses :+ HorizontalConcatenation.`class`
+    val classes = initClasses + HorizontalConcatenation.`class`
+    val id = initId.getOrElse(freshID())
 
     assert(!sublayouts.isEmpty, "horizontal concatenation must have at least 1 sublayout")
     assert(
@@ -160,11 +164,12 @@ trait Layouts[T]:
   case class InlineVerticalConcatenation(
       val sublayouts: Seq[Layout],
       val marker: String,
-      val tipSpec: Side => TipSpecification,
-      initClasses: Seq[String] = Seq.empty,
-      val id: String = freshID()) extends Layout:
+      val tipSpecs: TipSpecifications,
+      initClasses: Set[String] = Set.empty,
+      initId: Option[String] = None) extends Layout:
 
-    val classes = initClasses :+ InlineVerticalConcatenation.`class`
+    val classes = initClasses + InlineVerticalConcatenation.`class`
+    val id = initId.getOrElse(freshID())
 
     assert(sublayouts.length >= 2,
       "inline vertical concatenation must have at least 2 sublayouts")
@@ -177,10 +182,10 @@ trait Layouts[T]:
     val markerWidth = measure(marker)._1 + 2*InlineVerticalConcatenation.markerPadding
     val innerWidth = sublayouts.head.width + markerWidth
     val width = innerWidth
-      + (tipSpec(startSide) match
+      + (tipSpecs(startSide) match
           case Physical(p) if p != 0 => 3*Layout.unitWidth
           case _ => 0)
-      + (tipSpec(endSide) match
+      + (tipSpecs(endSide) match
           case Physical(p) if p != 1 => 3*Layout.unitWidth
           case _ => 0)
     assert(sublayouts.head.width == sublayouts.last.width,
