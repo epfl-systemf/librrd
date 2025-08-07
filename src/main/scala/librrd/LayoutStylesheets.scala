@@ -84,6 +84,9 @@ object LayoutStylesheets:
     val default = 0
     override def check(value: V) =
       assert(0 <= value, "gap value must be nonnegative")
+  case object ContinuationMarker extends PropertyName:
+    type V = String
+    val default = "…"
 
   class Property(val name: PropertyName, val value: name.V):
     name.check(value)
