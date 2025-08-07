@@ -1,6 +1,7 @@
 package librrd
 
 import LayoutStylesheets.PropertyMap
+import TipSpecification.*
 
 object AlignedDiagrams:
 
@@ -50,8 +51,8 @@ object AlignedDiagrams:
 
     Side.values.foreach(s =>
       assert(tipSpecs(s) match
-          case TipSpecification.Logical(r) => 1 == r
-          case TipSpecification.Physical(p) => 0 <= p && p <= 1
+          case Logical(r) => 1 == r
+          case Physical(p) => 0 <= p && p <= 1
           case _ => true,
         s"invalid tip specification ${tipSpecs(s)} on side $s"))
 
@@ -72,14 +73,14 @@ object AlignedDiagrams:
 
     val numRows = NumRows.forEach(s =>
       tipSpecs(s) match
-        case TipSpecification.Vertical => bottomSubdiagram.numRows(s)
+        case Vertical => bottomSubdiagram.numRows(s)
           + (polarity match { case Polarity.+ => topSubdiagram.numRows(s); case _ => 1 })
         case _ => 1)
 
     Side.values.foreach(s =>
       assert(tipSpecs(s) match
-          case TipSpecification.Logical(r) => 1 <= r && r <= numRows(s)
-          case TipSpecification.Physical(p) => 0 <= p && p <= 1
+          case Logical(r) => 1 <= r && r <= numRows(s)
+          case Physical(p) => 0 <= p && p <= 1
           case _ => true,
         s"invalid tip specification ${tipSpecs(s)} on side $s with ${numRows(s)} rows"))
 
@@ -100,7 +101,7 @@ object AlignedDiagrams:
     def singletonWithSpaces(ads: List[AlignedDiagram], properties: PropertyMap) =
       if ads.length == 1 then ads(0)
       else Sequence(ads, ads(0).direction, properties,
-        TipSpecifications(TipSpecification.Vertical, TipSpecification.Vertical), Set.empty, None)
+        TipSpecifications(Vertical, Vertical), Set.empty, None)
 
     def rec(diagram: DirectedDiagrams.DirectedDiagram, connectability: SidedProperty[Connectable])
         : List[AlignedDiagram] =
@@ -147,11 +148,11 @@ object AlignedDiagrams:
 
           val tipSpecs = connectability.map(_ match
             case Neither => properties.get(LayoutStylesheets.AlignItems) match
-              case AlignItemsPolicy.Top => TipSpecification.Physical(0)
-              case AlignItemsPolicy.Center => TipSpecification.Physical(0.5)
-              case AlignItemsPolicy.Bottom => TipSpecification.Physical(1)
-              case AlignItemsPolicy.Baseline => /* doesn't matter */ TipSpecification.Logical(1)
-            case _ => TipSpecification.Vertical)
+              case AlignItemsPolicy.Top => Physical(0)
+              case AlignItemsPolicy.Center => Physical(0.5)
+              case AlignItemsPolicy.Bottom => Physical(1)
+              case AlignItemsPolicy.Baseline => /* doesn't matter */ Logical(1)
+            case _ => Vertical)
           List(Sequence(alignedSubdiagrams, direction, properties, tipSpecs, classes, id))
 
 
@@ -164,23 +165,23 @@ object AlignedDiagrams:
 
           val tipSpecs = TipSpecifications.forEach(s => (connectability(s), polarity) match
             case (Neither, _) | (_, Polarity.-) => properties.get(LayoutStylesheets.AlignItems) match
-              case AlignItemsPolicy.Top => TipSpecification.Physical(0)
-              case AlignItemsPolicy.Center => TipSpecification.Physical(0.5)
-              case AlignItemsPolicy.Bottom => TipSpecification.Physical(1)
+              case AlignItemsPolicy.Top => Physical(0)
+              case AlignItemsPolicy.Center => Physical(0.5)
+              case AlignItemsPolicy.Bottom => Physical(1)
               case AlignItemsPolicy.Baseline =>
                 topSubdiagram match
                   case DirectedDiagrams.Sequence(subs, _, _, _, _)
-                    if subs.isEmpty && alignedBottom.numRows(s) == 1 => TipSpecification.Logical(2)
-                  case _ => TipSpecification.Logical((
+                    if subs.isEmpty && alignedBottom.numRows(s) == 1 => Logical(2)
+                  case _ => Logical((
                     (polarity match
                        case Polarity.+ => alignedTop.numRows(s)
                        case Polarity.- => 1) + alignedBottom.numRows(s))/2 + 1)
-            case _ => TipSpecification.Vertical)
+            case _ => Vertical)
 
           maybeSurroundSpaces(
             BlockVerticalConcatenation(
               alignedTop, alignedBottom, direction, polarity, properties, tipSpecs, classes, id),
-            tipSpecs.map(_ != TipSpecification.Vertical))
+            tipSpecs.map(_ != Vertical))
 
 
     assertSingletonList(rec(diagram, SidedProperty(Neither, Neither)))
