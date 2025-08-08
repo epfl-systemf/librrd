@@ -16,7 +16,7 @@ object LayoutStylesheets:
           .flatMap(sp => sp._2.map(p => (sp._1, p.name, p.value)))
           .groupBy(_._2)
           .map((name, snvs) =>
-            Property(name, snvs.sortBy(_._1).head._3.asInstanceOf[name.V]))
+            Property(name, snvs.sortBy(_._1).head._3.asInstanceOf[name.Value]))
           .toSeq)
 
   case class Rule(selectors: Seq[Selector], properties: Seq[Property])
@@ -58,45 +58,45 @@ object LayoutStylesheets:
 
 
   sealed trait PropertyName:
-    type V
-    val default: V
+    type Value
+    val default: Value
     val inherited: Boolean = true
-    def check(value: V): Unit = ()
+    def check(value: Value): Unit = ()
 
   case object AlignItems extends PropertyName:
-    type V = AlignItemsPolicy
+    type Value = AlignItemsPolicy
     val default = AlignItemsPolicy.Top
   // TODO: needs to be left/right
   case object AlignSelf extends PropertyName:
-    type V = Option[AlignItemsPolicy]
+    type Value = Option[AlignItemsPolicy]
     val default = None
     override val inherited = false
   case object JustifyContent extends PropertyName:
-    type V = JustifyContentPolicy
+    type Value = JustifyContentPolicy
     val default = JustifyContentPolicy.SpaceBetween
   case object FlexAbsorb extends PropertyName:
-    type V = Double
+    type Value = Double
     val default = 0
-    override def check(value: V) =
+    override def check(value: Value) =
       assert(0 <= value && value <= 1, "flex-absorb value must be in [0, 1]")
   case object Gap extends PropertyName:
-    type V = Double
+    type Value = Double
     val default = 0
-    override def check(value: V) =
+    override def check(value: Value) =
       assert(0 <= value, "gap value must be nonnegative")
   case object ContinuationMarker extends PropertyName:
-    type V = String
+    type Value = String
     val default = "…"
 
-  class Property(val name: PropertyName, val value: name.V):
+  class Property(val name: PropertyName, val value: name.Value):
     name.check(value)
   object Property:
     def unapply(property: Property) = (property.name, property.value)
 
   class PropertyMap(properties: Seq[Property]):
 
-    def get(name: PropertyName): name.V =
-      properties.collectFirst({ case Property(`name`, v: name.V) => v })
+    def get(name: PropertyName): name.Value =
+      properties.collectFirst({ case Property(`name`, value: name.Value) => value })
         .getOrElse(name.default)
 
     def resolveStartEnd(direction: Direction): PropertyMap =
