@@ -5,15 +5,12 @@ import TipSpecification.*
 
 object AlignedDiagrams:
 
-  type NumRows = SidedProperty[Int]
-  object NumRows extends SidedPropertyCompanion[Int]
-
   trait AlignedDiagramFields extends DirectedDiagrams.DirectedDiagramFields:
+    val numRows: NumRows
     def toAlignedDiagram: AlignedDiagram
     def toParameterizedDiagram = toDirectedDiagram.toParameterizedDiagram
 
   sealed trait AlignedDiagram extends AlignedDiagramFields:
-    val numRows: NumRows
     def toAlignedDiagram = this
 
   case class Station(label: String,
@@ -44,8 +41,7 @@ object AlignedDiagrams:
                       id: Option[String] = None) extends AlignedDiagram:
 
     val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
-    val sidemosts = SidedProperty[AlignedDiagram].apply.tupled(
-      direction.swap((subdiagrams.head, subdiagrams.last)))
+    val sidemosts = SidedProperty(subdiagrams.head, subdiagrams.last)
     val numRows = NumRows.forEach(s =>
       if justifyContent.flush(s, direction) then sidemosts(s).numRows(s) else 1)
 

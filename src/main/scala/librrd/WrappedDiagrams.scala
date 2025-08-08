@@ -23,6 +23,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
                      isTerminal: Boolean,
                      direction: Direction,
                      properties: PropertyMap,
+                     numRows: NumRows,
                      classes: Set[String] = Set.empty,
                      id: Option[String] = None) extends LocallyWrappedDiagram, GlobalWrap:
     val minContent = backend.measure(label)._1 + 4*backend.Station.paddingX
@@ -30,11 +31,12 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     def toAlignedDiagram =
       AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id)
 
-  case class Space(direction: Direction) extends LocallyWrappedDiagram, GlobalWrap:
+  case class Space(direction: Direction, numRows: NumRows)
+      extends LocallyWrappedDiagram, GlobalWrap:
     val properties = PropertyMap(Seq())
     val classes = Set()
     val id = None
-    val minContent = unitWidth
+    val minContent = 2*unitWidth
     val maxContent = minContent
     def toAlignedDiagram = AlignedDiagrams.Space(direction)
 
@@ -46,6 +48,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       polarity: Polarity,
       properties: PropertyMap,
       tipSpecs: TipSpecifications,
+      numRows: NumRows,
       classes: Set[String] = Set.empty,
       id: Option[String] = None) extends LocallyWrappedDiagram, GlobalWrap:
 
@@ -70,6 +73,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       subdiagrams: Seq[D | InlineVerticalConcatenation[D]],
       direction: Direction,
       properties: PropertyMap,
+      numRows: NumRows,
       classes: Set[String] = Set.empty,
       id: Option[String] = None) extends SequenceWrap[D]:
     val minGap = (if subdiagrams.isEmpty then 0 else (subdiagrams.length - 1) * MIN_GAP)
@@ -82,6 +86,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       direction: Direction,
       properties: PropertyMap,
       tipSpecs: TipSpecifications,
+      numRows: NumRows,
       classes: Set[String] = Set.empty,
       id: Option[String] = None) extends SequenceWrap[D]:
 
@@ -91,7 +96,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     val markerWidth = backend.measure(properties.get(LayoutStylesheets.ContinuationMarker))._1
 
     val extraWidth: Double =
-      markerWidth
+      markerWidth + 2*backend.InlineVerticalConcatenation.markerPadding
       + direction.reverse(Side.values).zip(List(0, 1)).map((s, p) => tipSpecs(s) match
           case TipSpecification.Physical(q) if q != p => 3 * unitWidth
           case _ => 0).sum
@@ -109,9 +114,10 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
 
 
   case class GloballyWrappedDiagram(
-      val direction: Direction,
-      val properties: PropertyMap,
-      val options: Iterable[GlobalWrap]) extends HasBestUnderWidth[GlobalWrap], WrappedDiagram:
+      direction: Direction,
+      properties: PropertyMap,
+      numRows: NumRows, // TODO
+      options: Iterable[GlobalWrap]) extends HasBestUnderWidth[GlobalWrap], WrappedDiagram:
 
     val classes: Set[String] = ???
     val id: Option[String] = ???
@@ -129,6 +135,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
         direction: Direction,
         properties: PropertyMap,
         tipSpecs: TipSpecifications,
+        numRows: NumRows,
         classes: Set[String] = Set.empty,
         id: Option[String] = None)
       extends HasBestUnderWidth[SequenceWrap[LocallyWrappedDiagram]], LocallyWrappedDiagram:
@@ -136,11 +143,12 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     val options =
       allPartitions(subdiagrams.toList).map[SequenceWrap[LocallyWrappedDiagram]](partition =>
         if partition.length == 1
-        then HorizontalConcatenation(partition(0), direction, properties, classes, id)
+        then HorizontalConcatenation(partition(0), direction, properties, numRows, classes, id)
         else InlineVerticalConcatenation(
-          partition.map(rowSubs =>
-            HorizontalConcatenation(rowSubs, direction, properties, classes, id)),
-          direction, properties, tipSpecs, classes, id))
+          direction.reverse(partition.map(rowSubs =>
+            HorizontalConcatenation(rowSubs, direction, properties, NumRows(1, 1), classes, id))),
+          direction, properties, tipSpecs,
+          NumRows.apply.tupled(direction.swap((numRows.left, numRows.right))), classes, id))
 
     def allPartitions[T](l: List[T]): Vector[List[List[T]]] =
       l match
@@ -168,13 +176,13 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
   def wrapLocally(diagram: AlignedDiagrams.AlignedDiagram): LocallyWrappedDiagram =
     diagram match
       case AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
-        Station(label, isTerminal, direction, properties, classes, id)
+        Station(label, isTerminal, direction, properties, diagram.numRows, classes, id)
       case AlignedDiagrams.Space(direction) =>
-        Space(direction)
+        Space(direction, diagram.numRows)
       case AlignedDiagrams.Sequence(subdiagrams, direction, properties, tipSpecs, classes, id) =>
         LocallyWrappedSequence(subdiagrams.map(wrapLocally),
-          direction, properties, tipSpecs, classes, id)
+          direction, properties, tipSpecs, diagram.numRows, classes, id)
       case AlignedDiagrams.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
           direction, polarity, properties, tipSpecs, classes, id) =>
         BlockVerticalConcatenation(wrapLocally(topSubdiagram), wrapLocally(bottomSubdiagram),
-          direction, polarity, properties, tipSpecs, classes, id)
+          direction, polarity, properties, tipSpecs, diagram.numRows, classes, id)

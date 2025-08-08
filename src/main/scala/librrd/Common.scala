@@ -33,6 +33,9 @@ object SidedProperty extends SidedPropertyCommon
 type TipSpecifications = SidedProperty[TipSpecification]
 object TipSpecifications extends SidedPropertyCompanion[TipSpecification]
 
+type NumRows = SidedProperty[Int]
+object NumRows extends SidedPropertyCompanion[Int]
+
 def assertSingletonList[T](list: List[T]): T =
   assert(list.length == 1, "list must have exactly 1 element")
   list(0)

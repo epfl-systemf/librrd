@@ -28,7 +28,7 @@ trait Layouts[T]:
     def width: Double
     def height: Double
     def classes: Set[String]
-    val numRows: Side => Int
+    val numRows: NumRows
     val tipSpecs: TipSpecifications
 
     final def tipY(s: Side, ts: TipSpecification): Double =
@@ -44,7 +44,7 @@ trait Layouts[T]:
       tipYInner(s, ts)
 
     def tipYInner(s: Side, ts: TipSpecification): Double
-    def tipY(s: Side): Double = tipY(s, tipSpecs(s))
+    val tipY: SidedProperty[Double] = SidedProperty.forEach(s => tipY(s, tipSpecs(s)))
 
   object Layout:
     val unitWidth = 4.0
@@ -53,7 +53,7 @@ trait Layouts[T]:
 
 
   trait InlineLayout:
-    val numRows: Side => Int = { case _ => 1 }
+    val numRows = SidedProperty(1, 1)
     val tipSpecs = TipSpecifications(Logical(1), Logical(1))
 
 
@@ -61,8 +61,8 @@ trait Layouts[T]:
     val `class` = "librrd-rail"
 
   case class Rail(
-      val width: Double,
-      val direction: Direction,
+      width: Double,
+      direction: Direction,
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout with InlineLayout:
     val classes = initClasses + Rail.`class`
@@ -75,8 +75,8 @@ trait Layouts[T]:
     val `class` = "librrd-space"
 
   case class Space(
-      val width: Double,
-      val direction: Direction,
+      width: Double,
+      direction: Direction,
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout with InlineLayout:
     val classes = initClasses + Space.`class`
@@ -94,9 +94,9 @@ trait Layouts[T]:
     val paddingY = Layout.unitWidth
 
   case class Station(
-      val label: String,
-      val isTerminal: Boolean,
-      val direction: Direction,
+      label: String,
+      isTerminal: Boolean,
+      direction: Direction,
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout with InlineLayout:
     val (textWidth, textHeight) = measure(label)
@@ -115,7 +115,7 @@ trait Layouts[T]:
     val `class` = "librrd-hconcat"
 
   case class HorizontalConcatenation(
-      val sublayouts: Seq[Layout],
+      sublayouts: Seq[Layout],
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout with InlineLayout:
 
@@ -152,9 +152,7 @@ trait Layouts[T]:
         case Right => sublayouts.last)
       .tipY(s, ts)
 
-    override def tipY(s: Side) = s match
-      case Left => leftTipY
-      case Right => rightTipY
+    override val tipY = SidedProperty(leftTipY, rightTipY)
 
 
   object InlineVerticalConcatenation:
@@ -162,9 +160,11 @@ trait Layouts[T]:
     val markerPadding = Layout.unitWidth
 
   case class InlineVerticalConcatenation(
-      val sublayouts: Seq[Layout],
-      val marker: String,
-      val tipSpecs: TipSpecifications,
+      sublayouts: Seq[Layout],
+      marker: String,
+      tipSpecs: TipSpecifications,
+      numRows: NumRows,
+      extraWidth: Double,
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout:
 
@@ -180,24 +180,14 @@ trait Layouts[T]:
     val (startSide, endSide) = direction.swap(Left, Right)
 
     val markerWidth = measure(marker)._1 + 2*InlineVerticalConcatenation.markerPadding
-    val innerWidth = sublayouts.head.width + markerWidth
-    val width = innerWidth
-      + (tipSpecs(startSide) match
-          case Physical(p) if p != 0 => 3*Layout.unitWidth
-          case _ => 0)
-      + (tipSpecs(endSide) match
-          case Physical(p) if p != 1 => 3*Layout.unitWidth
-          case _ => 0)
+    val width = sublayouts.head.width + extraWidth
     assert(sublayouts.head.width == sublayouts.last.width,
       "first and last sublayout of inline vertical concatenation must have same width")
-    assert(sublayouts.drop(1).dropRight(1).forall(_.width + 2*markerWidth == innerWidth),
+    assert(sublayouts.drop(1).dropRight(1).forall(_.width + 2*markerWidth == width),
       "middle sublayouts of inline vertical concatenation must all have width "
       + "equal to the first minus the marker width")
 
     val height = sublayouts.map(_.height).sum + Layout.rowGap * (sublayouts.length - 1)
-    val numRows: Side => Int = { s =>
-      (if s == startSide then sublayouts.head else sublayouts.last).numRows(s)
-    }
 
     override def tipYInner(s: Side, ts: TipSpecification): Double =
       ts match
@@ -210,3 +200,50 @@ trait Layouts[T]:
             sublayouts.head.tipY(s, ts)
           else
             height - sublayouts.last.height + sublayouts.last.tipY(s, ts)
+
+
+  object BlockVerticalConcatenation:
+    val `class` = "librrd-vconcat-block"
+
+  case class BlockVerticalConcatenation(
+      topSublayout: Layout,
+      bottomSublayout: Layout,
+      direction: Direction,
+      polarity: Polarity,
+      tipSpecs: TipSpecifications,
+      numRows: NumRows,
+      extraWidth: Double,
+      initClasses: Set[String] = Set.empty,
+      initId: Option[String] = None) extends Layout:
+
+    val classes = initClasses + BlockVerticalConcatenation.`class`
+    val id = initId.getOrElse(freshID())
+
+    assert(topSublayout.width == bottomSublayout.width,
+      "top and bottom sublayouts of block vertical concatenation must have same width")
+    val width = topSublayout.width + extraWidth
+
+    assert(topSublayout.direction == (polarity match
+        case Polarity.+ =>  bottomSublayout.direction
+        case Polarity.- =>  bottomSublayout.direction.reverse),
+      "bottom sublayout of block vertical concatenation must have direction equal to " +
+      "top sublayout iff polarity is positive")
+
+    val bottomOffset = topSublayout.height + Layout.rowGap
+    val height = bottomOffset + bottomSublayout.height
+
+    def tipYInner(s: Side, ts: TipSpecification): Double =
+      ts match
+        case Vertical => Double.NaN
+        case Physical(p) => linearInterpolate(
+          0, topSublayout.tipY(s, Physical(0)),
+          1, bottomOffset + bottomSublayout.tipY(s, Physical(1)), p)
+        case Logical(r) =>
+          val topRows = topSublayout.numRows(s)
+          polarity match
+            case Polarity.+ =>
+              if r <= topRows then topSublayout.tipY(s, Logical(r))
+              else bottomOffset + bottomSublayout.tipY(s, Logical(r - topRows))
+            case Polarity.- =>
+              if r == 1 then topSublayout.tipY(s, Logical(topRows))
+              else bottomOffset + bottomSublayout.tipY(s, Logical(r - 1))
