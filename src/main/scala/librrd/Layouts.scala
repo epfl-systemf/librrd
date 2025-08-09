@@ -164,7 +164,7 @@ trait Layouts[T]:
       marker: String,
       tipSpecs: TipSpecifications,
       numRows: NumRows,
-      extraWidth: Double,
+      extraWidths: SidedProperty[Double],
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout:
 
@@ -180,7 +180,7 @@ trait Layouts[T]:
     val (startSide, endSide) = direction.swap(Left, Right)
 
     val markerWidth = measure(marker)._1 + 2*InlineVerticalConcatenation.markerPadding
-    val width = sublayouts.head.width + extraWidth
+    val width = sublayouts.head.width + markerWidth + extraWidths.left + extraWidths.right
     assert(sublayouts.head.width == sublayouts.last.width,
       "first and last sublayout of inline vertical concatenation must have same width")
     assert(sublayouts.drop(1).dropRight(1).forall(_.width + 2*markerWidth == width),
@@ -192,9 +192,9 @@ trait Layouts[T]:
     override def tipYInner(s: Side, ts: TipSpecification): Double =
       ts match
         case Vertical => Double.NaN
-        case Physical(p) =>
-          linearInterpolate(0, sublayouts.head.tipY(startSide, Physical(0)),
-                            1, sublayouts.last.tipY(endSide, Physical(1)), p)
+        case Physical(p) => linearInterpolate(
+          0, sublayouts.head.tipY(startSide, Physical(0)),
+          1, height - sublayouts.last.height + sublayouts.last.tipY(endSide, Physical(1)), p)
         case Logical(r) =>
           if s == startSide then
             sublayouts.head.tipY(s, ts)
@@ -212,7 +212,7 @@ trait Layouts[T]:
       polarity: Polarity,
       tipSpecs: TipSpecifications,
       numRows: NumRows,
-      extraWidth: Double,
+      extraWidths: SidedProperty[Double],
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout:
 
@@ -221,7 +221,7 @@ trait Layouts[T]:
 
     assert(topSublayout.width == bottomSublayout.width,
       "top and bottom sublayouts of block vertical concatenation must have same width")
-    val width = topSublayout.width + extraWidth
+    val width = topSublayout.width + extraWidths.left + extraWidths.right
 
     assert(topSublayout.direction == (polarity match
         case Polarity.+ =>  bottomSublayout.direction

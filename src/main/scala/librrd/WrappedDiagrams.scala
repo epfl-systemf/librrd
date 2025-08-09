@@ -52,13 +52,9 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       classes: Set[String] = Set.empty,
       id: Option[String] = None) extends LocallyWrappedDiagram, GlobalWrap:
 
-    val extraWidth: Double =
-      + Side.values.map(s => (tipSpecs(s), polarity) match
-          case (TipSpecification.Vertical, Polarity.+) => 0
-          case (TipSpecification.Vertical
-              | TipSpecification.Logical(1)
-              | TipSpecification.Physical(0), Polarity.-) => 2 * unitWidth
-          case _ => 3 * unitWidth).sum
+    val extraWidths = SidedProperty.forEach(s =>
+      if tipSpecs(s) == TipSpecification.Vertical then 0 else 3*unitWidth)
+    val extraWidth = extraWidths.left + extraWidths.right
     val minContent = Math.max(topSubdiagram.minContent, bottomSubdiagram.minContent) + extraWidth
     val maxContent = Math.max(topSubdiagram.maxContent, bottomSubdiagram.maxContent) + extraWidth
 
@@ -93,15 +89,21 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     assert(subdiagrams.length >= 2,
       "inline vertical concatenation must have at least 2 subdiagrams")
 
-    val markerWidth = backend.measure(properties.get(LayoutStylesheets.ContinuationMarker))._1
+    val markerWidth =
+      backend.measure(properties.get(LayoutStylesheets.ContinuationMarker))._1
+      + 2*backend.InlineVerticalConcatenation.markerPadding
 
-    val extraWidth: Double =
-      markerWidth + 2*backend.InlineVerticalConcatenation.markerPadding
-      + direction.reverse(Side.values).zip(List(0, 1)).map((s, p) => tipSpecs(s) match
-          case TipSpecification.Physical(q) if q != p => 3 * unitWidth
-          case _ => 0).sum
-    val minContent = subdiagrams.map(_.minContent).max + extraWidth
-    val maxContent = subdiagrams.map(_.maxContent).max + extraWidth
+    val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
+    val extraWidths = SidedProperty.forEach(s => tipSpecs(s) match
+        case TipSpecification.Physical(p) if p != extraP(s) => 3*unitWidth
+        case _ => 0)
+    val extraWidth = extraWidths.left + extraWidths.right
+    val (firsts, rests) = subdiagrams.splitAt(1)
+    val (mids, lasts) = rests.splitAt(rests.length - 1)
+    val minContent = ((firsts ++ lasts).map(_.minContent + markerWidth)
+                      ++ mids.map(_.minContent + 2*markerWidth)).max
+    val maxContent = ((firsts ++ lasts).map(_.maxContent + markerWidth)
+                      ++ mids.map(_.maxContent + 2*markerWidth)).max
 
 
   case class GlobalSequenceWrap(sw: SequenceWrap[GlobalWrap]) extends GlobalWrap:

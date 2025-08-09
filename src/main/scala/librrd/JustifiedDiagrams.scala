@@ -18,11 +18,15 @@ object JustifiedDiagrams:
             direction, polarity, properties, tipSpecs, numRows, classes, id) =>
           val width = targetWidth - bvc.extraWidth
           l.BlockVerticalConcatenation(rec(topSubdiagram, width), rec(bottomSubdiagram, width),
-            direction, polarity, tipSpecs, numRows, bvc.extraWidth, classes, id)
+            direction, polarity, tipSpecs, numRows, bvc.extraWidths, classes, id)
         case ivc @ wd.InlineVerticalConcatenation[(wd.LocallyWrappedDiagram | wd.GlobalWrap)]
             (subdiagrams, direction, properties, tipSpecs, numRows, classes, id) =>
-          l.InlineVerticalConcatenation(subdiagrams.map(s => rec(s, targetWidth - ivc.extraWidth)),
-            properties.get(LayoutStylesheets.ContinuationMarker), tipSpecs, numRows, ivc.extraWidth,
+          val width = targetWidth - ivc.extraWidth
+          l.InlineVerticalConcatenation(
+            ivc.firsts.map(s => rec(s, width - ivc.markerWidth))
+            ++ ivc.mids.map(s => rec(s, width - 2*ivc.markerWidth))
+            ++ ivc.lasts.map(s => rec(s, width - ivc.markerWidth)),
+            properties.get(LayoutStylesheets.ContinuationMarker), tipSpecs, numRows, ivc.extraWidths,
             classes, id)
         case gwd @ wd.GloballyWrappedDiagram(direction, properties, numRows, options) =>
           rec(gwd.bestUnder(targetWidth), targetWidth)

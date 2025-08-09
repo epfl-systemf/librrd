@@ -42,58 +42,112 @@ object LayoutsSVG extends Layouts[Tag]:
         hc.sublayouts.zip(hc.subXs.zip(hc.subYs)).map{ case (sub, (subX, subY)) =>
           g(render(sub), transform:=s"translate($subX,$subY)")
         }
-      case ivc: InlineVerticalConcatenation =>
-        ???
+
+      case ivc @ InlineVerticalConcatenation(sublayouts, marker, tipSpecs, _, extraWidths, _, _) =>
+        val (firsts, rests) = sublayouts.splitAt(1)
+        val (mids, lasts) = rests.splitAt(rests.length - 1)
+        val (first, last) = (firsts(0), lasts(0))
+        val offsets = mids.scanLeft(first.height + Layout.rowGap)
+          ((offset, sub) => offset + sub.height + Layout.rowGap)
+        val padding = InlineVerticalConcatenation.markerPadding
+
+        val inners =
+          g(
+            render(first),
+            text(
+              marker,
+              x:=(ivc.direction match { case Direction.LTR => first.width; case Direction.RTL => 0 })
+                + padding, y:=first.tipY(ivc.endSide)),
+            transform:=s"translate(${extraWidths.left},0)"
+          )
+          +: mids.zip(offsets).map((mid, offset) =>
+            g(
+              text(marker, x:=padding, y:=mid.tipY(Side.Left)),
+              g(render(mid), transform:=s"translate(${ivc.markerWidth},0)"),
+              text(marker, x:=mid.width + 3*padding, y:=mid.tipY(Side.Right)),
+              transform:=s"translate(${extraWidths.left},$offset)"
+            ))
+          :+ g(
+            text(
+              marker,
+              x:=(ivc.direction match { case Direction.LTR => 0; case Direction.RTL => last.width })
+                + padding,
+              y:=last.tipY(ivc.startSide)
+            ),
+            render(last),
+            transform:=s"translate(${extraWidths.left},${offsets.last})"
+          )
+
+        // TODO: non-default physical tips
+        inners
+
       case bvc @ BlockVerticalConcatenation(
           topSublayout, bottomSublayout, direction, polarity, tipSpecs, numRows, _, _, _) =>
         import TipSpecification.*
-        val leftExtraWidth = (tipSpecs(Side.Left), polarity) match
-          case (Vertical, Polarity.+) => 0
-          case (Vertical | Logical(1) | Physical(0), Polarity.-) => 2 * Layout.unitWidth
-          case _ => 3 * Layout.unitWidth
+        val leftExtraWidth = bvc.extraWidths.left
 
         val unitWidth = Layout.unitWidth
         val radius = 2*unitWidth
-        val brackets = polarity match
-          case Polarity.+ =>
-            List((Side.Left, leftExtraWidth, +1),
-                 (Side.Right, leftExtraWidth + topSublayout.width, -1))
-              .map((side, x, sign) =>
-                val topmostTipY = bvc.tipY(side, Physical(0))
-                val bottommostTipY = bvc.tipY(side, Physical(1))
-                val upwards: Int = -(sign - 1)/2
-                val downwards = 1 - upwards
+        val brackets = List((Side.Left, leftExtraWidth, +1),
+                            (Side.Right, leftExtraWidth + topSublayout.width, -1))
+          .flatMap((side, x, sign) =>
+            val upwards: Int = -(sign - 1)/2
+            val downwards = 1 - upwards
+            val tipY = bvc.tipY(side)
+            polarity match
+              case Polarity.+ => tipSpecs(side) match
+                case Vertical => List()
+                case _ =>
+                  val topmostTipY = bvc.tipY(side, Logical(1))
+                  val bottommostTipY = bvc.tipY(side, Logical(numRows(side)))
+                  def upPath(subTipY: Double) = path(d:=
+                    s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
+                    + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${-2*unitWidth} "
+                    + s"L $x,${subTipY + 2*unitWidth} "
+                    + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${-2*unitWidth}")
+                  def downPath(subTipY: Double) = path(d:=
+                    s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
+                    + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${2*unitWidth} "
+                    + s"L $x,${subTipY - 2*unitWidth} "
+                    + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${2*unitWidth}")
+                  val straightPath =
+                    path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},$tipY")
+
+                  val (ups, notUps) = (1 to numRows(side))
+                    .map(r => bvc.tipY(side, Logical(r)))
+                    .partition(_ <= tipY - 4*unitWidth)
+                  val (notUpDowns, downs) = notUps.partition(_ <= tipY + 4*unitWidth)
+                  val (straights, approxs) = notUpDowns.partition(_ ~= tipY)
+                  straights.map(_ => straightPath) ++ ups.map(upPath) ++ downs.map(downPath)
+
+              case Polarity.- =>
+                def topPath(subTipY: Double) = path(d:=
+                  s"M $x,${bvc.bottomOffset}  L $x,${subTipY + 2*unitWidth} "
+                  + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${-2*unitWidth}")
+                def bottomPath(subTipY: Double) = path(d:=
+                  s"M $x,${bvc.bottomOffset}  L $x,${subTipY - 2*unitWidth} "
+                  + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${2*unitWidth}")
+                val inners = (1 to topSublayout.numRows(side))
+                  .map(r => topPath(bvc.tipY(side, Logical(r))))
+                  ++ (1 to bottomSublayout.numRows(side))
+                  .map(r => bottomPath(bvc.bottomOffset + bvc.tipY(side, Logical(r))))
+                val outerPath = path(d:=
+                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
+                  + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${-2*unitWidth}")
+                val straight = path(d:=
+                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},$tipY")
+
                 tipSpecs(side) match
-                  case Vertical => List()
-
-                  case Physical(p) =>
-                    val tipY = bvc.tipY(side)
-                    val upPath = path(d:=
-                      s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
-                      + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${-2*unitWidth} "
-                      + s"L $x,${topmostTipY + 2*unitWidth} "
-                      + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${-2*unitWidth}")
-                    val downPath = path(d:=
-                      s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
-                      + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${2*unitWidth} "
-                      + s"L $x,${bottommostTipY - 2*unitWidth} "
-                      + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${2*unitWidth}")
-                    val straightPath =
-                      path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},$tipY")
-
-                    if p == 0 then List(downPath, straightPath)
-                    else if p == 1 then List(upPath, straightPath)
-                    else List(upPath, downPath)
-
-                  case Logical(r) => ???)
-          case Polarity.- => ???
-
-        
+                  case Vertical => inners
+                  case Physical(0) | Logical(1) =>
+                    if topSublayout.numRows(side) == 1 then straight +: inners
+                    else straight +: outerPath +: inners
+                  case _ => outerPath +: inners)
 
         List(
           g(render(topSublayout), transform:=s"translate($leftExtraWidth,0)"),
           g(render(bottomSublayout), transform:=s"translate($leftExtraWidth,${bvc.bottomOffset})")
-        )
+        ) ++ brackets
 
     val withGroup = inner
       :+ rect(x:=0, y:=0, svgWidth:=layout.width, svgHeight:=layout.height, `class`:="librrd-group")
