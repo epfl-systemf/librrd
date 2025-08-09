@@ -111,6 +111,14 @@ object AlignedDiagrams:
         case DirectedDiagrams.Sequence(subs, direction, properties, classes, id) =>
           val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
           val subdiagrams = subs.toVector
+          val tipSpecs = connectability.map(_ match
+            case Neither => properties.get(LayoutStylesheets.AlignItems) match
+              case AlignItemsPolicy.Top => Physical(0)
+              case AlignItemsPolicy.Center => Physical(0.5)
+              case AlignItemsPolicy.Bottom => Physical(1)
+              case AlignItemsPolicy.Baseline => /* doesn't matter */ Logical(1)
+            case _ => Vertical)
+
           val alignedSubdiagrams = subdiagrams.length match
             case 0 => Side.values.toList.flatMap(s =>
               if connectability(s) != Neither then Some(Space(direction)) else None)
@@ -122,33 +130,32 @@ object AlignedDiagrams:
               val (mids, lasts) = rest.splitAt(rest.length - 1)
               val (first, last) = (firsts(0), lasts(0))
 
+              val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
+              val extraConn = SidedProperty.apply[Connectable].tupled(direction.swap((Down, Up)))
+              val firstLastConn = SidedProperty.forEach(s => tipSpecs(s) match
+                case Physical(p) if p != extraP(s) => extraConn(s)
+                case _ => connectability(s))
+
               val alignedFirst =
                 if justifyContent.flush(Side.Left, direction) then
-                  rec(first, SidedProperty(connectability.left, Neither))
+                  rec(first, SidedProperty(firstLastConn(Side.Left), Neither))
                 else
                   maybeSurroundSpaces(
                     assertSingletonList(rec(first, SidedProperty(Neither, Neither))),
-                    SidedProperty(connectability.left != Neither, false))
+                    SidedProperty(firstLastConn(Side.Left) != Neither, false))
 
               val alignedLast =
                 if justifyContent.flush(Side.Right, direction) then
-                  rec(last, SidedProperty(Neither, connectability.right))
+                  rec(last, SidedProperty(Neither, firstLastConn(Side.Right)))
                 else
                   maybeSurroundSpaces(
                     assertSingletonList(rec(last, SidedProperty(Neither, Neither))),
-                    SidedProperty(false, connectability.right != Neither))
+                    SidedProperty(false, firstLastConn(Side.Right) != Neither))
 
               alignedFirst
               ++ mids.map(d => assertSingletonList(rec(d, SidedProperty(Neither, Neither))))
               ++ alignedLast
 
-          val tipSpecs = connectability.map(_ match
-            case Neither => properties.get(LayoutStylesheets.AlignItems) match
-              case AlignItemsPolicy.Top => Physical(0)
-              case AlignItemsPolicy.Center => Physical(0.5)
-              case AlignItemsPolicy.Bottom => Physical(1)
-              case AlignItemsPolicy.Baseline => /* doesn't matter */ Logical(1)
-            case _ => Vertical)
           List(Sequence(alignedSubdiagrams, direction, properties, tipSpecs, classes, id))
 
 
