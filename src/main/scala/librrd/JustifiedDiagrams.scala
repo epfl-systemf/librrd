@@ -38,26 +38,28 @@ object JustifiedDiagrams:
           val maybeSpaces = SidedProperty(subs.head, subs.last).map(_ match
             case sp: wd.Space => Some(rec(sp, sp.minContent))
             case _ => None)
+          val maybeSpacesWidth = Side.values.map(s => maybeSpaces(s).map(_.width).getOrElse(0.0)).sum
           val subdiagrams = subs.toVector
             .drop(if maybeSpaces.left.isDefined then 1 else 0)
             .dropRight(if maybeSpaces.right.isDefined then 1 else 0)
           val n = subdiagrams.length
           var absorbed = Math.max(0, (n-1)*MIN_GAP)
           val distributed = subdiagrams.map(_.minContent).toArray
-          var remaining = targetWidth - absorbed - distributed.sum
+          var remaining = targetWidth - absorbed - distributed.sum - maybeSpacesWidth
 
           val growth = subdiagrams.map(s => s.maxContent - s.minContent)
           val growthSum = growth.sum
           val maxGrowth = Math.min(remaining, growthSum)
-          distributed.indices.foreach { i => distributed(i) += maxGrowth * growth(i)/growthSum }
-          remaining -= maxGrowth
+          if growthSum > 0 then
+            distributed.indices.foreach { i => distributed(i) += maxGrowth * growth(i)/growthSum }
+            remaining -= maxGrowth
 
           val flexAbsorbed = properties.get(LayoutStylesheets.FlexAbsorb) * remaining
           absorbed += flexAbsorbed
           remaining -= flexAbsorbed
 
           val concatenations = subdiagrams.map(s =>
-            if (s.isInstanceOf[l.Station] || s.isInstanceOf[l.Space]) then None else Some(s))
+            if (s.isInstanceOf[wd.Station] || s.isInstanceOf[wd.Space]) then None else Some(s))
           if concatenations.forall(_.isEmpty)
           then
             absorbed += remaining
@@ -68,7 +70,8 @@ object JustifiedDiagrams:
               distributed(i) += remaining * concatMaxs(i).get / concatMaxsSum
             }
           remaining = 0
-          assert(absorbed + distributed.sum == targetWidth, "justification implementation error")
+          assert(absorbed + distributed.sum + maybeSpacesWidth == targetWidth,
+            "justification implementation error")
 
           val justificationRails = properties.get(LayoutStylesheets.JustifyContent)
             .distribute(absorbed, n, direction)
@@ -77,7 +80,7 @@ object JustifiedDiagrams:
           l.HorizontalConcatenation(
             maybeSpaces.left.toList
             ++ (justificationRails.head // one more than n
-                 +: justifiedSubdiagrams.zip(justificationRails).flatMap[l.Layout](_.toList))
+                 +: justifiedSubdiagrams.zip(justificationRails.tail).flatMap[l.Layout](_.toList))
             ++ maybeSpaces.right.toList,
             classes, id)
 

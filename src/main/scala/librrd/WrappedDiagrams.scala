@@ -143,14 +143,31 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       extends HasBestUnderWidth[SequenceWrap[LocallyWrappedDiagram]], LocallyWrappedDiagram:
 
     val options =
-      allPartitions(subdiagrams.toList).map[SequenceWrap[LocallyWrappedDiagram]](partition =>
+      val maybeSpaces = SidedProperty(subdiagrams.head, subdiagrams.last).map(_ match
+        case sp: Space => Some(sp); case _ => None)
+      val withoutSpaces = subdiagrams
+        .drop(if maybeSpaces.left.isDefined then 1 else 0)
+        .dropRight(if maybeSpaces.right.isDefined then 1 else 0)
+      allPartitions(withoutSpaces.toList).map[SequenceWrap[LocallyWrappedDiagram]](partition =>
         if partition.length == 1
-        then HorizontalConcatenation(partition(0), direction, properties, numRows, classes, id)
-        else InlineVerticalConcatenation(
-          direction.reverse(partition.map(rowSubs =>
-            HorizontalConcatenation(rowSubs, direction, properties, NumRows(1, 1), classes, id))),
-          direction, properties, tipSpecs,
-          NumRows.apply.tupled(direction.swap((numRows.left, numRows.right))), classes, id))
+        then HorizontalConcatenation(
+          maybeSpaces.left.toList ++ partition(0) ++ maybeSpaces.right.toList,
+          direction, properties, numRows, classes, id)
+        else
+          val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
+          val extraSpaces = SidedProperty.forEach(s => tipSpecs(s) match
+            case TipSpecification.Physical(p) if p != extraP(s) =>
+              Some(Space(direction, NumRows(1, 1)))
+            case _ => maybeSpaces(s))
+          val (firsts, rests) = partition.splitAt(1)
+          val (mids, lasts) = rests.splitAt(rests.length - 1)
+          val withSpaces = (extraSpaces.left.toList ++ firsts(0))
+            +: mids :+ (lasts(0) ++ extraSpaces.right.toList)
+          InlineVerticalConcatenation(
+            direction.reverse(withSpaces.map(rowSubs =>
+              HorizontalConcatenation(rowSubs, direction, properties, NumRows(1, 1), classes, id))),
+            direction, properties, tipSpecs,
+            NumRows.apply.tupled(direction.swap((numRows.left, numRows.right))), classes, id))
 
     def allPartitions[T](l: List[T]): Vector[List[List[T]]] =
       l match

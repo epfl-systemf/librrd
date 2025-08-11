@@ -130,27 +130,21 @@ object AlignedDiagrams:
               val (mids, lasts) = rest.splitAt(rest.length - 1)
               val (first, last) = (firsts(0), lasts(0))
 
-              val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
-              val extraConn = SidedProperty.apply[Connectable].tupled(direction.swap((Down, Up)))
-              val firstLastConn = SidedProperty.forEach(s => tipSpecs(s) match
-                case Physical(p) if p != extraP(s) => extraConn(s)
-                case _ => connectability(s))
-
               val alignedFirst =
                 if justifyContent.flush(Side.Left, direction) then
-                  rec(first, SidedProperty(firstLastConn(Side.Left), Neither))
+                  rec(first, SidedProperty(connectability(Side.Left), Neither))
                 else
                   maybeSurroundSpaces(
                     assertSingletonList(rec(first, SidedProperty(Neither, Neither))),
-                    SidedProperty(firstLastConn(Side.Left) != Neither, false))
+                    SidedProperty(connectability(Side.Left) != Neither, false))
 
               val alignedLast =
                 if justifyContent.flush(Side.Right, direction) then
-                  rec(last, SidedProperty(Neither, firstLastConn(Side.Right)))
+                  rec(last, SidedProperty(Neither, connectability(Side.Right)))
                 else
                   maybeSurroundSpaces(
                     assertSingletonList(rec(last, SidedProperty(Neither, Neither))),
-                    SidedProperty(false, firstLastConn(Side.Right) != Neither))
+                    SidedProperty(false, connectability(Side.Right) != Neither))
 
               alignedFirst
               ++ mids.map(d => assertSingletonList(rec(d, SidedProperty(Neither, Neither))))
@@ -184,7 +178,7 @@ object AlignedDiagrams:
           maybeSurroundSpaces(
             BlockVerticalConcatenation(
               alignedTop, alignedBottom, direction, polarity, properties, tipSpecs, classes, id),
-            tipSpecs.map(_ != Vertical))
+            SidedProperty.forEach(s => connectability(s) != Neither && tipSpecs(s) != Vertical))
 
 
     assertSingletonList(rec(diagram, SidedProperty(Neither, Neither)))

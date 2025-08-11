@@ -181,9 +181,9 @@ trait Layouts[T]:
 
     val markerWidth = measure(marker)._1 + 2*InlineVerticalConcatenation.markerPadding
     val width = sublayouts.head.width + markerWidth + extraWidths.left + extraWidths.right
-    assert(sublayouts.head.width == sublayouts.last.width,
+    assert(sublayouts.head.width ~= sublayouts.last.width,
       "first and last sublayout of inline vertical concatenation must have same width")
-    assert(sublayouts.drop(1).dropRight(1).forall(_.width + 2*markerWidth == width),
+    assert(sublayouts.drop(1).dropRight(1).forall(_.width + 2*markerWidth ~= width),
       "middle sublayouts of inline vertical concatenation must all have width "
       + "equal to the first minus the marker width")
 
@@ -219,8 +219,9 @@ trait Layouts[T]:
     val classes = initClasses + BlockVerticalConcatenation.`class`
     val id = initId.getOrElse(freshID())
 
-    assert(topSublayout.width == bottomSublayout.width,
-      "top and bottom sublayouts of block vertical concatenation must have same width")
+    assert(topSublayout.width ~= bottomSublayout.width,
+      "top and bottom sublayouts of block vertical concatenation must have same width " +
+      s"${topSublayout.width} ${bottomSublayout.width}")
     val width = topSublayout.width + extraWidths.left + extraWidths.right
 
     assert(topSublayout.direction == (polarity match
