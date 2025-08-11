@@ -2,6 +2,7 @@ package librrd
 
 import org.scalajs.dom
 import org.scalajs.dom.document
+import scalatags.JsDom.Tag
 
 object UI:
   lazy val outputCanvas = document.getElementById("output-canvas")
@@ -56,13 +57,27 @@ object UI:
     InputPresetState(InputsPresets.Layout, reLayOut).register()
     InputPresetState(InputsPresets.Rendering, reRender).register()
 
+  given WrappedDiagrams[Tag] = WrappedDiagrams(LayoutsSVG)
+
+  def getStylesheet: LayoutStylesheets.Stylesheet =
+    LayoutStylesheets.Stylesheet(Seq())
+
+  def getDiagram: Diagrams.Diagram =
+    Diagrams.Sequence(Seq(
+      Diagrams.Stack(
+        Diagrams.TerminalToken("railroad"),
+        Diagrams.TerminalToken("syntax"),
+        Polarity.+),
+      Diagrams.NonterminalToken("diagram")))
+
   def reLayOut(): Unit =
-    import LayoutsSVG.*
-    val l1 = Station("hello", false, Direction.LTR)
-    val l2 = Station("world", false, Direction.LTR)
-    val l3 = Station("!", true, Direction.LTR)
-    val l4 = HorizontalConcatenation(Seq(l1, l2, l3))
-    outputCanvas.appendChild(render(l4).render)
+    val myParameterizedDiagram = ParameterizedDiagrams.parameterize(getDiagram, getStylesheet)
+    val myDirectedDiagram = DirectedDiagrams.direct(myParameterizedDiagram)
+    val myAlignedDiagram = AlignedDiagrams.align(myDirectedDiagram)
+    val myWrappedDiagram = summon[WrappedDiagrams[Tag]].wrapLocally(myAlignedDiagram)
+    val myLayout = JustifiedDiagrams.justify(myWrappedDiagram, 500)
+    val myRendering = summon[WrappedDiagrams[Tag]].backend.render(myLayout)
+    outputCanvas.appendChild(myRendering.render)
     println("relaidout")
 
   lazy val customStyleElement = document.getElementById("custom-style")
