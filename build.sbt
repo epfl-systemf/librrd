@@ -12,6 +12,12 @@ lazy val root = project.in(file("."))
     name := "librrd",
     scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
+    scalacOptions ++= Seq(
+      s"-scalajs-mapSourceURI:file://${baseDirectory.value}->/",
+      "-Ysafe-init",
+      "-Wunused:all",
+      "-Wvalue-discard",
+    ),
 
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-dom" % "2.8.0",
