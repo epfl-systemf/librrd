@@ -5,7 +5,7 @@ import scalatags.JsDom.all.*
 import scalatags.JsDom.svgTags.*
 import scalatags.JsDom.svgAttrs.width as svgWidth
 import scalatags.JsDom.svgAttrs.height as svgHeight
-import scalatags.JsDom.svgAttrs.{cx, cy, r, x, y, radius, x1, x2, y1, y2, d, rx, ry, style, transform}
+import scalatags.JsDom.svgAttrs.{x, y, x1, x2, y1, y2, d, transform}
 
 object LayoutsSVG extends Layouts[Tag]:
 

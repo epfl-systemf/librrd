@@ -44,7 +44,7 @@ trait Layouts[T]:
       tipYInner(s, ts)
 
     def tipYInner(s: Side, ts: TipSpecification): Double
-    val tipY: SidedProperty[Double] = SidedProperty.forEach(s => tipY(s, tipSpecs(s)))
+    lazy val tipY: SidedProperty[Double] = SidedProperty.forEach(s => tipY(s, tipSpecs(s)))
 
   object Layout:
     val unitWidth = 4.0
@@ -152,7 +152,7 @@ trait Layouts[T]:
         case Right => sublayouts.last)
       .tipY(s, ts)
 
-    override val tipY = SidedProperty(leftTipY, rightTipY)
+    override lazy val tipY = SidedProperty(leftTipY, rightTipY)
 
 
   object InlineVerticalConcatenation:
