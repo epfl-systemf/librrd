@@ -79,12 +79,12 @@ object LayoutsSVG extends Layouts[Tag]:
             transform:=s"translate(${extraWidths.left},${offsets.last})"
           )
 
+        val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
         val brackets = List((Side.Left, extraWidths.left, +1),
                             (Side.Right, extraWidths.left + first.width + ivc.markerWidth, -1))
           .flatMap((side, x, sign) =>
             val upwards: Int = -(sign - 1)/2
             val downwards = 1 - upwards
-            val extraP = SidedProperty.apply.tupled(direction.swap((upwards, downwards)))
             val tipY = ivc.tipY(side)
             tipSpecs(side) match
               case TipSpecification.Physical(p) if p != extraP(side) =>
@@ -158,10 +158,10 @@ object LayoutsSVG extends Layouts[Tag]:
                   ++ (1 to bottomSublayout.numRows(side))
                   .map(r => bottomPath(bvc.bottomOffset + bvc.tipY(side, Logical(r))))
                 val outerPath = path(d:=
-                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
+                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
                   + s"$quarterArc $upwards ${sign*2*unitWidth},${-2*unitWidth}")
                 val straight = path(d:=
-                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},$tipY")
+                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
 
                 tipSpecs(side) match
                   case Vertical => inners
