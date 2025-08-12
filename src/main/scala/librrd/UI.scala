@@ -58,9 +58,9 @@ object UI:
         customTypingState()
       })
 
-  class ResizeState():
+  object ResizeState:
     var width = 500.0
-    private val debouncer = Debouncer(() => reLayOut(width), 10)
+    private val debouncer = Debouncer(() => reLayOut, 10)
 
     def register(): Unit =
       dom.ResizeObserver{ (entries, o) =>
@@ -76,10 +76,9 @@ object UI:
       }.observe(document.getElementById("output"))
 
   def registerInputs(): Unit =
-    val resize = ResizeState()
-    resize.register()
-    InputPresetState(InputsPresets.Diagram, () => reLayOut(resize.width)).register(true)
-    InputPresetState(InputsPresets.Layout, () => reLayOut(resize.width)).register(true)
+    ResizeState.register()
+    InputPresetState(InputsPresets.Diagram, () => reLayOut).register(true)
+    InputPresetState(InputsPresets.Layout, () => reLayOut).register(true)
     InputPresetState(InputsPresets.Rendering, reRender).register()
 
   given WrappedDiagrams[Tag] = WrappedDiagrams(LayoutsSVG)
@@ -108,12 +107,12 @@ object UI:
     DiagramParser(InputsPresets.Diagram.input.value)
 
   var oldSVG: Option[org.scalajs.dom.Node] = None
-  def reLayOut(width: Double): Unit =
+  def reLayOut: Unit =
     val myParameterizedDiagram = ParameterizedDiagrams.parameterize(getDiagram, getStylesheet)
     val myDirectedDiagram = DirectedDiagrams.direct(myParameterizedDiagram)
     val myAlignedDiagram = AlignedDiagrams.align(myDirectedDiagram)
     val myWrappedDiagram = summon[WrappedDiagrams[Tag]].wrapLocally(myAlignedDiagram)
-    val myLayout = JustifiedDiagrams.justify(myWrappedDiagram, width)
+    val myLayout = JustifiedDiagrams.justify(myWrappedDiagram, ResizeState.width)
     val myRendering = summon[WrappedDiagrams[Tag]].backend.render(myLayout)
     val mySVG = myRendering.render
     if oldSVG.isDefined then
