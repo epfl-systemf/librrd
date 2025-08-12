@@ -1,9 +1,6 @@
-.librrd-rail, .librrd-station rect {
+.librrd-rail, .librrd-station rect, path {
     stroke-width: 1px;
     stroke: black;
-}
-
-.librrd-station rect {
     fill: none;
 }
 

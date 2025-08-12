@@ -5,7 +5,7 @@ import scalatags.JsDom.all.*
 import scalatags.JsDom.svgTags.*
 import scalatags.JsDom.svgAttrs.width as svgWidth
 import scalatags.JsDom.svgAttrs.height as svgHeight
-import scalatags.JsDom.svgAttrs.{x, y, x1, x2, y1, y2, d, transform}
+import scalatags.JsDom.svgAttrs.{x, y, x1, x2, y1, y2, rx, ry, d, transform}
 
 object LayoutsSVG extends Layouts[Tag]:
 
@@ -16,6 +16,7 @@ object LayoutsSVG extends Layouts[Tag]:
     elem.style.setProperty("fill", "black")
     document.getElementById("output-canvas").appendChild(elem)
     elem
+  val baselineCorrection = -2.0
 
   override def measure(text: String) =
     textMetricsElement.textContent = text
@@ -24,6 +25,7 @@ object LayoutsSVG extends Layouts[Tag]:
 
   val unitWidth = Layout.unitWidth
   val radius = 2*unitWidth
+  val quarterArc = s"a $radius,$radius 90 0"
 
   override def render(layout: Layout) =
     val inner = layout match
@@ -32,10 +34,12 @@ object LayoutsSVG extends Layouts[Tag]:
       case station: Station =>
         val width = station.width
         val height = station.height
+        val rounded = if station.isTerminal then 0 else radius
         List(
-          rect(x:=Station.paddingX, y:=0,
+          rect(x:=Station.paddingX, y:=0, rx:=rounded, ry:=rounded,
                svgWidth:=width - 2*Station.paddingX, svgHeight:=height),
-          text(station.label, x:=2*Station.paddingX, y:=height - Station.paddingY),
+          text(station.label, x:=2*Station.paddingX,
+               y:=height - Station.paddingY + baselineCorrection),
           line(x1:=0, y1:=height/2, x2:=Station.paddingX, y2:=height/2,
                `class`:=Rail.`class`),
           line(x1:=width - Station.paddingX, y1:=height/2, x2:=width, y2:=height/2,
@@ -52,15 +56,14 @@ object LayoutsSVG extends Layouts[Tag]:
           ((offset, sub) => offset + sub.height + Layout.rowGap)
         val padding = InlineVerticalConcatenation.markerPadding
         val direction = ivc.direction
+        val (firstMarkerX, firstX, lastMarkerX, lastX) = direction match
+          case Direction.LTR => (first.width, 0.0, 0.0, ivc.markerWidth)
+          case Direction.RTL => (0.0, ivc.markerWidth, last.width, 0.0)
 
         val inners =
           g(
-            render(first),
-            text(
-              marker,
-              x:=(direction match { case Direction.LTR => first.width; case Direction.RTL => 0 })
-                + padding,
-              y:=first.tipY(ivc.endSide)),
+            g(render(first), transform:=s"translate($firstX,0)"),
+            text(marker, x:=firstMarkerX + padding, y:=first.tipY(ivc.endSide)),
             transform:=s"translate(${extraWidths.left},0)"
           )
           +: mids.zip(offsets).map((mid, offset) =>
@@ -71,12 +74,8 @@ object LayoutsSVG extends Layouts[Tag]:
               transform:=s"translate(${extraWidths.left},$offset)"
             ))
           :+ g(
-            text(
-              marker,
-              x:=(direction match { case Direction.LTR => 0; case Direction.RTL => last.width })
-                + padding,
-              y:=last.tipY(ivc.startSide)),
-            render(last),
+            text(marker, x:=lastMarkerX + padding, y:=last.tipY(ivc.startSide)),
+            g(render(last), transform:=s"translate($lastX,0)"),
             transform:=s"translate(${extraWidths.left},${offsets.last})"
           )
 
@@ -90,17 +89,17 @@ object LayoutsSVG extends Layouts[Tag]:
             tipSpecs(side) match
               case TipSpecification.Physical(p) if p != extraP(side) =>
                 def upPath(subTipY: Double) = path(d:=
-                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
-                  + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${-2*unitWidth} "
+                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
+                  + s"$quarterArc $upwards ${sign*2*unitWidth},${-2*unitWidth} "
                   + s"L $x,${subTipY + 2*unitWidth} "
-                  + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${-2*unitWidth}")
+                  + s"$quarterArc $downwards ${sign*2*unitWidth},${-2*unitWidth}")
                 def downPath(subTipY: Double) = path(d:=
-                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
-                  + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${2*unitWidth} "
+                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
+                  + s"$quarterArc $downwards ${sign*2*unitWidth},${2*unitWidth} "
                   + s"L $x,${subTipY - 2*unitWidth} "
-                  + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${2*unitWidth}")
+                  + s"$quarterArc $upwards ${sign*2*unitWidth},${2*unitWidth}")
                 val straightPath =
-                  path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},$tipY")
+                  path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
 
                 val (ups, notUps) = (1 to numRows(side))
                   .map(r => ivc.tipY(side, TipSpecification.Logical(r)))
@@ -128,19 +127,19 @@ object LayoutsSVG extends Layouts[Tag]:
                 case Vertical => List()
                 case _ =>
                   def upPath(subTipY: Double) = path(d:=
-                    s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
-                    + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${-2*unitWidth} "
+                    s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
+                    + s"$quarterArc $upwards ${sign*2*unitWidth},${-2*unitWidth} "
                     + s"L $x,${subTipY + 2*unitWidth} "
-                    + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${-2*unitWidth}")
+                    + s"$quarterArc $downwards ${sign*2*unitWidth},${-2*unitWidth}")
                   def downPath(subTipY: Double) = path(d:=
-                    s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
-                    + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${2*unitWidth} "
+                    s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
+                    + s"$quarterArc $downwards ${sign*2*unitWidth},${2*unitWidth} "
                     + s"L $x,${subTipY - 2*unitWidth} "
-                    + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${2*unitWidth}")
+                    + s"$quarterArc $upwards ${sign*2*unitWidth},${2*unitWidth}")
                   val straightPath =
-                    path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},$tipY")
+                    path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
 
-                  val (ups, notUps) = (1 to numRows(side))
+                  val (ups, notUps) = (1 to (topSublayout.numRows(side) + bottomSublayout.numRows(side)))
                     .map(r => bvc.tipY(side, Logical(r)))
                     .partition(_ <= tipY - 4*unitWidth)
                   val (notUpDowns, downs) = notUps.partition(_ <= tipY + 4*unitWidth)
@@ -150,17 +149,17 @@ object LayoutsSVG extends Layouts[Tag]:
               case Polarity.- =>
                 def topPath(subTipY: Double) = path(d:=
                   s"M $x,${bvc.bottomOffset}  L $x,${subTipY + 2*unitWidth} "
-                  + s"a $radius,$radius 0 $downwards ${sign*2*unitWidth},${-2*unitWidth}")
+                  + s"$quarterArc $downwards ${sign*2*unitWidth},${-2*unitWidth}")
                 def bottomPath(subTipY: Double) = path(d:=
                   s"M $x,${bvc.bottomOffset}  L $x,${subTipY - 2*unitWidth} "
-                  + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${2*unitWidth}")
+                  + s"$quarterArc $upwards ${sign*2*unitWidth},${2*unitWidth}")
                 val inners = (1 to topSublayout.numRows(side))
                   .map(r => topPath(bvc.tipY(side, Logical(r))))
                   ++ (1 to bottomSublayout.numRows(side))
                   .map(r => bottomPath(bvc.bottomOffset + bvc.tipY(side, Logical(r))))
                 val outerPath = path(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},$tipY "
-                  + s"a $radius,$radius 0 $upwards ${sign*2*unitWidth},${-2*unitWidth}")
+                  + s"$quarterArc $upwards ${sign*2*unitWidth},${-2*unitWidth}")
                 val straight = path(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},$tipY")
 

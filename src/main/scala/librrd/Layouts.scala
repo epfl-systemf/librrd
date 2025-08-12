@@ -37,10 +37,7 @@ trait Layouts[T]:
         case Physical(p) =>
           assert(0 <= p && p <= 1,
             "if tip specification is physical, proportion must be between 0 and 1")
-        case Logical(r) =>
-          assert(1 <= r && r <= numRows(s),
-            "if tip specification is logical, row number must be between 1 and "
-            + "number of rows")
+        case Logical(r) => ()
       tipYInner(s, ts)
 
     def tipYInner(s: Side, ts: TipSpecification): Double
@@ -104,9 +101,9 @@ trait Layouts[T]:
     val height = textHeight + 2*Station.paddingY
 
     val classes = initClasses
-    val id = initId.getOrElse(freshID())
       + Station.`class`
       + (if isTerminal then Station.terminalClass else Station.nonterminalClass)
+    val id = initId.getOrElse(freshID())
 
     def tipYInner(s: Side, ts: TipSpecification) = height/2
 
@@ -140,17 +137,16 @@ trait Layouts[T]:
         case (rty, h, widths) => (rty, h, widths.tail.reverse, widths.head)
 
     val (leftTipY, subYs) =
-      sublayouts.foldRight((rightTipY, List(0.0))){ (sub, acc) => acc match
+      sublayouts.foldRight((rightTipY, List.empty[Double])){ (sub, acc) => acc match
         case (prevLeftTipY, prevYs) =>
           val subY = prevLeftTipY - sub.tipY(Right)
           (subY + sub.tipY(Left), subY :: prevYs)
       }
 
     def tipYInner(s: Side, ts: TipSpecification) =
-      (s match
-        case Left => sublayouts.head
-        case Right => sublayouts.last)
-      .tipY(s, ts)
+      s match
+        case Left => subYs.head + sublayouts.head.tipY(s, ts)
+        case Right => subYs.last + sublayouts.last.tipY(s, ts)
 
     override lazy val tipY = SidedProperty(leftTipY, rightTipY)
 
