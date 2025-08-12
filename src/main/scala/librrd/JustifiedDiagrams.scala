@@ -78,10 +78,11 @@ object JustifiedDiagrams:
             .map(w => l.Rail(w, direction))
           val justifiedSubdiagrams = subdiagrams.zip(distributed).map(rec.tupled)
           l.HorizontalConcatenation(
-            maybeSpaces.left.toList
-            ++ (justificationRails.head // one more than n
+            (maybeSpaces.left.toList
+             ++ (justificationRails.head // one more than n
                  +: justifiedSubdiagrams.zip(justificationRails.tail).flatMap[l.Layout](_.toList))
-            ++ maybeSpaces.right.toList,
+             ++ maybeSpaces.right.toList)
+             .filterNot(_.width == 0),
             classes, id)
 
     rec(diagram, targetWidth)
