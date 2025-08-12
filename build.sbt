@@ -22,6 +22,7 @@ lazy val root = project.in(file("."))
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-dom" % "2.8.0",
       "com.lihaoyi" %%% "scalatags" % "0.13.1",
+      "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.4.0",
     ),
 
     Compile / deploy := {

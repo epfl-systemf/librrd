@@ -3,6 +3,7 @@ package librrd
 import org.scalajs.dom
 import org.scalajs.dom.document
 import scalatags.JsDom.Tag
+import util.parsing.combinator.RegexParsers
 
 object UI:
   lazy val outputCanvas = document.getElementById("output-canvas")
@@ -86,13 +87,25 @@ object UI:
   def getStylesheet: LayoutStylesheets.Stylesheet =
     LayoutStylesheets.Stylesheet(Seq())
 
+  object DiagramParser extends RegexParsers:
+    import Diagrams.*
+    def diagram: Parser[Diagram] = terminal | nonterminal | sequence | stack
+    def terminal: Parser[TerminalToken] =
+      (("\"" ~> """[^"]+""".r <~ "\"") | ("\'" ~> """[^']+""".r <~ "\'")) ^^ (l => TerminalToken(l))
+    def nonterminal: Parser[NonterminalToken] =
+      "[" ~> """[^\]]+""".r <~ "]" ^^ (l => NonterminalToken(l))
+    def sequence: Parser[Sequence] = "(" ~> diagram.* <~ ")" ^^ (ds => Sequence(ds))
+    def polarity: Parser[Polarity] = ("+" | "-") ^^ { case "+" => Polarity.+; case "-" => Polarity.- }
+    def stack: Parser[Stack] = "(" ~> polarity ~ diagram ~ diagram <~ ")" ^^ {
+      case pol ~ top ~ bot => Stack(top, bot, pol) }
+
+    def apply(input: String) = parseAll(diagram, input) match
+      case Success(result, _) => result
+      case e: NoSuccess => throw RuntimeException(e.msg)
+
+
   def getDiagram: Diagrams.Diagram =
-    Diagrams.Sequence(Seq(
-      Diagrams.Stack(
-        Diagrams.TerminalToken("railroad"),
-        Diagrams.TerminalToken("syntax"),
-        Polarity.+),
-      Diagrams.NonterminalToken("diagram")))
+    DiagramParser(InputsPresets.Diagram.input.value)
 
   var oldSVG: Option[org.scalajs.dom.Node] = None
   def reLayOut(width: Double): Unit =
