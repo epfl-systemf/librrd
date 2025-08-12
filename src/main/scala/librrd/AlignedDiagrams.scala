@@ -126,9 +126,7 @@ object AlignedDiagrams:
             case 1 => List(assertSingletonList(rec(subdiagrams(0), connectability)))
 
             case _ =>
-              val (firsts, rest) = subdiagrams.splitAt(1)
-              val (mids, lasts) = rest.splitAt(rest.length - 1)
-              val (first, last) = (firsts(0), lasts(0))
+              val (first, mids, last) = splitEnds(subdiagrams)
 
               val alignedFirst =
                 if justifyContent.flush(Side.Left, direction) then

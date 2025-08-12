@@ -40,6 +40,12 @@ def assertSingletonList[T](list: List[T]): T =
   assert(list.length == 1, "list must have exactly 1 element")
   list(0)
 
+def splitEnds[T](seq: Seq[T]): (T, Seq[T], T) =
+  val (firsts, rests) = seq.splitAt(1)
+  val (mids, lasts) = rests.splitAt(rests.length - 1)
+  (firsts(0), mids, lasts(0))
+
+
 val TOLERANCE = 0.0001
 extension (self: Double)
   def ~=(other: Double): Boolean =

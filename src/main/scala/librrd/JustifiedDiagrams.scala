@@ -21,9 +21,9 @@ object JustifiedDiagrams:
             (subdiagrams, direction, properties, tipSpecs, numRows, classes, id) =>
           val width = targetWidth - ivc.extraWidth
           l.InlineVerticalConcatenation(
-            ivc.firsts.map(s => rec(s, width - ivc.markerWidth))
-            ++ ivc.mids.map(s => rec(s, width - 2*ivc.markerWidth))
-            ++ ivc.lasts.map(s => rec(s, width - ivc.markerWidth)),
+            rec(ivc.first, width - ivc.markerWidth)
+            +: ivc.mids.map(s => rec(s, width - 2*ivc.markerWidth))
+            :+ rec(ivc.last, width - ivc.markerWidth),
             properties.get(LayoutStylesheets.ContinuationMarker), tipSpecs, numRows, ivc.extraWidths,
             classes, id)
         case gwd @ wd.GloballyWrappedDiagram(direction, properties, numRows, options) =>

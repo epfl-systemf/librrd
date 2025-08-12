@@ -47,9 +47,7 @@ object LayoutsSVG extends Layouts[Tag]:
         }
 
       case ivc @ InlineVerticalConcatenation(sublayouts, marker, tipSpecs, numRows, extraWidths, _, _) =>
-        val (firsts, rests) = sublayouts.splitAt(1)
-        val (mids, lasts) = rests.splitAt(rests.length - 1)
-        val (first, last) = (firsts(0), lasts(0))
+        val (first, mids, last) = splitEnds(sublayouts)
         val offsets = mids.scanLeft(first.height + Layout.rowGap)
           ((offset, sub) => offset + sub.height + Layout.rowGap)
         val padding = InlineVerticalConcatenation.markerPadding

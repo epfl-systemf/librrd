@@ -98,11 +98,10 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
         case TipSpecification.Physical(p) if p != extraP(s) => 3*unitWidth
         case _ => 0)
     val extraWidth = extraWidths.left + extraWidths.right
-    val (firsts, rests) = subdiagrams.splitAt(1)
-    val (mids, lasts) = rests.splitAt(rests.length - 1)
-    val minContent = ((firsts ++ lasts).map(_.minContent + markerWidth)
+    val (first, mids, last) = splitEnds(subdiagrams)
+    val minContent = (List(first, last).map(_.minContent + markerWidth)
                       ++ mids.map(_.minContent + 2*markerWidth)).max
-    val maxContent = ((firsts ++ lasts).map(_.maxContent + markerWidth)
+    val maxContent = (List(first, last).map(_.maxContent + markerWidth)
                       ++ mids.map(_.maxContent + 2*markerWidth)).max
 
 
@@ -159,10 +158,9 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
             case TipSpecification.Physical(p) if p != extraP(s) =>
               Some(Space(direction, NumRows(1, 1)))
             case _ => maybeSpaces(s))
-          val (firsts, rests) = partition.splitAt(1)
-          val (mids, lasts) = rests.splitAt(rests.length - 1)
-          val withSpaces = (extraSpaces.left.toList ++ firsts(0))
-            +: mids :+ (lasts(0) ++ extraSpaces.right.toList)
+          val (first, mids, last) = splitEnds(partition)
+          val withSpaces = (extraSpaces.left.toList ++ first)
+            +: mids :+ (last ++ extraSpaces.right.toList)
           InlineVerticalConcatenation(
             direction.reverse(withSpaces.map(rowSubs =>
               HorizontalConcatenation(rowSubs, direction, properties, NumRows(1, 1), classes, id))),
