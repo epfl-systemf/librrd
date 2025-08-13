@@ -3,29 +3,9 @@ package librrd
 import org.scalajs.dom
 import org.scalajs.dom.document
 import scalatags.JsDom.Tag
-import util.parsing.combinator.RegexParsers
 
 object UI:
   lazy val outputCanvas = document.getElementById("output-canvas")
-
-  val customPreset = "custom…"
-  enum InputsPresets(val inputID: String, val presetID: String, val presets: Map[String, String]):
-    val input = document.getElementById(inputID).asInstanceOf[dom.HTMLTextAreaElement]
-    val preset = document.getElementById(presetID).asInstanceOf[dom.HTMLSelectElement]
-    case Diagram extends InputsPresets(
-      "diagram-input",
-      "diagram-preset",
-      Map("JSON list" -> "(\"[\" (+ () (- \"[token]\" \",\")) \"]\")"))
-    case Layout extends InputsPresets(
-      "layout-input",
-      "layout-preset",
-      Map("JSON" -> "foo"))
-    case Rendering extends InputsPresets(
-      "rendering-input",
-      "rendering-preset",
-      Map(
-        "JSON" -> "foo",
-        "default" -> "@import url(librrd-default.css);"))
 
   class Debouncer(private val action: () => Unit, val timeout: Int):
     private var timer: Option[Int] = None
@@ -33,34 +13,77 @@ object UI:
       timer.foreach(dom.window.clearTimeout(_))
       timer = Some(dom.window.setTimeout(() => action(), timeout))
 
-  class InputPresetState(val ip: InputsPresets, val onDone: () => Unit):
+  val customPreset = "custom…"
+  enum InputsPresets[T](
+      val inputID: String,
+      val presetID: String,
+      val presets: Map[String, String],
+      val parser: InputParser[T],
+      val onDone: () => Unit):
+    val input = document.getElementById(inputID).asInstanceOf[dom.HTMLTextAreaElement]
+    val preset = document.getElementById(presetID).asInstanceOf[dom.HTMLSelectElement]
+
+    case Diagram extends InputsPresets(
+      "diagram-input",
+      "diagram-preset",
+      Map("JSON list" -> "(\"[\" (+ () (- [token] \",\")) \"]\")"),
+      DiagramParser,
+      reLayOut)
+
+    case LayoutStylesheet extends InputsPresets(
+      "layout-input",
+      "layout-preset",
+      Map("JSON" -> "foo"),
+      StylesheetParser,
+      reLayOut)
+
+    case RenderingStylesheet extends InputsPresets(
+      "rendering-input",
+      "rendering-preset",
+      Map(
+        "JSON" -> "foo",
+        "default" -> "@import url(librrd-default.css);"),
+      IdentityParser,
+      reRender)
+
     private def presetState(suppressDone: Boolean = false): Unit =
-      ip.presets.get(ip.preset.value).foreach{ ip.input.value = _ }
+      if preset.value != customPreset then
+        input.value = presets.get(preset.value).get
+        input.setCustomValidity("")
+        input.reportValidity(): Unit
       if !suppressDone then onDone()
 
     private val debouncer = Debouncer(() => customDoneState(), 500)
     private def customTypingState(): Unit =
-      debouncer.trigger()
+      parser(input.value) match
+        case util.Success(_) =>
+          debouncer.trigger()
+          input.setCustomValidity("")
+        case util.Failure(exception) =>
+          input.setCustomValidity(exception.getMessage())
+      input.reportValidity(): Unit
 
     private def customDoneState(): Unit = onDone()
 
+    def get: T = parser(input.value).get
+
     def register(suppressInitialDone: Boolean = false): Unit =
       presetState(suppressInitialDone)
-      ip.preset.addEventListener("change", (event) => {
-        if ip.preset.value == customPreset then
-          ip.input.value = ""
+      preset.addEventListener("change", (event) => {
+        if preset.value == customPreset then
+          input.value = ""
           customDoneState()
         else
           presetState()
       })
-      ip.input.addEventListener("input", (event) => {
-        ip.preset.value = customPreset
+      input.addEventListener("input", (event) => {
+        preset.value = customPreset
         customTypingState()
       })
 
   object ResizeState:
     var width = 500.0
-    private val debouncer = Debouncer(() => reLayOut, 10)
+    private val debouncer = Debouncer(reLayOut, 10)
 
     def register(): Unit =
       dom.ResizeObserver{ (entries, o) =>
@@ -77,38 +100,16 @@ object UI:
 
   def registerInputs(): Unit =
     ResizeState.register()
-    InputPresetState(InputsPresets.Diagram, () => reLayOut).register(true)
-    InputPresetState(InputsPresets.Layout, () => reLayOut).register(true)
-    InputPresetState(InputsPresets.Rendering, reRender).register()
+    InputsPresets.Diagram.register(true)
+    InputsPresets.LayoutStylesheet.register(true)
+    InputsPresets.RenderingStylesheet.register()
 
   given WrappedDiagrams[Tag] = WrappedDiagrams(LayoutsSVG)
 
-  def getStylesheet: LayoutStylesheets.Stylesheet =
-    LayoutStylesheets.Stylesheet(Seq())
-
-  object DiagramParser extends RegexParsers:
-    import Diagrams.*
-    def diagram: Parser[Diagram] = terminal | nonterminal | sequence | stack
-    def terminal: Parser[TerminalToken] =
-      (("\"" ~> """[^"]+""".r <~ "\"") | ("\'" ~> """[^']+""".r <~ "\'")) ^^ (l => TerminalToken(l))
-    def nonterminal: Parser[NonterminalToken] =
-      "[" ~> """[^\]]+""".r <~ "]" ^^ (l => NonterminalToken(l))
-    def sequence: Parser[Sequence] = "(" ~> diagram.* <~ ")" ^^ (ds => Sequence(ds))
-    def polarity: Parser[Polarity] = ("+" | "-") ^^ { case "+" => Polarity.+; case "-" => Polarity.- }
-    def stack: Parser[Stack] = "(" ~> polarity ~ diagram ~ diagram <~ ")" ^^ {
-      case pol ~ top ~ bot => Stack(top, bot, pol) }
-
-    def apply(input: String) = parseAll(diagram, input) match
-      case Success(result, _) => result
-      case e: NoSuccess => throw RuntimeException(e.msg)
-
-
-  def getDiagram: Diagrams.Diagram =
-    DiagramParser(InputsPresets.Diagram.input.value)
-
   var oldSVG: Option[org.scalajs.dom.Node] = None
-  def reLayOut: Unit =
-    val myParameterizedDiagram = ParameterizedDiagrams.parameterize(getDiagram, getStylesheet)
+  def reLayOut(): Unit =
+    val myParameterizedDiagram = ParameterizedDiagrams.parameterize(
+      InputsPresets.Diagram.get, InputsPresets.LayoutStylesheet.get)
     val myDirectedDiagram = DirectedDiagrams.direct(myParameterizedDiagram)
     val myAlignedDiagram = AlignedDiagrams.align(myDirectedDiagram)
     val myWrappedDiagram = summon[WrappedDiagrams[Tag]].wrapLocally(myAlignedDiagram)
@@ -123,7 +124,7 @@ object UI:
 
   lazy val customStyleElement = document.getElementById("custom-style")
   def reRender(): Unit =
-    customStyleElement.innerHTML = InputsPresets.Rendering.input.value
+    customStyleElement.innerHTML = InputsPresets.RenderingStylesheet.get
 
   @main def main(): Unit =
     document.addEventListener("DOMContentLoaded", (event) => {
