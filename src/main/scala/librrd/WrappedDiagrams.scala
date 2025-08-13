@@ -100,9 +100,9 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     val extraWidth = extraWidths.left + extraWidths.right
     val (first, mids, last) = splitEnds(subdiagrams)
     val minContent = (List(first, last).map(_.minContent + markerWidth)
-                      ++ mids.map(_.minContent + 2*markerWidth)).max
+                      ++ mids.map(_.minContent + 2*markerWidth)).max + extraWidth
     val maxContent = (List(first, last).map(_.maxContent + markerWidth)
-                      ++ mids.map(_.maxContent + 2*markerWidth)).max
+                      ++ mids.map(_.maxContent + 2*markerWidth)).max + extraWidth
 
 
   case class GlobalSequenceWrap(sw: SequenceWrap[GlobalWrap]) extends GlobalWrap:
@@ -142,11 +142,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       extends HasBestUnderWidth[SequenceWrap[LocallyWrappedDiagram]], LocallyWrappedDiagram:
 
     val options =
-      val maybeSpaces = SidedProperty(subdiagrams.head, subdiagrams.last).map(_ match
-        case sp: Space => Some(sp); case _ => None)
-      val withoutSpaces = subdiagrams
-        .drop(if maybeSpaces.left.isDefined then 1 else 0)
-        .dropRight(if maybeSpaces.right.isDefined then 1 else 0)
+      val (maybeSpaces, withoutSpaces) = trimSides(subdiagrams, { case sp: Space => sp })
       allPartitions(withoutSpaces.toList).map[SequenceWrap[LocallyWrappedDiagram]](partition =>
         if partition.length == 1
         then HorizontalConcatenation(
@@ -167,16 +163,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
             direction, properties, tipSpecs,
             NumRows.apply.tupled(direction.swap((numRows.left, numRows.right))), classes, id))
 
-    def allPartitions[T](l: List[T]): Vector[List[List[T]]] =
-      l match
-        case Nil => Vector(List(List()))
-        case elem :: Nil => Vector(List(List(elem)))
-        case head :: tail =>
-          val restPartitions = allPartitions(tail)
-          restPartitions.map(rp => List(head) +: rp)
-          ++ restPartitions.map(rp => (head +: rp.head) +: rp.tail)
-
-    val minContent: Double = options.map(_.minContent).min
+    val minContentOption = options.minBy(_.minContent)
+    val minContent: Double = minContentOption.minContent
     val maxContent: Double = options.last.maxContent
 
     def toAlignedDiagram =
@@ -187,7 +175,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       options
         .filter(_.minContent <= width)
         // make wrapping magic happen here
-        .head
+        .minByOption(w => (w.maxContent - width).abs)
+        .getOrElse(minContentOption)
 
 
   def wrapLocally(diagram: AlignedDiagrams.AlignedDiagram): LocallyWrappedDiagram =

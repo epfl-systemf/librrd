@@ -35,17 +35,11 @@ object JustifiedDiagrams:
 
         case wd.HorizontalConcatenation[(wd.LocallyWrappedDiagram | wd.GlobalWrap)]
             (subs, direction, properties, numRows, classes, id) =>
-          val maybeSpaces = SidedProperty(subs.head, subs.last).map(_ match
-            case sp: wd.Space => Some(rec(sp, sp.minContent))
-            case _ => None)
-          val maybeSpacesWidth = Side.values.map(s => maybeSpaces(s).map(_.width).getOrElse(0.0)).sum
           val subdiagrams = subs.toVector
-            .drop(if maybeSpaces.left.isDefined then 1 else 0)
-            .dropRight(if maybeSpaces.right.isDefined then 1 else 0)
-          val n = subdiagrams.length
+          val n = subdiagrams.count(!_.isInstanceOf[wd.Space])
           var absorbed = Math.max(0, (n-1)*MIN_GAP)
           val distributed = subdiagrams.map(_.minContent).toArray
-          var remaining = targetWidth - absorbed - distributed.sum - maybeSpacesWidth
+          var remaining = targetWidth - absorbed - distributed.sum
 
           val growth = subdiagrams.map(s => s.maxContent - s.minContent)
           val growthSum = growth.sum
@@ -70,19 +64,20 @@ object JustifiedDiagrams:
               distributed(i) += remaining * concatMaxs(i).get / concatMaxsSum
             }
           remaining = 0
-          assert(absorbed + distributed.sum + maybeSpacesWidth == targetWidth,
+          assert(absorbed + distributed.sum ~= targetWidth,
             "justification implementation error")
 
           val justificationRails = properties.get(LayoutStylesheets.JustifyContent)
             .distribute(absorbed, n, direction)
             .map(w => l.Rail(w, direction))
-          val justifiedSubdiagrams = subdiagrams.zip(distributed).map(rec.tupled)
+          val (maybeSpaces, justifiedSubdiagrams) =
+            trimSides(subdiagrams.zip(distributed).map(rec.tupled), { case sp: l.Space => sp })
           l.HorizontalConcatenation(
-            (maybeSpaces.left.toList
-             ++ (justificationRails.head // one more than n
-                 +: justifiedSubdiagrams.zip(justificationRails.tail).flatMap[l.Layout](_.toList))
-             ++ maybeSpaces.right.toList)
-             .filterNot(_.width == 0),
-            classes, id)
+            maybeSpaces.left.toList
+            ++ (justificationRails.head // one more than n
+                +: justifiedSubdiagrams.zip(justificationRails.tail).flatMap[l.Layout](_.toList))
+               .filterNot(_.width == 0)
+            ++ maybeSpaces.right.toList,
+            numRows, classes, id)
 
     rec(diagram, targetWidth)

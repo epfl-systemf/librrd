@@ -94,9 +94,9 @@ object AlignedDiagrams:
       val maybeSpaces = conditions.map(c => if c then List(Space(ad.direction)) else List())
       maybeSpaces.left ++ (ad +: maybeSpaces.right)
 
-    def singletonWithSpaces(ads: List[AlignedDiagram], properties: PropertyMap) =
+    def singletonWithSpaces(ads: List[AlignedDiagram], direction: Direction, properties: PropertyMap) =
       if ads.length == 1 then ads(0)
-      else Sequence(ads, ads(0).direction, properties,
+      else Sequence(ads, direction, properties,
         TipSpecifications(Vertical, Vertical), Set.empty, None)
 
     def rec(diagram: DirectedDiagrams.DirectedDiagram, connectability: SidedProperty[Connectable])
@@ -123,7 +123,8 @@ object AlignedDiagrams:
             case 0 => Side.values.toList.flatMap(s =>
               if connectability(s) != Neither then Some(Space(direction)) else None)
 
-            case 1 => List(assertSingletonList(rec(subdiagrams(0), connectability)))
+            case 1 => rec(subdiagrams(0), SidedProperty.forEach(s =>
+              if justifyContent.flush(s, direction) then connectability(s) else Neither))
 
             case _ =>
               val (first, mids, last) = splitEnds(subdiagrams)
@@ -153,10 +154,10 @@ object AlignedDiagrams:
 
         case DirectedDiagrams.Stack(topSubdiagram, bottomSubdiagram,
                                     direction, polarity, properties, classes, id) =>
-          val alignedTop =
-            singletonWithSpaces(rec(topSubdiagram, SidedProperty(Down, Down)), properties)
-          val alignedBottom =
-            singletonWithSpaces(rec(bottomSubdiagram, SidedProperty(Up, Up)), properties)
+          val alignedTop = singletonWithSpaces(rec(topSubdiagram, SidedProperty(Down, Down)),
+            topSubdiagram.direction, properties)
+          val alignedBottom = singletonWithSpaces(rec(bottomSubdiagram, SidedProperty(Up, Up)),
+            bottomSubdiagram.direction, properties)
 
           val tipSpecs = TipSpecifications.forEach(s => (connectability(s), polarity) match
             case (Neither, _) | (_, Polarity.-) => properties.get(LayoutStylesheets.AlignItems) match

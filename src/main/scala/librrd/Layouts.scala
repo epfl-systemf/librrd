@@ -113,6 +113,7 @@ trait Layouts[T]:
 
   case class HorizontalConcatenation(
       sublayouts: Seq[Layout],
+      override val numRows: NumRows,
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout with InlineLayout:
 
@@ -179,7 +180,7 @@ trait Layouts[T]:
     val width = sublayouts.head.width + markerWidth + extraWidths.left + extraWidths.right
     assert(sublayouts.head.width ~= sublayouts.last.width,
       "first and last sublayout of inline vertical concatenation must have same width")
-    assert(sublayouts.drop(1).dropRight(1).forall(_.width + 2*markerWidth ~= width),
+    assert(sublayouts.drop(1).dropRight(1).forall(_.width ~= sublayouts.head.width - markerWidth),
       "middle sublayouts of inline vertical concatenation must all have width "
       + "equal to the first minus the marker width")
 
@@ -231,9 +232,11 @@ trait Layouts[T]:
 
     def tipYInner(s: Side, ts: TipSpecification): Double =
       ts match
-        case Vertical => Double.NaN
+        case Vertical => 0 // should not matter
         case Physical(p) => linearInterpolate(
-          0, topSublayout.tipY(s, Physical(0)),
+          0, topSublayout.tipY(s, polarity match
+            case Polarity.+ => Physical(0)
+            case Polarity.- => Logical(topSublayout.numRows(s))),
           1, bottomOffset + bottomSublayout.tipY(s, Physical(1)), p)
         case Logical(r) =>
           val topRows = topSublayout.numRows(s)

@@ -70,7 +70,7 @@ object LayoutsSVG extends Layouts[Tag]:
             g(
               text(marker, x:=padding, y:=mid.tipY(Side.Left)),
               g(render(mid), transform:=s"translate(${ivc.markerWidth},0)"),
-              text(marker, x:=mid.width + 3*padding, y:=mid.tipY(Side.Right)),
+              text(marker, x:=ivc.markerWidth + mid.width + padding, y:=mid.tipY(Side.Right)),
               transform:=s"translate(${extraWidths.left},$offset)"
             ))
           :+ g(
@@ -154,9 +154,9 @@ object LayoutsSVG extends Layouts[Tag]:
                   s"M $x,${bvc.bottomOffset}  L $x,${subTipY - 2*unitWidth} "
                   + s"$quarterArc $upwards ${sign*2*unitWidth},${2*unitWidth}")
                 val inners = (1 to topSublayout.numRows(side))
-                  .map(r => topPath(bvc.tipY(side, Logical(r))))
+                  .map(r => topPath(topSublayout.tipY(side, Logical(r))))
                   ++ (1 to bottomSublayout.numRows(side))
-                  .map(r => bottomPath(bvc.bottomOffset + bvc.tipY(side, Logical(r))))
+                  .map(r => bottomPath(bvc.bottomOffset + bottomSublayout.tipY(side, Logical(r))))
                 val outerPath = path(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
                   + s"$quarterArc $upwards ${sign*2*unitWidth},${-2*unitWidth}")

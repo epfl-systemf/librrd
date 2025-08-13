@@ -36,6 +36,7 @@ object TipSpecifications extends SidedPropertyCompanion[TipSpecification]
 type NumRows = SidedProperty[Int]
 object NumRows extends SidedPropertyCompanion[Int]
 
+
 def assertSingletonList[T](list: List[T]): T =
   assert(list.length == 1, "list must have exactly 1 element")
   list(0)
@@ -44,6 +45,24 @@ def splitEnds[T](seq: Seq[T]): (T, Seq[T], T) =
   val (firsts, rests) = seq.splitAt(1)
   val (mids, lasts) = rests.splitAt(rests.length - 1)
   (firsts(0), mids, lasts(0))
+
+def trimSides[T, U](seq: Seq[T], trim: PartialFunction[T, U])
+  : (SidedProperty[Option[U]], Seq[T]) =
+  val maybeSides = SidedProperty(seq.headOption, seq.lastOption)
+    .map[Option[U]](_.collect(trim))
+  val withoutSides = seq
+    .drop(if maybeSides.left.isDefined then 1 else 0)
+    .dropRight(if maybeSides.right.isDefined then 1 else 0)
+  (maybeSides, withoutSides)
+
+def allPartitions[T](l: List[T]): Vector[List[List[T]]] =
+  l match
+    case Nil => Vector(List(List()))
+    case elem :: Nil => Vector(List(List(elem)))
+    case head :: tail =>
+      val restPartitions = allPartitions(tail)
+      restPartitions.map(rp => List(head) +: rp)
+      ++ restPartitions.map(rp => (head +: rp.head) +: rp.tail)
 
 
 val TOLERANCE = 0.0001
@@ -72,6 +91,7 @@ enum JustifyContentPolicy:
     case _ => false
 
   def distribute(space: Double, numItems: Int, direction: Direction): List[Double] =
+    if numItems == 0 then List(space) else {
     assert(space ~>= (numItems - 1)*MIN_GAP,
       "space to justify must be at least MIN_GAP*(N-1)")
     val extra = space - (numItems - 1)*MIN_GAP
@@ -99,6 +119,7 @@ enum JustifyContentPolicy:
         && (distributed.drop(1).dropRight(1).forall(MIN_GAP ~<= _)),
       "justify-content implementation error")
     distributed
+    }
 
 
 enum AlignItemsPolicy:
