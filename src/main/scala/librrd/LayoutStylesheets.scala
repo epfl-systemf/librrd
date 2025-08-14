@@ -24,7 +24,10 @@ object LayoutStylesheets:
 
   sealed trait Selector:
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]): Boolean
-    val weight: (Int, Int, Int)
+    type Weight = (Int, Int, Int)
+    extension (w: Weight)
+      def +(ow: Weight): Weight = (w._1 + ow._1, w._2 + ow._2, w._3 + ow._3)
+    val weight: Weight
 
   case class ID(id: String) extends Selector:
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) = selfInfo.id.fold(false)(_ == id)
@@ -42,13 +45,13 @@ object LayoutStylesheets:
       self.matches(selfInfo, parents)
         && parents.tails.filterNot(_.isEmpty)
              .exists(ps => ancestor.matches(ps.head, ps.tail))
-    val weight = self.weight
+    val weight = ancestor.weight + self.weight
 
   case class Child(parent: Selector, self: Selector) extends Selector:
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) =
       self.matches(selfInfo, parents)
         && !parents.isEmpty && parent.matches(parents.head, parents.tail)
-    val weight = self.weight
+    val weight = parent.weight + self.weight
 
   case object Wildcard extends Selector:
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) = true
