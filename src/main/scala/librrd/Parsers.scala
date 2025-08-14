@@ -9,14 +9,23 @@ trait InputParser[T]:
 object DiagramParser extends RegexParsers, InputParser[Diagrams.Diagram]:
   import Diagrams.*
   def diagram: Parser[Diagram] = terminal | nonterminal | sequence | stack
-  def terminal: Parser[TerminalToken] =
-    (("\"" ~> """[^"]+""".r <~ "\"") | ("\'" ~> """[^']+""".r <~ "\'")) ^^ (l => TerminalToken(l))
-  def nonterminal: Parser[NonterminalToken] =
-    "[" ~> """[^\]]+""".r <~ "]" ^^ (l => NonterminalToken(l))
-  def sequence: Parser[Sequence] = "(" ~> diagram.* <~ ")" ^^ (ds => Sequence(ds))
+
+  def terminalLabel: Parser[String] = ("\"" ~> """[^"]+""".r <~ "\"") | ("\'" ~> """[^']+""".r <~ "\'")
+  def terminal: Parser[TerminalToken] = withClassId(terminalLabel) ^^ TerminalToken.apply
+  def nonterminalLabel = "[" ~> """[^\]]+""".r <~ "]"
+  def nonterminal: Parser[NonterminalToken] = withClassId(nonterminalLabel) ^^ NonterminalToken.apply
+  def sequence: Parser[Sequence] = withClassId("(" ~> diagram.* <~ ")") ^^ Sequence.apply
   def polarity: Parser[Polarity] = ("+" | "-") ^^ { case "+" => Polarity.+; case "-" => Polarity.- }
-  def stack: Parser[Stack] = "(" ~> polarity ~ diagram ~ diagram <~ ")" ^^ {
-    case pol ~ top ~ bot => Stack(top, bot, pol) }
+  def stack: Parser[Stack] = withClassId("(" ~> polarity ~ diagram ~ diagram <~ ")") ^^ {
+    case (pol ~ top ~ bot, c, i) => Stack(top, bot, pol, classes = c, id = i) }
+
+  def `class`: Parser[Set[String]] = ("class" ~> "=" ~> "\"" ~> """[^\t\n "]+""".r.* <~ "\"") ^^ { _.toSet }
+  def `id`: Parser[Option[String]] = "id" ~> "=" ~> "\"" ~> """[^"]+""".r <~ "\"" ^^ { Some(_) }
+  def withClassId[T](p: Parser[T]): Parser[(T, Set[String], Option[String])] =
+      p ^^ { res => (res, Set(), None) }
+    | "{" ~> p ~ `class` ~ `id`.? <~ "}" ^^ (_ match { case l ~ c ~ i => (l, c, i.flatten) })
+    | "{" ~> p ~ `id` ~ `class`.? <~ "}" ^^ (_ match { case l ~ i ~ c => (l, c.getOrElse(Set()), i) })
+
   def apply(input: String) = parseAll(diagram, input) match
     case Success(result, _) => util.Success(result)
     case e: NoSuccess => util.Failure(RuntimeException(e.msg))
