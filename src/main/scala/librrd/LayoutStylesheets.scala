@@ -9,13 +9,16 @@ object LayoutStylesheets:
     def mostSpecificProperties(selfInfo: TagInfo, parents: Seq[TagInfo],
                                inheritable: PropertyMap) =
       PropertyMap()
-        .addAllUnlessExists(rules
-          .flatMap { rule => rule.selectors
-            .filter(_.matches(selfInfo, parents))
-            .maxOption
-            .map(s => (s, rule.properties)) }
-          .sortBy(_._1)
-          .flatMap(_._2))
+        .addAllUnlessExists(
+          rules
+            .flatMap { rule =>
+              rule.selectors
+                .filter(_.matches(selfInfo, parents))
+                .maxOption
+                .map(s => (s, rule.properties))
+              }
+            .sortBy(_._1)
+            .flatMap(_._2))
         .addAllUnlessExists(inheritable)
 
   case class Rule(selectors: Seq[Selector], properties: Seq[Property])
