@@ -46,7 +46,7 @@ trait Layouts[T]:
   object Layout:
     val unitWidth = 4.0
     val `class` = "librrd"
-    val rowGap = 2*unitWidth
+    val rowGap = 3*unitWidth
 
 
   trait InlineLayout:

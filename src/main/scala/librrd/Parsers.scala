@@ -19,7 +19,7 @@ object DiagramParser extends RegexParsers, InputParser[Diagrams.Diagram]:
   def stack: Parser[Stack] = withClassId("(" ~> polarity ~ diagram ~ diagram <~ ")") ^^ {
     case (pol ~ top ~ bot, c, i) => Stack(top, bot, pol, classes = c, id = i) }
 
-  def `class`: Parser[Set[String]] = ("class" ~> "=" ~> "\"" ~> """[^\t\n "]+""".r.* <~ "\"") ^^ { _.toSet }
+  def `class`: Parser[Set[String]] = ("class" ~> "=" ~> "\"" ~> """[^ \t\n\r"]+""".r.* <~ "\"") ^^ { _.toSet }
   def `id`: Parser[Option[String]] = "id" ~> "=" ~> "\"" ~> """[^"]+""".r <~ "\"" ^^ { Some(_) }
   def withClassId[T](p: Parser[T]): Parser[(T, Set[String], Option[String])] =
       p ^^ { res => (res, Set(), None) }
@@ -39,7 +39,7 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "nonterminal" ^^ (_ => Tag.NonterminalToken)
     | "sequence" ^^ (_ => Tag.Sequence)
     | "stack" ^^ (_ => Tag.Stack)
-  def `class`: Parser[String] = "." ~> """[^.]+""".r
+  def `class`: Parser[String] = "." ~> """[^. \t\n\r]+""".r
   def tagClassList: Parser[TagClassList] =
     ((tag ^^ (t => Some(t))) ~ `class`.* | tag.? ~ `class`.+) ^^ { _ match
       case maybeTag ~ classes => TagClassList(maybeTag, classes.toSet) }

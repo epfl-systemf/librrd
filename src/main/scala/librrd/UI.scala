@@ -33,7 +33,7 @@ object UI:
     case LayoutStylesheet extends InputsPresets(
       "layout-input",
       "layout-preset",
-      Map("JSON" -> "foo"),
+      Map("JSON" -> ""),
       StylesheetParser,
       reLayOut)
 
@@ -41,7 +41,7 @@ object UI:
       "rendering-input",
       "rendering-preset",
       Map(
-        "JSON" -> "foo",
+        "JSON" -> "",
         "default" -> "@import url(librrd-default.css);"),
       IdentityParser,
       reRender)
@@ -108,6 +108,7 @@ object UI:
 
   var oldSVG: Option[org.scalajs.dom.Node] = None
   def reLayOut(): Unit =
+    summon[WrappedDiagrams[Tag]].backend.resetID()
     val myParameterizedDiagram = ParameterizedDiagrams.parameterize(
       InputsPresets.Diagram.get, InputsPresets.LayoutStylesheet.get)
     val myDirectedDiagram = DirectedDiagrams.direct(myParameterizedDiagram)
