@@ -1,7 +1,7 @@
 package librrd
 
 object JustifiedDiagrams:
-  def justify[T](using wd: WrappedDiagrams[T])(diagram: wd.WrappedDiagram, targetWidth: Double)
+  def justify[T](wd: WrappedDiagrams[T])(diagram: wd.WrappedDiagram, targetWidth: Double)
       : wd.backend.Layout =
     import wd.backend as l
     def rec(diagram: wd.WrappedDiagram | wd.GlobalWrap

@@ -2,7 +2,6 @@ package librrd
 
 import org.scalajs.dom
 import org.scalajs.dom.document
-import scalatags.JsDom.Tag
 
 object UI:
   lazy val outputCanvas = document.getElementById("output-canvas")
@@ -104,19 +103,13 @@ object UI:
     InputsPresets.LayoutStylesheet.register(true)
     InputsPresets.RenderingStylesheet.register()
 
-  given WrappedDiagrams[Tag] = WrappedDiagrams(LayoutsSVG)
-
   var oldSVG: Option[org.scalajs.dom.Node] = None
   def reLayOut(): Unit =
-    summon[WrappedDiagrams[Tag]].backend.resetID()
-    val myParameterizedDiagram = ParameterizedDiagrams.parameterize(
-      InputsPresets.Diagram.get, InputsPresets.LayoutStylesheet.get)
-    val myDirectedDiagram = DirectedDiagrams.direct(myParameterizedDiagram)
-    val myAlignedDiagram = AlignedDiagrams.align(myDirectedDiagram)
-    val myWrappedDiagram = summon[WrappedDiagrams[Tag]].wrapLocally(myAlignedDiagram)
-    val myLayout = JustifiedDiagrams.justify(myWrappedDiagram, ResizeState.width)
-    val myRendering = summon[WrappedDiagrams[Tag]].backend.render(myLayout)
-    val mySVG = myRendering.render
+    LibRRD.resetSVGID()
+    val mySVG = LibRRD.layOutToSVG(
+      InputsPresets.Diagram.get,
+      InputsPresets.LayoutStylesheet.get,
+      ResizeState.width).render
     if oldSVG.isDefined then
       outputCanvas.replaceChild(mySVG, oldSVG.get)
     else
