@@ -6,18 +6,17 @@ object LayoutStylesheets:
   case class TagInfo(tag: Tag, id: Option[String], classes: Set[String])
 
   case class Stylesheet(rules: Seq[Rule]):
-    def mostSpecificProperties(selfInfo: TagInfo, parents: Seq[TagInfo]) =
-      PropertyMap(
-        rules
+    def mostSpecificProperties(selfInfo: TagInfo, parents: Seq[TagInfo],
+                               inheritable: PropertyMap) =
+      PropertyMap()
+        .addAllUnlessExists(rules
           .flatMap { rule => rule.selectors
             .filter(_.matches(selfInfo, parents))
             .maxOption
             .map(s => (s, rule.properties)) }
-          .flatMap(sp => sp._2.map(p => (sp._1, p.name, p.value)))
-          .groupBy(_._2)
-          .map((name, snvs) =>
-            Property(name, snvs.sortBy(_._1).head._3.asInstanceOf[name.Value]))
-          .toSeq)
+          .sortBy(_._1)
+          .flatMap(_._2))
+        .addAllUnlessExists(inheritable)
 
   case class Rule(selectors: Seq[Selector], properties: Seq[Property])
 
@@ -63,7 +62,7 @@ object LayoutStylesheets:
   sealed trait PropertyName:
     type Value
     val default: Value
-    val inherited: Boolean = true
+    val inheritable: Boolean = true
     def check(value: Value): Unit = ()
 
   case object AlignItems extends PropertyName:
@@ -73,7 +72,7 @@ object LayoutStylesheets:
   case object AlignSelf extends PropertyName:
     type Value = Option[AlignItemsPolicy]
     val default = None
-    override val inherited = false
+    override val inheritable = false
   case object JustifyContent extends PropertyName:
     type Value = JustifyContentPolicy
     val default = JustifyContentPolicy.SpaceBetween
@@ -96,18 +95,27 @@ object LayoutStylesheets:
   object Property:
     def unapply(property: Property) = (property.name, property.value)
 
-  class PropertyMap(properties: Seq[Property]):
-
-    def get(name: PropertyName): name.Value =
+  class PropertyMap(private val properties: Vector[Property]):
+    def addAlways(property: Property) = new PropertyMap(property +: properties)
+    def addAllAlways(newProperties: Seq[Property]) =
+      new PropertyMap(PropertyMap.compact(newProperties.toVector.reverse ++ properties))
+    def addAllAlways(other: PropertyMap) =
+      new PropertyMap(PropertyMap.compact(other.properties.reverse ++ properties))
+    def addUnlessExists(property: Property) = new PropertyMap(properties :+ property)
+    def addAllUnlessExists(newProperties: Seq[Property]) =
+      new PropertyMap(PropertyMap.compact(properties ++ newProperties.toVector))
+    def addAllUnlessExists(other: PropertyMap) =
+      new PropertyMap(PropertyMap.compact(properties ++ other.properties))
+    def get(name: PropertyName): name.Value = getOption(name).get
+    def getOption(name: PropertyName): Option[name.Value] =
       properties.collectFirst({ case Property(`name`, value: name.Value) => value })
-        .getOrElse(name.default)
+    def filterInheritable = new PropertyMap(properties.filter(_.name.inheritable))
 
-    def resolveStartEnd(direction: Direction): PropertyMap =
-      import Direction.*
-      import JustifyContentPolicy.*
-      (get(JustifyContent), direction) match
-        case (Start, LTR) | (End, RTL) =>
-          PropertyMap(Property(JustifyContent, Left) +: properties)
-        case (End, LTR) | (Start, RTL) =>
-          PropertyMap(Property(JustifyContent, Right) +: properties)
-        case _ => this
+  object PropertyMap:
+    def apply() = new PropertyMap(Vector())
+    def apply(properties: Seq[Property]) = new PropertyMap(properties.toVector)
+    private def compact(properties: Vector[Property]) = properties.distinctBy(_.name)
+
+  val defaultProperties =
+    PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, ContinuationMarker)
+      .map(pn => Property(pn, pn.default)))

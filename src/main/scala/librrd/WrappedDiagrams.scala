@@ -159,7 +159,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
             +: mids :+ (last ++ extraSpaces.right.toList)
           InlineVerticalConcatenation(
             direction.reverse(withSpaces.map(rowSubs =>
-              HorizontalConcatenation(rowSubs, direction, properties, NumRows(1, 1), classes, id))),
+              HorizontalConcatenation(rowSubs, direction, properties, NumRows(1, 1), classes, None))),
             direction, properties, tipSpecs,
             NumRows.apply.tupled(direction.swap((numRows.left, numRows.right))), classes, id))
 

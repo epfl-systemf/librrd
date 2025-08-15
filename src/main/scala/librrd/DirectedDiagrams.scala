@@ -52,12 +52,11 @@ object DirectedDiagrams:
       case ParameterizedDiagrams.Station(label, isTerminal, properties, classes, id) =>
         Station(label, isTerminal, direction, properties, classes, id)
       case ParameterizedDiagrams.Sequence(subdiagrams, properties, classes, id) =>
-        Sequence(
-          direction.reverse(subdiagrams).map(direct(_, direction)),
-          direction, properties.resolveStartEnd(direction), classes, id)
+        Sequence(direction.reverse(subdiagrams).map(direct(_, direction)),
+          direction, properties, classes, id)
       case ParameterizedDiagrams.Stack(topSubdiagram, bottomSubdiagram, polarity, properties, classes, id) =>
         Stack(
           direct(topSubdiagram, direction),
           direct(bottomSubdiagram,
             polarity match { case Polarity.- => direction.reverse; case _ => direction }),
-          direction, polarity, properties.resolveStartEnd(direction), classes, id)
+          direction, polarity, properties, classes, id)

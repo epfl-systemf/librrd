@@ -43,36 +43,37 @@ object ParameterizedDiagrams:
 
 
   def parameterize(diagram: Diagrams.Diagram, stylesheet: Stylesheet): ParameterizedDiagram =
-    def rec(diagram: Diagrams.Diagram, parents: List[TagInfo]): ParameterizedDiagram =
+    def rec(diagram: Diagrams.Diagram, parents: List[TagInfo], inheritable: PropertyMap)
+        : ParameterizedDiagram =
       diagram match
 
         case Diagrams.TerminalToken(label, classes, id) =>
           val info = TagInfo(Tag.TerminalToken, id, classes.toSet)
           Station(
             label, true,
-            stylesheet.mostSpecificProperties(info, parents),
+            stylesheet.mostSpecificProperties(info, parents, inheritable),
             info.classes, id)
         case Diagrams.NonterminalToken(label, classes, id) =>
           val info = TagInfo(Tag.NonterminalToken, id, classes.toSet)
           Station(
             label, false,
-            stylesheet.mostSpecificProperties(info, parents),
+            stylesheet.mostSpecificProperties(info, parents, inheritable),
             info.classes, id)
 
         case Diagrams.Sequence(subdiagrams, classes, id) =>
           val info = TagInfo(Tag.Sequence, id, classes.toSet)
+          val properties = stylesheet.mostSpecificProperties(info, parents, inheritable)
           Sequence(
-            subdiagrams.map(rec(_, info :: parents)),
-            stylesheet.mostSpecificProperties(info, parents),
-            info.classes, id)
+            subdiagrams.map(rec(_, info :: parents, properties.filterInheritable)),
+            properties, info.classes, id)
 
         case Diagrams.Stack(topSubdiagram, bottomSubdiagram, polarity, classes, id) =>
           val info = TagInfo(Tag.Stack, id, classes.toSet)
+          val properties = stylesheet.mostSpecificProperties(info, parents, inheritable)
+          val subInheritable = properties.filterInheritable
           Stack(
-            rec(topSubdiagram, info :: parents),
-            rec(bottomSubdiagram, info :: parents),
-            polarity,
-            stylesheet.mostSpecificProperties(info, parents),
-            info.classes, id)
+            rec(topSubdiagram, info :: parents, subInheritable),
+            rec(bottomSubdiagram, info :: parents, subInheritable),
+            polarity, properties, info.classes, id)
 
-    rec(diagram, List())
+    rec(diagram, List(), defaultProperties)
