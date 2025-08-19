@@ -31,18 +31,24 @@ object LayoutStylesheets:
       def +(ow: Weight): Weight = (w._1 + ow._1, w._2 + ow._2, w._3 + ow._3)
     val weight: Weight
 
-  case class ID(id: String) extends Selector:
+  sealed trait SimpleSelector extends Selector
+
+  case class ID(id: String) extends SimpleSelector:
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) = selfInfo.id.fold(false)(_ == id)
     val weight = (1, 0, 0)
 
-  case class TagClassList(tag: Option[Tag], classes: Set[String]) extends Selector:
+  case class TagClassList(tag: Option[Tag], classes: Set[String]) extends SimpleSelector:
     assert(tag.isDefined || !classes.isEmpty,
       "must specify at least either tag or class in selector")
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) =
       tag.fold(true)(_ == selfInfo.tag) && classes.subsetOf(selfInfo.classes)
     val weight = (0, classes.size, tag.fold(0)(_ => 1))
 
-  case class Descendant(ancestor: Selector, self: Selector) extends Selector:
+  case object Wildcard extends SimpleSelector:
+    def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) = true
+    val weight = (0, 0, 0)
+
+  case class Descendant(ancestor: Selector, self: SimpleSelector) extends Selector:
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) =
       self.matches(selfInfo, parents)
         && parents.tails.filterNot(_.isEmpty)
@@ -55,17 +61,13 @@ object LayoutStylesheets:
         && !parents.isEmpty && parent.matches(parents.head, parents.tail)
     val weight = parent.weight + self.weight
 
-  case object Wildcard extends Selector:
-    def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) = true
-    val weight = (0, 0, 0)
-
   given Ordering[Selector] = Ordering.by((s: Selector) => s.weight).reverse
 
 
   sealed trait PropertyName:
     type Value
     val default: Value
-    val inheritable: Boolean = true
+    val inheritable: Boolean = false
     def check(value: Value): Unit = ()
 
   case object AlignItems extends PropertyName:
@@ -75,7 +77,6 @@ object LayoutStylesheets:
   case object AlignSelf extends PropertyName:
     type Value = Option[AlignItemsPolicy]
     val default = None
-    override val inheritable = false
   case object JustifyContent extends PropertyName:
     type Value = JustifyContentPolicy
     val default = JustifyContentPolicy.SpaceBetween
@@ -109,7 +110,7 @@ object LayoutStylesheets:
       new PropertyMap(PropertyMap.compact(properties ++ newProperties.toVector))
     def addAllUnlessExists(other: PropertyMap) =
       new PropertyMap(PropertyMap.compact(properties ++ other.properties))
-    def get(name: PropertyName): name.Value = getOption(name).get
+    def get(name: PropertyName): name.Value = getOption(name).getOrElse(name.default)
     def getOption(name: PropertyName): Option[name.Value] =
       properties.collectFirst({ case Property(`name`, value: name.Value) => value })
     def filterInheritable = new PropertyMap(properties.filter(_.name.inheritable))

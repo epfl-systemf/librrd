@@ -31,24 +31,40 @@ object DiagramParser extends RegexParsers, InputParser[Diagrams.Diagram]:
     case e: NoSuccess => util.Failure(RuntimeException(e.msg))
 
 
-object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Stylesheet]:
+object SelectorParser extends RegexParsers, PartialFunction[String, LayoutStylesheets.Selector]:
   import LayoutStylesheets.*
+  override def skipWhitespace = false
 
-  def id: Parser[ID] = "#" ~> """\S+""".r ^^ ID.apply
-  def tag: Parser[Tag] = "terminal" ^^ (_ => Tag.TerminalToken)
-    | "nonterminal" ^^ (_ => Tag.NonterminalToken)
-    | "sequence" ^^ (_ => Tag.Sequence)
-    | "stack" ^^ (_ => Tag.Stack)
+  def id: Parser[ID] = "#" ~> """[^. \t\n\r]+""".r ^^ ID.apply
+  def tag: Parser[Tag] = "terminal" ^^^ Tag.TerminalToken
+    | "nonterminal" ^^^ Tag.NonterminalToken
+    | "sequence" ^^^ Tag.Sequence
+    | "stack" ^^^ Tag.Stack
   def `class`: Parser[String] = "." ~> """[^. \t\n\r]+""".r
   def tagClassList: Parser[TagClassList] =
-    ((tag ^^ (t => Some(t))) ~ `class`.* | tag.? ~ `class`.+) ^^ { _ match
-      case maybeTag ~ classes => TagClassList(maybeTag, classes.toSet) }
-  def wildcard: Parser[Selector] = "*" ^^ (_ => Wildcard)
-  def atomic: Parser[Selector] = id | tagClassList | wildcard
-  def descendant: Parser[Descendant] =
-    (atomic <~ whiteSpace) ~ atomic ^^ { s => Descendant(s._1, s._2) }
-  def child : Parser[Child] = (atomic <~ ">") ~ atomic ^^ { s => Child(s._1, s._2) }
-  def selector: Parser[Selector] = descendant | child | atomic
+    ((tag ~ `class`.*) ^^ { _ match { case t ~ cs => TagClassList(Some(t), cs.toSet) } })
+    | (`class`.+ ^^ (cs => TagClassList(None, cs.toSet)))
+  def wildcard: Parser[Wildcard.type] = "*" ^^^ Wildcard
+  def simple: Parser[SimpleSelector] = id | tagClassList | wildcard
+
+  def compoundSeparator: Parser[Char] =
+    ((whiteSpace.? ~ ">" ~ whiteSpace.?) ^^ (_ => '>'))
+    | whiteSpace ^^ (_ => ' ')
+  def compound: Parser[Selector] =
+    (simple ~ (compoundSeparator ~ simple).+) ^^ { _ match
+      case first ~ restSep => restSep.foldLeft[Selector](first)((sel, ancestor) => ancestor match
+        case ancSep ~ ancSel =>
+          (ancSep match { case ' ' => Descendant.apply; case '>' => Child.apply })(sel, ancSel)) }
+
+  def selector: Parser[Selector] = compound | simple
+
+  def apply(input: String) = parseAll(selector, input.trim()).get
+  def isDefinedAt(input: String) = parseAll(selector, input.trim()).successful
+
+
+
+object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Stylesheet]:
+  import LayoutStylesheets.*
 
   def alignItemsValue: Parser[AlignItems.Value] =
       "top" ^^ (_ => AlignItemsPolicy.Top)
@@ -73,8 +89,9 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "continuation-marker:" ~> """"\S+"""".r ^^ (v =>
         Property(ContinuationMarker, v.substring(1, v.length() - 1)))) <~ ";"
 
-  def rule: Parser[Rule] = (rep1sep(selector, ",") <~ "{") ~ property.* <~ "}" ^^ { _ match
-    case selectors ~ properties => Rule(selectors, properties) }
+  def selector: Parser[Selector] = "[^,{]+".r ^? SelectorParser
+  def rule: Parser[Rule] = (rep1sep(selector, ",") <~ "{") ~ property.* <~ "}"
+    ^^ { _ match { case selectors ~ properties => Rule(selectors, properties) }}
   def stylesheet: Parser[Stylesheet] = rule.* ^^ (rs => Stylesheet(rs))
 
   def apply(input: String) = parseAll(stylesheet, input) match
