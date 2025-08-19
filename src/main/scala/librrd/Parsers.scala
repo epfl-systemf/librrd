@@ -80,6 +80,7 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "space-around" ^^ (_ => JustifyContentPolicy.SpaceAround)
     | "space-evenly" ^^ (_ => JustifyContentPolicy.SpaceEvenly)
     | "center" ^^ (_ => JustifyContentPolicy.Center)
+  def otherValue: Parser[String] = """[A-Za-z0-9-.]+""".r
   def property: Parser[Property] =
      ("align-items:" ~> alignItemsValue ^^ (v => Property(AlignItems, v))
     | "align-self:" ~> alignItemsValue ^^ (v => Property(AlignSelf, Some(v)))
@@ -87,7 +88,11 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "flex-absorb:" ~> """[0-9.]+""".r ^^ (v => Property(FlexAbsorb, v.toDouble))
     | "gap:" ~> """[0-9.]+""".r ^^ (v => Property(Gap, v.toDouble))
     | "continuation-marker:" ~> """"\S+"""".r ^^ (v =>
-        Property(ContinuationMarker, v.substring(1, v.length() - 1)))) <~ ";"
+        Property(ContinuationMarker, v.substring(1, v.length() - 1)))
+    | "font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
+      ^^ { _ match { case family ~ style ~ weight ~ size =>
+      Property(Font, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
+                              size.getOrElse("1rem"))) }}) <~ ";"
 
   def selector: Parser[Selector] = "[^,{]+".r ^? SelectorParser
   def rule: Parser[Rule] = (rep1sep(selector, ",") <~ "{") ~ property.* <~ "}"

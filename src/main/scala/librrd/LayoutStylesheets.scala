@@ -93,6 +93,9 @@ object LayoutStylesheets:
   case object ContinuationMarker extends PropertyName:
     type Value = String
     val default = "…"
+  case object Font extends PropertyName:
+    type Value = FontInfo
+    val default = FontInfo("sans-serif", "normal", "normal", "1rem")
 
   class Property(val name: PropertyName, val value: name.Value):
     name.check(value)
@@ -121,5 +124,5 @@ object LayoutStylesheets:
     private def compact(properties: Vector[Property]) = properties.distinctBy(_.name)
 
   val defaultProperties =
-    PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, ContinuationMarker)
+    PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, ContinuationMarker, Font)
       .map(pn => Property(pn, pn.default)))

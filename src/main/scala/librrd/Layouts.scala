@@ -7,10 +7,9 @@ def linearInterpolate(xStart: Double, yStart: Double,
                       xEnd: Double, yEnd: Double, x: Double): Double =
   yStart + (yEnd - yStart) * (x - xStart)/(xEnd - xStart)
 
-trait Layouts[T]:
+case class FontInfo(family: String, style: String, weight: String, size: String)
 
-  def measure(text: String): (Double, Double)
-  def render(layout: Layout): T
+trait Layouts[T]:
 
   private var lastID = 0
   val generatedIDPrefix = "librrd-generated-"
@@ -21,6 +20,8 @@ trait Layouts[T]:
 
   def resetID(): Unit = lastID = 0
 
+  def measure(text: String, font: FontInfo): (Double, Double)
+  def render(layout: Layout): T
 
   sealed trait Layout:
     val direction: Direction
@@ -94,9 +95,10 @@ trait Layouts[T]:
       label: String,
       isTerminal: Boolean,
       direction: Direction,
+      font: FontInfo,
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout with InlineLayout:
-    val (textWidth, textHeight) = measure(label)
+    val (textWidth, textHeight) = measure(label, font)
     val width = textWidth + 4*Station.paddingX
     val height = textHeight + 2*Station.paddingY
 
@@ -162,6 +164,7 @@ trait Layouts[T]:
       tipSpecs: TipSpecifications,
       numRows: NumRows,
       extraWidths: SidedProperty[Double],
+      font: FontInfo,
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout:
 
@@ -176,7 +179,7 @@ trait Layouts[T]:
     val direction = sublayouts(0).direction
     val (startSide, endSide) = direction.swap(Left, Right)
 
-    val markerWidth = measure(marker)._1 + 2*InlineVerticalConcatenation.markerPadding
+    val markerWidth = measure(marker, font)._1 + 2*InlineVerticalConcatenation.markerPadding
     val width = sublayouts.head.width + markerWidth + extraWidths.left + extraWidths.right
     assert(sublayouts.head.width ~= sublayouts.last.width,
       "first and last sublayout of inline vertical concatenation must have same width")

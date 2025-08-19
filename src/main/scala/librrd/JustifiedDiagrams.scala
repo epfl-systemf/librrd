@@ -8,8 +8,8 @@ object JustifiedDiagrams:
                      | wd.SequenceWrap[wd.GlobalWrap | wd.LocallyWrappedDiagram],
             targetWidth: Double): l.Layout =
       diagram match
-        case wd.Station(label, isTerminal, direction, properties, numRows, classes, id) =>
-          l.Station(label, isTerminal, direction, classes, id)
+        case wd.Station(label, isTerminal, direction, properties, numRows, font, classes, id) =>
+          l.Station(label, isTerminal, direction, font, classes, id)
         case wd.Space(direction, numRows) =>
           l.Space(diagram.minContent, direction)
         case bvc @ wd.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
@@ -25,7 +25,7 @@ object JustifiedDiagrams:
             +: ivc.mids.map(s => rec(s, width - 2*ivc.markerWidth))
             :+ rec(ivc.last, width - ivc.markerWidth),
             properties.get(LayoutStylesheets.ContinuationMarker), tipSpecs, numRows, ivc.extraWidths,
-            classes, id)
+            ivc.markerFont, classes, id)
         case gwd @ wd.GloballyWrappedDiagram(direction, properties, numRows, options) =>
           rec(gwd.bestUnder(targetWidth), targetWidth)
         case gsw @ wd.GlobalSequenceWrap(sw) => rec(sw, targetWidth)

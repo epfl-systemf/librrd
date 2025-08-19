@@ -18,8 +18,18 @@ object LayoutsSVG extends Layouts[Tag]:
     elem
   val baselineCorrection = -2.0
 
-  override def measure(text: String) =
+  def fontToStyleString(font: FontInfo) =
+    s"font-family: ${font.family}; " +
+    s"font-size: ${font.size}; " +
+    s"font-weight: ${font.weight}; " +
+    s"font-style: ${font.style};"
+
+  override def measure(text: String, font: FontInfo) =
     textMetricsElement.textContent = text
+    textMetricsElement.style.setProperty("font-family", font.family)
+    textMetricsElement.style.setProperty("font-size", font.size)
+    textMetricsElement.style.setProperty("font-weight", font.weight)
+    textMetricsElement.style.setProperty("font-style", font.style)
     val bbox = textMetricsElement.getBBox()
     (bbox.width, bbox.height)
 
@@ -39,7 +49,8 @@ object LayoutsSVG extends Layouts[Tag]:
           rect(x:=Station.paddingX, y:=0, rx:=rounded, ry:=rounded,
                svgWidth:=width - 2*Station.paddingX, svgHeight:=height),
           text(station.label, x:=2*Station.paddingX,
-               y:=height - Station.paddingY + baselineCorrection),
+               y:=height - Station.paddingY + baselineCorrection,
+               style:=fontToStyleString(station.font)),
           line(x1:=0, y1:=height/2, x2:=Station.paddingX, y2:=height/2,
                `class`:=Rail.`class`),
           line(x1:=width - Station.paddingX, y1:=height/2, x2:=width, y2:=height/2,
@@ -50,7 +61,8 @@ object LayoutsSVG extends Layouts[Tag]:
           g(render(sub), transform:=s"translate($subX,$subY)")
         }
 
-      case ivc @ InlineVerticalConcatenation(sublayouts, marker, tipSpecs, numRows, extraWidths, _, _) =>
+      case ivc @ InlineVerticalConcatenation(sublayouts, marker, tipSpecs, numRows, extraWidths,
+                                             font, _, _) =>
         val (first, mids, last) = splitEnds(sublayouts)
         val offsets = mids.scanLeft(first.height + Layout.rowGap)
           ((offset, sub) => offset + sub.height + Layout.rowGap)
@@ -59,22 +71,23 @@ object LayoutsSVG extends Layouts[Tag]:
         val (firstMarkerX, firstX, lastMarkerX, lastX) = direction match
           case Direction.LTR => (first.width, 0.0, 0.0, ivc.markerWidth)
           case Direction.RTL => (0.0, ivc.markerWidth, last.width, 0.0)
+        val markerElement = text(marker, style:=fontToStyleString(ivc.font))
 
         val inners =
           g(
             g(render(first), transform:=s"translate($firstX,0)"),
-            text(marker, x:=firstMarkerX + padding, y:=first.tipY(ivc.endSide)),
+            markerElement(x:=firstMarkerX + padding, y:=first.tipY(ivc.endSide)),
             transform:=s"translate(${extraWidths.left},0)"
           )
           +: mids.zip(offsets).map((mid, offset) =>
             g(
-              text(marker, x:=padding, y:=mid.tipY(Side.Left)),
+              markerElement(x:=padding, y:=mid.tipY(Side.Left)),
               g(render(mid), transform:=s"translate(${ivc.markerWidth},0)"),
-              text(marker, x:=ivc.markerWidth + mid.width + padding, y:=mid.tipY(Side.Right)),
+              markerElement(x:=ivc.markerWidth + mid.width + padding, y:=mid.tipY(Side.Right)),
               transform:=s"translate(${extraWidths.left},$offset)"
             ))
           :+ g(
-            text(marker, x:=lastMarkerX + padding, y:=last.tipY(ivc.startSide)),
+            markerElement(x:=lastMarkerX + padding, y:=last.tipY(ivc.startSide)),
             g(render(last), transform:=s"translate($lastX,0)"),
             transform:=s"translate(${extraWidths.left},${offsets.last})"
           )

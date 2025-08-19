@@ -24,9 +24,10 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
                      direction: Direction,
                      properties: PropertyMap,
                      numRows: NumRows,
+                     font: FontInfo,
                      classes: Set[String] = Set.empty,
                      id: Option[String] = None) extends LocallyWrappedDiagram, GlobalWrap:
-    val minContent = backend.measure(label)._1 + 4*backend.Station.paddingX
+    val minContent = backend.measure(label, font)._1 + 4*backend.Station.paddingX
     val maxContent = minContent
     def toAlignedDiagram =
       AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id)
@@ -89,8 +90,9 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     assert(subdiagrams.length >= 2,
       "inline vertical concatenation must have at least 2 subdiagrams")
 
+    val markerFont = LayoutStylesheets.Font.default
     val markerWidth =
-      backend.measure(properties.get(LayoutStylesheets.ContinuationMarker))._1
+      backend.measure(properties.get(LayoutStylesheets.ContinuationMarker), markerFont)._1
       + 2*backend.InlineVerticalConcatenation.markerPadding
 
     val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
@@ -182,7 +184,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
   def wrapLocally(diagram: AlignedDiagrams.AlignedDiagram): LocallyWrappedDiagram =
     diagram match
       case AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
-        Station(label, isTerminal, direction, properties, diagram.numRows, classes, id)
+        Station(label, isTerminal, direction, properties, diagram.numRows,
+                properties.get(LayoutStylesheets.Font), classes, id)
       case AlignedDiagrams.Space(direction) =>
         Space(direction, diagram.numRows)
       case AlignedDiagrams.Sequence(subdiagrams, direction, properties, tipSpecs, classes, id) =>
