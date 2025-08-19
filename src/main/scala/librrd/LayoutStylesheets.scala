@@ -73,6 +73,7 @@ object LayoutStylesheets:
   case object AlignItems extends PropertyName:
     type Value = AlignItemsPolicy
     val default = AlignItemsPolicy.Top
+    override val inheritable = true
   // TODO: needs to be left/right
   case object AlignSelf extends PropertyName:
     type Value = Option[AlignItemsPolicy]
@@ -80,6 +81,7 @@ object LayoutStylesheets:
   case object JustifyContent extends PropertyName:
     type Value = JustifyContentPolicy
     val default = JustifyContentPolicy.SpaceBetween
+    override val inheritable = true
   case object FlexAbsorb extends PropertyName:
     type Value = Double
     val default = 0
