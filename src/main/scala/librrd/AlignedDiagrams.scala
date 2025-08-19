@@ -67,15 +67,16 @@ object AlignedDiagrams:
       classes: Set[String] = Set.empty,
       id: Option[String] = None) extends AlignedDiagram:
 
+    val innerNumRows = NumRows.forEach(s => bottomSubdiagram.numRows(s)
+      + (polarity match { case Polarity.+ => topSubdiagram.numRows(s); case _ => 1 }))
     val numRows = NumRows.forEach(s =>
       tipSpecs(s) match
-        case Vertical => bottomSubdiagram.numRows(s)
-          + (polarity match { case Polarity.+ => topSubdiagram.numRows(s); case _ => 1 })
+        case Vertical => innerNumRows(s)
         case _ => 1)
 
     Side.values.foreach(s =>
       assert(tipSpecs(s) match
-          case Logical(r) => 1 <= r && r <= numRows(s)
+          case Logical(r) => 1 <= r && r <= innerNumRows(s)
           case Physical(p) => 0 <= p && p <= 1
           case _ => true,
         s"invalid tip specification ${tipSpecs(s)} on side $s with ${numRows(s)} rows"))
@@ -171,7 +172,7 @@ object AlignedDiagrams:
                   case _ => Logical((
                     (polarity match
                        case Polarity.+ => alignedTop.numRows(s)
-                       case Polarity.- => 1) + alignedBottom.numRows(s))/2 + 1)
+                       case Polarity.- => 1) + alignedBottom.numRows(s) + 1)/2)
             case _ => Vertical)
 
           maybeSurroundSpaces(
