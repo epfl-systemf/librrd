@@ -1,3 +1,26 @@
+2025-08-19
+==========
+
+todo
+ * read align-self, and make it sided
+ * small library of presets
+ * decide whether to switch to Typeable properties
+ * global wrapping
+ * make negative stacks sometimes have vertical tips
+ * reasonable local wrapping for demo
+
+broader
+ * wrapping experiments
+ * finish redoing the paper
+ * see how bad it is in ECOOP template
+
+done
+ * fix left-recursive child and descendant thing, allow multiple
+ * font family, style, weight, size as layout properties
+ * investigate passing backend around as an implicit parameter
+   + no: I want to statically know it's the same one for the whole structure
+
+
 2025-08-15
 ==========
 
