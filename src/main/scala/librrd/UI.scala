@@ -25,23 +25,21 @@ object UI:
     case Diagram extends InputsPresets(
       "diagram-input",
       "diagram-preset",
-      Map("JSON list" -> "(\"[\" (+ () (- [token] \",\")) \"]\")"),
+      UIPresets.diagramPresets,
       DiagramParser,
       reLayOut)
 
     case LayoutStylesheet extends InputsPresets(
       "layout-input",
       "layout-preset",
-      Map("JSON" -> ""),
+      UIPresets.layoutPresets,
       StylesheetParser,
       reLayOut)
 
     case RenderingStylesheet extends InputsPresets(
       "rendering-input",
       "rendering-preset",
-      Map(
-        "JSON" -> "",
-        "default" -> "@import url(librrd-default.css);"),
+      UIPresets.renderingPresets,
       IdentityParser,
       reRender)
 
@@ -67,6 +65,11 @@ object UI:
     def get: T = parser(input.value).get
 
     def register(suppressInitialDone: Boolean = false): Unit =
+      (presets.keys.toVector :+ customPreset).map{ key =>
+          val opt = document.createElement("option")
+          opt.innerText = key
+          opt
+        }.foreach(preset.appendChild)
       presetState(suppressInitialDone)
       preset.addEventListener("change", (event) => {
         if preset.value == customPreset then
