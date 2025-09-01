@@ -20,6 +20,8 @@ object LayoutStylesheets:
             .sortBy(_._1)
             .flatMap(_._2))
         .addAllUnlessExists(inheritable)
+        .addUnlessExists(Property(
+          AlignSelf, SidedProperty.forEach(_ => inheritable.get(AlignItems))))
 
   case class Rule(selectors: Seq[Selector], properties: Seq[Property])
 
@@ -74,10 +76,9 @@ object LayoutStylesheets:
     type Value = AlignItemsPolicy
     val default = AlignItemsPolicy.Top
     override val inheritable = true
-  // TODO: needs to be left/right
   case object AlignSelf extends PropertyName:
-    type Value = Option[AlignItemsPolicy]
-    val default = None
+    type Value = SidedProperty[AlignItemsPolicy]
+    val default = SidedProperty(AlignItems.default, AlignItems.default)
   case object JustifyContent extends PropertyName:
     type Value = JustifyContentPolicy
     val default = JustifyContentPolicy.SpaceBetween

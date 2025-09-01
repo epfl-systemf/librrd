@@ -83,7 +83,9 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
   def otherValue: Parser[String] = """[A-Za-z0-9-.]+""".r
   def property: Parser[Property] =
      ("align-items:" ~> alignItemsValue ^^ (v => Property(AlignItems, v))
-    | "align-self:" ~> alignItemsValue ^^ (v => Property(AlignSelf, Some(v)))
+    | "align-self:" ~> alignItemsValue ~ alignItemsValue ^^ (_ match
+        case vLeft ~ vRight => Property(AlignSelf, SidedProperty(vLeft, vRight)))
+    | "align-self:" ~> alignItemsValue ^^ (v => Property(AlignSelf, SidedProperty(v, v)))
     | "justify-content:" ~> justifyContentValue ^^ (v => Property(JustifyContent, v))
     | "flex-absorb:" ~> """[0-9.]+""".r ^^ (v => Property(FlexAbsorb, v.toDouble))
     | "gap:" ~> """[0-9.]+""".r ^^ (v => Property(Gap, v.toDouble))

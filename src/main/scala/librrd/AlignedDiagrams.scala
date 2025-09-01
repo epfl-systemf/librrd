@@ -113,8 +113,8 @@ object AlignedDiagrams:
         case DirectedDiagrams.Sequence(subs, direction, properties, classes, id) =>
           val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
           val subdiagrams = subs.toVector
-          val tipSpecs = connectability.map(_ match
-            case Neither => properties.get(LayoutStylesheets.AlignItems) match
+          val tipSpecs = TipSpecifications.forEach(s => connectability(s) match
+            case Neither => properties.get(LayoutStylesheets.AlignSelf)(s) match
               case AlignItemsPolicy.Top => Physical(0)
               case AlignItemsPolicy.Center => Physical(0.5)
               case AlignItemsPolicy.Bottom => Physical(1)
@@ -175,7 +175,7 @@ object AlignedDiagrams:
             bottomSubdiagram.direction, properties)
 
           val tipSpecs = TipSpecifications.forEach(s => (connectability(s), polarity) match
-            case (Neither, _) | (_, Polarity.-) => properties.get(LayoutStylesheets.AlignItems) match
+            case (Neither, _) | (_, Polarity.-) => properties.get(LayoutStylesheets.AlignSelf)(s) match
               case AlignItemsPolicy.Top => Physical(0)
               case AlignItemsPolicy.Center => Physical(0.5)
               case AlignItemsPolicy.Bottom => Physical(1)
