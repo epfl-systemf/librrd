@@ -1,0 +1,8 @@
+/.bloop/
+/.bsp/
+/.metals/
+/project/
+/target/
+/trial.svg
+/www/*.js
+/www/*.js.map

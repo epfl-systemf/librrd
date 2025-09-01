@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>librrd playground</title>
+    <link rel="stylesheet" href="style.css?version=1">
+    <script type="module" src="main.js"></script>
+    <style id="custom-style"></style>
+  </head>
+  <body>
+    <header>
+      <h1>librrd playground</h1>
+    </header>
+    <main>
+      <div class="control-boxes-container">
+        <div class="control-box">
+          <label for="diagram-preset">railroad diagram</label>
+          <select id="diagram-preset"></select>
+          <label for="diagram-input">Write your own railroad diagram:</label>
+          <textarea id="diagram-input"></textarea>
+        </div>
+        <div class="control-box" id="layout-control-box">
+          <label for="layout-preset">layout style</label>
+          <select id="layout-preset"></select>
+          <label for="layout-input">Write your own layout style:</label>
+          <textarea id="layout-input"></textarea>
+        </div>
+        <div class="control-box">
+          <label for="rendering-preset">rendering style</label>
+          <select id="rendering-preset"></select>
+          <label for="rendering-input">Write your own rendering style:</label>
+          <textarea id="rendering-input"></textarea>
+        </div>
+      </div>
+      <div id="output">
+        <svg id="output-canvas"></svg>
+      </div>
+    </main>
+  </body>
+</html>
