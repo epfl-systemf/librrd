@@ -33,8 +33,8 @@ object JustifiedDiagrams:
             subdiagrams, direction, properties, tipSpecs, numRows, classes, id) =>
           rec(lws.bestUnder(targetWidth), targetWidth)
 
-        case wd.HorizontalConcatenation[(wd.LocallyWrappedDiagram | wd.GlobalWrap)]
-            (subs, direction, properties, numRows, classes, id) =>
+        case hc @ wd.HorizontalConcatenation[(wd.LocallyWrappedDiagram | wd.GlobalWrap)]
+            (subs, direction, properties, _, classes, id) =>
           val subdiagrams = subs.toVector
           val n = subdiagrams.count(!_.isInstanceOf[wd.Space])
           var absorbed = Math.max(0, (n-1)*MIN_GAP)
@@ -78,6 +78,6 @@ object JustifiedDiagrams:
                 +: justifiedSubdiagrams.zip(justificationRails.tail).flatMap[l.Layout](_.toList))
                .filterNot(_.width == 0)
             ++ maybeSpaces.right.toList,
-            numRows, classes, id)
+            hc.numRows, classes, id)
 
     rec(diagram, targetWidth)

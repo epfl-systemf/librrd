@@ -23,6 +23,9 @@ enum TipSpecification:
 
 case class SidedProperty[T](left: T, right: T):
   def apply(s: Side) = s match { case Side.Left => left; case _ => right }
+  def update(s: Side, v: T) = s match
+    case Side.Left => SidedProperty(v, right)
+    case _ => SidedProperty(left, v)
   def map[U](f: T => U) = SidedProperty(f(left), f(right))
 trait SidedPropertyCommon:
   def forEach[U](f: Side => U) = SidedProperty(f(Side.Left), f(Side.Right))

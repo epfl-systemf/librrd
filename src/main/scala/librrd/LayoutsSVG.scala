@@ -64,6 +64,7 @@ object LayoutsSVG extends Layouts[Tag]:
       case ivc @ InlineVerticalConcatenation(sublayouts, marker, tipSpecs, numRows, extraWidths,
                                              font, _, _) =>
         val (first, mids, last) = splitEnds(sublayouts)
+        val ends = SidedProperty(first, last)
         val offsets = mids.scanLeft(first.height + Layout.rowGap)
           ((offset, sub) => offset + sub.height + Layout.rowGap)
         val padding = InlineVerticalConcatenation.markerPadding
@@ -114,7 +115,7 @@ object LayoutsSVG extends Layouts[Tag]:
                 val straightPath =
                   path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
 
-                val (ups, notUps) = (1 to numRows(side))
+                val (ups, notUps) = (1 to ends(side).numRows(side))
                   .map(r => ivc.tipY(side, TipSpecification.Logical(r)))
                   .partition(_ <= tipY - 4*unitWidth)
                 val (notUpDowns, downs) = notUps.partition(_ <= tipY + 4*unitWidth)

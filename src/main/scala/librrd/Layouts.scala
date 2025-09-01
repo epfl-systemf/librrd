@@ -156,7 +156,7 @@ trait Layouts[T]:
 
   object InlineVerticalConcatenation:
     val `class` = "librrd-vconcat-inline"
-    val markerPadding = Layout.unitWidth
+    val markerPadding = 2*Layout.unitWidth
 
   case class InlineVerticalConcatenation(
       sublayouts: Seq[Layout],
