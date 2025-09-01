@@ -64,7 +64,7 @@ h1 {
 }
 
 #output {
-    width: 700px;
+    width: 1000px;
     height: 300px;
     resize: both;
     overflow: hidden;

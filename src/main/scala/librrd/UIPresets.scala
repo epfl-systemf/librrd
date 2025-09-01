@@ -14,11 +14,16 @@ object UIPresets:
     "SQLite table-constraint" ->
       """((+ ("CONSTRAINT" "NAME") ())
         | (+ ((+ ("PRIMARY" "KEY") "UNIQUE")
-        |     "(" (- [indexed-column] ",") ")"
+        |     {"(" class="punct"}
+        |     (- [indexed-column] {"," class="punct"})
+        |     {")" class="punct"}
         |     [conflict-clause])
-        |    (+ ("CHECK" "(" [expr] ")")
+        |    (+ ("CHECK"
+        |        {"(" class="punct"} [expr] {")" class="punct"})
         |       ("FOREIGN" "KEY"
-        |        "(" (- "column-name" ",") ")"
+        |        {"(" class="punct"}
+        |        (- "column-name" {"," class="punct"})
+        |        {")" class="punct"}
         |        [foreign-key-clause]))))""".stripMargin,
     "SQLite compound-select" ->
       """((+ ("WITH" (+ () "RECURSIVE") (- [common-table-expression] ",")) ())
@@ -29,7 +34,16 @@ object UIPresets:
   )
 
   val layoutPresets = Map(
-    "SQLite" -> "",
+    "SQLite" ->
+      """* {
+        |    align-items: top;
+        |    justify-content: space-between;
+        |    flex-absorb: 0.3;
+        |}
+        |
+        |.punct {
+        |    font: sans-serif normal bold;
+        |}""".stripMargin,
     "JSON" -> "",
   )
 
