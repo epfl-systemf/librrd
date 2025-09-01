@@ -139,6 +139,9 @@ object AlignedDiagrams:
               val spacesCondOne = SidedProperty.forEach(s => connectability(s) != Neither)
               val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
               val extraConn = SidedProperty.apply[Connectable].tupled(direction.swap((Down,  Up)))
+              val connectabilityMulti = SidedProperty.forEach(s => tipSpecs(s) match
+                case Physical(p) if p != extraP(s) => extraConn(s)
+                case _ => connectability(s))
               val spacesCondMulti = SidedProperty.forEach(s =>
                 connectability(s) != Neither
                 || (tipSpecs(s) match { case Physical(p) => p != extraP(s); case _ => false }))
@@ -146,7 +149,7 @@ object AlignedDiagrams:
               val alignedEndsOneMulti = SidedProperty.forEach{ s =>
                 val aligneds =
                   if justifyContent.flush(s, direction) then
-                    List(connectability(s), extraConn(s)).map(conn =>
+                    List(connectability(s), connectabilityMulti(s)).map(conn =>
                       (rec(ends(s), SidedProperty(Neither, Neither).update(s, conn))))
                   else
                     List(spacesCondOne(s), spacesCondMulti(s)).map(cond =>
