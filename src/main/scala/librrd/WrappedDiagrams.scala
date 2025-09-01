@@ -120,7 +120,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
 
 
   sealed trait HasBestUnderWidth[T]:
-    def bestUnder(width: Double): T
+    def bestUnder(width: Double, depth: Int): T
 
 
   case class GloballyWrappedDiagram(
@@ -137,7 +137,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     
     def toAlignedDiagram: librrd.AlignedDiagrams.AlignedDiagram = ???
 
-    def bestUnder(width: Double): GlobalWrap = ???
+    def bestUnder(width: Double, depth: Int): GlobalWrap = ???
 
 
   case class LocallyWrappedSequence(
@@ -180,12 +180,15 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
         subdiagramsMulti.map(_.toAlignedDiagram),
         direction, properties, tipSpecs, classes, id)
 
-    def bestUnder(width: Double): SequenceWrap[LocallyWrappedDiagram] =
+    def bestUnder(width: Double, depth: Int): SequenceWrap[LocallyWrappedDiagram] =
       options
-        .filter(_.minContent <= width)
+        .filter(_._1.minContent <= width)
         // make wrapping magic happen here
-        .minByOption(w => (w.maxContent - width).abs)
-        .getOrElse(minContentOption)
+        .minByOption(w =>
+          val wrapPenalty = w._2.length * Math.pow(2, depth)
+          val contentPenalty = (w._1.maxContent - width).abs
+          10*wrapPenalty + contentPenalty)
+        .getOrElse(minContentOption)._1
 
 
   def wrapLocally(diagram: AlignedDiagrams.AlignedDiagram): LocallyWrappedDiagram =

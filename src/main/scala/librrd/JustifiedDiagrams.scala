@@ -6,7 +6,9 @@ object JustifiedDiagrams:
     import wd.backend as l
     def rec(diagram: wd.WrappedDiagram | wd.GlobalWrap
                      | wd.SequenceWrap[wd.GlobalWrap | wd.LocallyWrappedDiagram],
-            targetWidth: Double): l.Layout =
+            targetWidth: Double,
+            depth: Int): l.Layout =
+      val depthRec = (d, w) => rec(d, w, depth + 1)
       diagram match
         case wd.Station(label, isTerminal, direction, properties, numRows, font, classes, id) =>
           l.Station(label, isTerminal, direction, font, classes, id)
@@ -15,23 +17,24 @@ object JustifiedDiagrams:
         case bvc @ wd.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
             direction, polarity, properties, tipSpecs, numRows, classes, id) =>
           val width = targetWidth - bvc.extraWidth
-          l.BlockVerticalConcatenation(rec(topSubdiagram, width), rec(bottomSubdiagram, width),
+          l.BlockVerticalConcatenation(
+            depthRec(topSubdiagram, width),
+            depthRec(bottomSubdiagram, width),
             direction, polarity, tipSpecs, numRows, bvc.extraWidths, classes, id)
         case ivc @ wd.InlineVerticalConcatenation[(wd.LocallyWrappedDiagram | wd.GlobalWrap)]
             (subdiagrams, direction, properties, tipSpecs, numRows, classes, id) =>
           val width = targetWidth - ivc.extraWidth
           l.InlineVerticalConcatenation(
-            rec(ivc.first, width - ivc.markerWidth)
-            +: ivc.mids.map(s => rec(s, width - 2*ivc.markerWidth))
-            :+ rec(ivc.last, width - ivc.markerWidth),
+            depthRec(ivc.first, width - ivc.markerWidth)
+            +: ivc.mids.map(s => depthRec(s, width - 2*ivc.markerWidth))
+            :+ depthRec(ivc.last, width - ivc.markerWidth),
             properties.get(LayoutStylesheets.ContinuationMarker), tipSpecs, numRows, ivc.extraWidths,
             ivc.markerFont, classes, id)
         case gwd @ wd.GloballyWrappedDiagram(direction, properties, numRows, options) =>
-          rec(gwd.bestUnder(targetWidth), targetWidth)
-        case gsw @ wd.GlobalSequenceWrap(sw) => rec(sw, targetWidth)
-        case lws @ wd.LocallyWrappedSequence(
-            subdiagrams, direction, properties, tipSpecs, numRows, classes, id) =>
-          rec(lws.bestUnder(targetWidth), targetWidth)
+          depthRec(gwd.bestUnder(targetWidth, depth), targetWidth)
+        case gsw @ wd.GlobalSequenceWrap(sw) => depthRec(sw, targetWidth)
+        case lws: wd.LocallyWrappedSequence =>
+          depthRec(lws.bestUnder(targetWidth, depth), targetWidth)
 
         case hc @ wd.HorizontalConcatenation[(wd.LocallyWrappedDiagram | wd.GlobalWrap)]
             (subs, direction, properties, _, classes, id) =>
@@ -71,7 +74,7 @@ object JustifiedDiagrams:
             .distribute(absorbed, n, direction)
             .map(w => l.Rail(w, direction))
           val (maybeSpaces, justifiedSubdiagrams) =
-            trimSides(subdiagrams.zip(distributed).map(rec.tupled), { case sp: l.Space => sp })
+            trimSides(subdiagrams.zip(distributed).map(depthRec.tupled), { case sp: l.Space => sp })
           l.HorizontalConcatenation(
             maybeSpaces.left.toList
             ++ (justificationRails.head // one more than n
@@ -80,4 +83,4 @@ object JustifiedDiagrams:
             ++ maybeSpaces.right.toList,
             hc.numRows, classes, id)
 
-    rec(diagram, targetWidth)
+    rec(diagram, targetWidth, 0)

@@ -58,14 +58,17 @@ def trimSides[T, U](seq: Seq[T], trim: PartialFunction[T, U])
     .dropRight(if maybeSides.right.isDefined then 1 else 0)
   (maybeSides, withoutSides)
 
-def allPartitions[T](l: List[T]): Vector[List[List[T]]] =
+type Subset[T] = List[T]
+type Partition[T] = List[Subset[T]]
+type PartitionIndices = List[Subset[Int]]
+
+def allPartitions[T](l: List[T], startIndex: Int = 0): Vector[(Partition[T], PartitionIndices)] =
   l match
-    case Nil => Vector(List(List()))
-    case elem :: Nil => Vector(List(List(elem)))
-    case head :: tail =>
-      val restPartitions = allPartitions(tail)
-      restPartitions.map(rp => List(head) +: rp)
-      ++ restPartitions.map(rp => (head +: rp.head) +: rp.tail)
+    case Nil => Vector((List(List()), List(List())))
+    case elem :: Nil => Vector((List(List(elem)), List(List(startIndex))))
+    case head :: tail => allPartitions(tail, startIndex + 1).flatMap((rp, rpi) =>
+      List((List(head) +: rp, List(0) +: rpi),
+           ((head +: rp.head) +: rp.tail, (0 +: rpi.head) +: rpi.tail)))
 
 
 val TOLERANCE = 0.0001
