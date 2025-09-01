@@ -162,10 +162,18 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
           val (first, mids, last) = splitEnds(partition)
           val withSpaces = (maybeSpaces.left.toList ++ first)
             +: mids :+ (last ++ maybeSpaces.right.toList)
+          val spaceBetweenProperties =
+            import LayoutStylesheets.{JustifyContent, Property}
+            import JustifyContentPolicy.*
+            if properties.get(JustifyContent) == SpaceBetween
+            then properties.addAlways(Property(JustifyContent, Start))
+                 +: List.fill(mids.length)(properties)
+                 :+ properties.addAlways(Property(JustifyContent, End))
+            else List.fill(withSpaces.length)(properties)
           (InlineVerticalConcatenation(
-             direction.reverse(withSpaces.map(rowSubs =>
+             direction.reverse(withSpaces.zip(spaceBetweenProperties).map((rowSubs, props) =>
                HorizontalConcatenation(
-                 rowSubs, direction, properties, None, classes, None))),
+                 rowSubs, direction, props, None, classes, None))),
              direction, properties, tipSpecs,
              NumRows.apply.tupled(direction.swap((numRows.left, numRows.right))), classes, id),
            indices))
