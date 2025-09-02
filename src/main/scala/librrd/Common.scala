@@ -70,6 +70,14 @@ def allPartitions[T](l: List[T], startIndex: Int = 0): Vector[(Partition[T], Par
       List((List(head) +: rp, List(0) +: rpi),
            ((head +: rp.head) +: rp.tail, (0 +: rpi.head) +: rpi.tail)))
 
+extension[T] (l: Seq[T])
+  def filterMinBy(f: T => Double): Vector[T] =
+    l.tail.foldLeft((f(l.head), List[T](l.head)))((acc, elem) =>
+      val fElem = f(elem)
+      if fElem < acc._1 then (fElem, List(elem))
+      else if fElem == acc._1 then (acc._1, elem +: acc._2)
+      else acc)._2.toVector.reverse
+
 
 val TOLERANCE = 0.0001
 extension (self: Double)

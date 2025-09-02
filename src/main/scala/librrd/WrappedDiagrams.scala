@@ -197,13 +197,20 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
         direction, properties, tipSpecs, classes, id)
 
     def bestUnder(width: Double, depth: Int): SequenceWrap[D] =
-      options
-        .filter(_._1.minContent <= width)
-        // make wrapping magic happen here
-        .minByOption(w =>
-          val wrapPenalty = w._2.length * Math.pow(2, depth)
-          val contentPenalty = (w._1.maxContent - width).abs
-          10*wrapPenalty + contentPenalty)
+      val fitting = options.filter(_._1.minContent <= width)
+      // make wrapping magic happen here
+      val minWrapLength = fitting.map(_._2.length).min
+      // fitting
+      //   .filter(_._2.length == minWrapLength)
+      //   .minByOption(_._1.maxContent)
+      //   .getOrElse(minContentOption)._1
+      fitting
+        .filterMinBy(w =>
+          val wrapPenalty = w._2.length * Math.pow(2, 2*depth) * 10
+          val contentPenalty = Math.pow(Math.max(0, w._1.maxContent - width), 2)
+          wrapPenalty + contentPenalty)
+        .filterMinBy(_._1.maxContent)
+        .headOption
         .getOrElse(minContentOption)._1
 
 
