@@ -35,9 +35,12 @@ object UIPresets:
 
   val layoutPresets = Map(
     "SQLite" ->
-      """* {
+      """:root {
         |    align-items: top;
         |    justify-content: space-between;
+        |}
+        |
+        |* {
         |    flex-absorb: 0.3;
         |}
         |

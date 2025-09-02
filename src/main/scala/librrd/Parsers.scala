@@ -45,7 +45,8 @@ object SelectorParser extends RegexParsers, PartialFunction[String, LayoutStyles
     ((tag ~ `class`.*) ^^ { _ match { case t ~ cs => TagClassList(Some(t), cs.toSet) } })
     | (`class`.+ ^^ (cs => TagClassList(None, cs.toSet)))
   def wildcard: Parser[Wildcard.type] = "*" ^^^ Wildcard
-  def simple: Parser[SimpleSelector] = id | tagClassList | wildcard
+  def root: Parser[Root.type] = ":root" ^^^ Root
+  def simple: Parser[SimpleSelector] = id | tagClassList | wildcard | root
 
   def compoundSeparator: Parser[Char] =
     ((whiteSpace.? ~ ">" ~ whiteSpace.?) ^^ (_ => '>'))

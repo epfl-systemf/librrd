@@ -50,6 +50,10 @@ object LayoutStylesheets:
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) = true
     val weight = (0, 0, 0)
 
+  case object Root extends SimpleSelector:
+    def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) = parents.isEmpty
+    val weight = (0, 1, 0)
+
   case class Descendant(ancestor: Selector, self: SimpleSelector) extends Selector:
     def matches(selfInfo: TagInfo, parents: Seq[TagInfo]) =
       self.matches(selfInfo, parents)
