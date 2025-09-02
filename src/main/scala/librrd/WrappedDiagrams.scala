@@ -9,16 +9,19 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     def toWrappedDiagram: WrappedDiagram
     def toDirectedDiagram = toAlignedDiagram.toDirectedDiagram
 
-  trait ContentWidthFields:
+  sealed trait ContentWidthFields:
     val minContent: Double
     val maxContent: Double
     val numRows: NumRows
 
-  sealed trait WrappedDiagram extends WrappedDiagramFields, ContentWidthFields:
+  trait Alignable:
+    def toAlignedDiagram: AlignedDiagrams.AlignedDiagram
+
+  sealed trait WrappedDiagram extends WrappedDiagramFields, ContentWidthFields, Alignable:
     def toWrappedDiagram = this
 
   sealed trait LocallyWrappedDiagram extends WrappedDiagram
-  sealed trait GlobalWrap extends ContentWidthFields
+  sealed trait GlobalWrap extends ContentWidthFields, Alignable
 
   case class Station(label: String,
                      isTerminal: Boolean,
@@ -44,8 +47,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
 
 
   case class BlockVerticalConcatenation(
-      topSubdiagram: WrappedDiagram,
-      bottomSubdiagram: WrappedDiagram,
+      topSubdiagram: LocallyWrappedDiagram | GlobalWrap,
+      bottomSubdiagram: LocallyWrappedDiagram | GlobalWrap,
       direction: Direction,
       polarity: Polarity,
       properties: PropertyMap,
@@ -117,6 +120,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     val minContent = sw.minContent
     val maxContent = sw.maxContent
     val numRows = sw.numRows
+    def toAlignedDiagram = ???
 
 
   sealed trait HasBestUnderWidth[T]:
@@ -126,32 +130,36 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
   case class GloballyWrappedDiagram(
       direction: Direction,
       properties: PropertyMap,
-      numRows: NumRows, // TODO
-      options: Iterable[GlobalWrap]) extends HasBestUnderWidth[GlobalWrap], WrappedDiagram:
+      options: Vector[GlobalWrap],
+      classes: Set[String],
+      id: Option[String]) extends HasBestUnderWidth[GlobalWrap], WrappedDiagram:
 
-    val classes: Set[String] = ???
-    val id: Option[String] = ???
+    def toAlignedDiagram = options.head.toAlignedDiagram
+    val numRows = options.head.numRows
 
-    val maxContent: Double = ???
-    val minContent: Double = ???
-    
-    def toAlignedDiagram: librrd.AlignedDiagrams.AlignedDiagram = ???
+    val minContentOption = options.minBy(_.minContent)
+    val minContent: Double = minContentOption.minContent
+    val maxContent: Double = options.map(_.maxContent).max
 
-    def bestUnder(width: Double, depth: Int): GlobalWrap = ???
+    def bestUnder(width: Double, depth: Int): GlobalWrap =
+      options
+        .filter(_.minContent <= width)
+        .maxByOption(_.maxContent)
+        .getOrElse(minContentOption)
 
 
-  case class LocallyWrappedSequence(
-        subdiagramsOne: Seq[LocallyWrappedDiagram],
-        subdiagramsMulti: Seq[LocallyWrappedDiagram],
+  case class LocallyWrappedSequence[D <: LocallyWrappedDiagram | GlobalWrap](
+        subdiagramsOne: Seq[D],
+        subdiagramsMulti: Seq[D],
         direction: Direction,
         properties: PropertyMap,
         tipSpecs: TipSpecifications,
         numRows: NumRows,
         classes: Set[String] = Set.empty,
         id: Option[String] = None)
-      extends HasBestUnderWidth[SequenceWrap[LocallyWrappedDiagram]], LocallyWrappedDiagram:
+      extends HasBestUnderWidth[SequenceWrap[D]], LocallyWrappedDiagram:
 
-    val options: Vector[(SequenceWrap[LocallyWrappedDiagram], PartitionIndices)] =
+    val options: Vector[(SequenceWrap[D], PartitionIndices)] =
       val (maybeSpaces, withoutSpaces) = trimSides(subdiagramsMulti, { case sp: Space => sp })
       allPartitions(withoutSpaces.toList).map((partition, indices) =>
         if partition.length == 1 then
@@ -188,7 +196,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
         subdiagramsMulti.map(_.toAlignedDiagram),
         direction, properties, tipSpecs, classes, id)
 
-    def bestUnder(width: Double, depth: Int): SequenceWrap[LocallyWrappedDiagram] =
+    def bestUnder(width: Double, depth: Int): SequenceWrap[D] =
       options
         .filter(_._1.minContent <= width)
         // make wrapping magic happen here
@@ -214,3 +222,37 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
           direction, polarity, properties, tipSpecs, classes, id) =>
         BlockVerticalConcatenation(wrapLocally(topSubdiagram), wrapLocally(bottomSubdiagram),
           direction, polarity, properties, tipSpecs, diagram.numRows, classes, id)
+
+
+  def wrapGlobally(diagram: AlignedDiagrams.AlignedDiagram): GloballyWrappedDiagram =
+    def rec(diagram: AlignedDiagrams.AlignedDiagram): Vector[GlobalWrap] =
+      diagram match
+        case AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
+          Vector(Station(label, isTerminal, direction, properties, diagram.numRows,
+                         properties.get(LayoutStylesheets.Font), classes, id))
+        case AlignedDiagrams.Space(direction) =>
+          Vector(Space(direction, diagram.numRows))
+        case AlignedDiagrams.Sequence(subdiagramsOne, subdiagramsMulti,
+            direction, properties, tipSpecs, classes, id) =>
+          subdiagramsOne.zip(subdiagramsMulti)
+            .map(s => rec(s._1).zip(rec(s._2)))
+            .foldLeft[Vector[Vector[(GlobalWrap, GlobalWrap)]]](Vector(Vector()))((acc, subOptions) =>
+              acc.flatMap(accOption => subOptions.map(accOption :+ _)))
+            .map(_.unzip)
+            .flatMap((so, sm) =>
+              LocallyWrappedSequence(so, sm, direction, properties, tipSpecs, diagram.numRows,
+                                     classes, id)
+                .options.map(_._1))
+            .map(GlobalSequenceWrap.apply)
+        case AlignedDiagrams.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
+            direction, polarity, properties, tipSpecs, classes, id) =>
+          val topGlobals = rec(topSubdiagram)
+          val bottomGlobals = rec(bottomSubdiagram)
+          for
+            tg <- topGlobals
+            bg <- bottomGlobals
+          yield
+            BlockVerticalConcatenation(tg, bg, direction, polarity, properties, tipSpecs,
+                                       diagram.numRows, classes, id)
+    GloballyWrappedDiagram(diagram.direction, diagram.properties, rec(diagram),
+      diagram.classes, diagram.id)

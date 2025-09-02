@@ -15,4 +15,10 @@ object LibRRD:
     val myLayout = JustifiedDiagrams.justify(SVGWD)(myWrappedDiagram, width)
     SVGWD.backend.render(myLayout)
 
+  def layOutGloballyToSVG(diagram: Diagrams.Diagram, stylesheet: LayoutStylesheets.Stylesheet,
+                        width: Double) =
+    val myWrappedDiagram = SVGWD.wrapGlobally(preLayOut(diagram, stylesheet))
+    val myLayout = JustifiedDiagrams.justify(SVGWD)(myWrappedDiagram, width)
+    SVGWD.backend.render(myLayout)
+
   def resetSVGID() = LayoutsSVG.resetID()
