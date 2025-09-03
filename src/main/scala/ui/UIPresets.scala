@@ -1,4 +1,4 @@
-package librrd
+package ui
 
 object UIPresets:
   val diagramPresets = Map(

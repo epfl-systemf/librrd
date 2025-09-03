@@ -1,7 +1,8 @@
-package librrd
+package ui
 
 import org.scalajs.dom
 import org.scalajs.dom.document
+import librrd.LibRRD
 
 object UI:
   lazy val outputCanvas = document.getElementById("output-canvas")

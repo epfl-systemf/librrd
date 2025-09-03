@@ -1,7 +1,9 @@
-package librrd
+package ui
 
 import util.parsing.combinator.RegexParsers
 import util.{Try, Success}
+import librrd.{Diagrams, LayoutStylesheets, AlignItemsPolicy, JustifyContentPolicy,
+               Polarity, SidedProperty, FontInfo}
 
 trait InputParser[T]:
   def apply(input: String): Try[T]
