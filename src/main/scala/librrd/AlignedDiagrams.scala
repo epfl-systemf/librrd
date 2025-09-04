@@ -54,9 +54,9 @@ object AlignedDiagrams:
                       id: Option[String] = None) extends AlignedDiagram:
 
     val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
-    val sidemosts = SidedProperty(subdiagramsOneRow.head, subdiagramsOneRow.last)
+    val sidemosts = SidedProperty(subdiagramsOneRow.headOption, subdiagramsOneRow.lastOption)
     val numRows = NumRows.forEach(s =>
-      if justifyContent.flush(s, direction) then sidemosts(s).numRows(s) else 1)
+      if justifyContent.flush(s, direction) then sidemosts(s).map(_.numRows(s)).getOrElse(1) else 1)
 
     Side.values.foreach(s =>
       assert(tipSpecs(s) match

@@ -54,12 +54,12 @@ object JustifiedDiagrams:
 
           val concatenations = subdiagrams.map(s =>
             if (s.isInstanceOf[wd.Station] || s.isInstanceOf[wd.Space]) then None else Some(s))
-          if concatenations.forall(_.isEmpty)
+          val concatMaxs = concatenations.map(_.map(_.maxContent))
+          val concatMaxsSum = concatMaxs.map(_.getOrElse(0.0)).sum
+          if concatMaxsSum == 0
           then
             absorbed += remaining
           else
-            val concatMaxs = concatenations.map(_.map(_.maxContent))
-            val concatMaxsSum = concatMaxs.map(_.getOrElse(0.0)).sum
             distributed.indices.filter(i => concatenations(i).isDefined).foreach { i =>
               distributed(i) += remaining * concatMaxs(i).get / concatMaxsSum
             }
@@ -72,12 +72,13 @@ object JustifiedDiagrams:
             .map(w => l.Rail(w, hc.direction))
           val (maybeSpaces, justifiedSubdiagrams) =
             trimSides(subdiagrams.zip(distributed).map(depthRec.tupled), { case sp: l.Space => sp })
-          l.HorizontalConcatenation(
+          val sublayouts =
             maybeSpaces.left.toList
             ++ (justificationRails.head // one more than n
                 +: justifiedSubdiagrams.zip(justificationRails.tail).flatMap[l.Layout](_.toList))
                .filterNot(_.width == 0)
-            ++ maybeSpaces.right.toList,
-            hc.numRows, hc.classes, hc.id)
+            ++ maybeSpaces.right.toList
+          if sublayouts.isEmpty then l.Rail(0, hc.direction, hc.classes, hc.id)
+          else l.HorizontalConcatenation(sublayouts, hc.numRows, hc.classes, hc.id)
 
     rec(diagram, targetWidth, 0)
