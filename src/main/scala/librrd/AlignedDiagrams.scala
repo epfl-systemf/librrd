@@ -132,6 +132,9 @@ object AlignedDiagrams:
               case AlignItemsPolicy.Baseline => /* doesn't matter */ Logical(1)
             case _ => Vertical)
 
+          if subdiagrams.isEmpty && Side.values.count(s => connectability(s).isEither) == 1
+          then List(Space(direction))
+          else {
           val (alignedSubdiagramsOne, alignedSubdiagramsMulti) = subdiagrams.length match
             case 0 =>
               val spaces = Side.values.toList.flatMap(s =>
@@ -176,6 +179,7 @@ object AlignedDiagrams:
 
           List(Sequence(alignedSubdiagramsOne, alignedSubdiagramsMulti,
                         direction, properties, tipSpecs, classes, id))
+        }
 
 
         case DirectedDiagrams.Stack(topSubdiagram, bottomSubdiagram,

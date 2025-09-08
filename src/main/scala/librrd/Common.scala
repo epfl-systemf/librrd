@@ -50,8 +50,8 @@ def splitEnds[T](seq: Seq[T]): (T, Seq[T], T) =
   (firsts(0), mids, lasts(0))
 
 def trimSides[T, U](seq: Seq[T], trim: PartialFunction[T, U])
-  : (SidedProperty[Option[U]], Seq[T]) =
-  val maybeSides = SidedProperty(seq.headOption, seq.lastOption)
+    : (SidedProperty[Option[U]], Seq[T]) =
+  val maybeSides = SidedProperty(seq.headOption, seq.drop(1).lastOption)
     .map[Option[U]](_.collect(trim))
   val withoutSides = seq
     .drop(if maybeSides.left.isDefined then 1 else 0)
