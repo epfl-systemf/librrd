@@ -5,16 +5,14 @@ import TipSpecification.*
 
 object AlignedDiagrams:
 
-  enum ConnectabilityValue { case Up, Down }
+  enum ConnectabilityValue { case +, - }
   type Connectability = Set[ConnectabilityValue]
   object Connectability:
     val Neither: Connectability = Set()
-    val Up: Connectability = Set(ConnectabilityValue.Up)
-    val Down: Connectability = Set(ConnectabilityValue.Down)
-    val Both: Connectability = Up | Down
+    val `+`: Connectability = Set(ConnectabilityValue.+)
+    val `-`: Connectability = Set(ConnectabilityValue.-)
+    val Both: Connectability = `+` | `-`
   extension (c: Connectability)
-    def isUp = !(c & Connectability.Up).isEmpty
-    def isDown = !(c & Connectability.Down).isEmpty
     def isEither = !c.isEmpty
 
   trait AlignedDiagramFields extends DirectedDiagrams.DirectedDiagramFields:
@@ -83,8 +81,8 @@ object AlignedDiagrams:
     val innerNumRows = NumRows.forEach(s => bottomSubdiagram.numRows(s)
       + (polarity match { case Polarity.+ => topSubdiagram.numRows(s); case _ => 1 }))
     val numRows = NumRows.forEach(s =>
-      tipSpecs(s) match
-        case Vertical => innerNumRows(s)
+      (tipSpecs(s), polarity) match
+        case (Vertical, Polarity.+) => innerNumRows(s)
         case _ => 1)
 
     Side.values.foreach(s =>
@@ -152,9 +150,8 @@ object AlignedDiagrams:
 
               val spacesCondOne = SidedProperty.forEach(s => connectability(s).isEither)
               val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
-              val extraConn = SidedProperty.apply[Connectability].tupled(direction.swap((Down,  Up)))
               val connectabilityMulti = SidedProperty.forEach(s => (tipSpecs(s) match
-                case Physical(p) if p != extraP(s) => extraConn(s)
+                case Physical(p) if p != extraP(s) => +
                 case _ => Neither) | connectability(s))
               val spacesCondMulti = SidedProperty.forEach(s =>
                 connectability(s).isEither
@@ -184,26 +181,28 @@ object AlignedDiagrams:
 
         case DirectedDiagrams.Stack(topSubdiagram, bottomSubdiagram,
                                     direction, polarity, properties, classes, id) =>
-          val topConnectability = SidedProperty.forEach(s => Down | connectability(s))
+          val polarityConnectability = polarity match { case Polarity.+ => + ; case _ => - }
+          val topConnectability = SidedProperty.forEach(s => polarityConnectability | connectability(s))
           val alignedTop = singletonWithSpaces(rec(topSubdiagram, topConnectability),
             topSubdiagram.direction, properties)
-          val bottomConnectability = SidedProperty.forEach(s => Up | connectability(s))
+          val bottomConnectability = SidedProperty.forEach(s => `+` | connectability(s))
           val alignedBottom = singletonWithSpaces(rec(bottomSubdiagram, bottomConnectability),
             bottomSubdiagram.direction, properties)
 
+          val preNumRows = NumRows.forEach(s => (polarity match
+            case Polarity.+ => alignedTop.numRows(s)
+            case Polarity.- => 1) + alignedBottom.numRows(s))
           val tipSpecs = TipSpecifications.forEach(s => (connectability(s), polarity) match
+            case (-, Polarity.-) => Vertical
             case (Neither, _) | (_, Polarity.-) => properties.get(LayoutStylesheets.AlignSelf)(s) match
-              case AlignItemsPolicy.Top => Physical(0)
+              case AlignItemsPolicy.Top => Logical(1)
               case AlignItemsPolicy.Center => Physical(0.5)
-              case AlignItemsPolicy.Bottom => Physical(1)
+              case AlignItemsPolicy.Bottom => Logical(preNumRows(s))
               case AlignItemsPolicy.Baseline =>
                 topSubdiagram match
                   case DirectedDiagrams.Sequence(subs, _, _, _, _)
                     if subs.isEmpty && alignedBottom.numRows(s) == 1 => Logical(2)
-                  case _ => Logical((
-                    (polarity match
-                       case Polarity.+ => alignedTop.numRows(s)
-                       case Polarity.- => 1) + alignedBottom.numRows(s) + 1)/2)
+                  case _ => Logical((preNumRows(s) + 1)/2)
             case _ => Vertical)
 
           maybeSurroundSpaces(
