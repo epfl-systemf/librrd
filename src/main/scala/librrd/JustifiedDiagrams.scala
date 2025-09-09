@@ -30,7 +30,7 @@ object JustifiedDiagrams:
             ivc.extraWidths, ivc.markerFont, ivc.classes, ivc.id)
         case gwd: wd.GloballyWrappedDiagram =>
           depthRec(gwd.bestUnder(targetWidth, depth), targetWidth)
-        case gsw @ wd.GlobalSequenceWrap(sw) => depthRec(sw, targetWidth)
+        case gsw @ wd.GlobalSequenceWrap(sw, _) => depthRec(sw, targetWidth)
         case lws: wd.LocallyWrappedSequence[_] =>
           depthRec(lws.bestUnder(targetWidth, depth), targetWidth)
 

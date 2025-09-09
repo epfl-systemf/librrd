@@ -116,11 +116,13 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
                       ++ mids.map(_.maxContent + 2*markerWidth)).max + extraWidth
 
 
-  case class GlobalSequenceWrap(sw: SequenceWrap[GlobalWrap]) extends GlobalWrap:
+  case class GlobalSequenceWrap(sw: SequenceWrap[GlobalWrap],
+                                origAligned: AlignedDiagrams.Sequence) extends GlobalWrap:
     val minContent = sw.minContent
     val maxContent = sw.maxContent
     val numRows = sw.numRows
-    def toAlignedDiagram = ???
+    def toAlignedDiagram = origAligned
+
 
 
   sealed trait HasBestUnderWidth[T]:
@@ -239,7 +241,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
                          properties.get(LayoutStylesheets.Font), classes, id))
         case AlignedDiagrams.Space(direction) =>
           Vector(Space(direction, diagram.numRows))
-        case AlignedDiagrams.Sequence(subdiagramsOne, subdiagramsMulti,
+        case seq @ AlignedDiagrams.Sequence(subdiagramsOne, subdiagramsMulti,
             direction, properties, tipSpecs, classes, id) =>
           subdiagramsOne.zip(subdiagramsMulti)
             .map(s => rec(s._1).zip(rec(s._2)))
@@ -250,7 +252,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
               LocallyWrappedSequence(so, sm, direction, properties, tipSpecs, diagram.numRows,
                                      classes, id)
                 .options.map(_._1))
-            .map(GlobalSequenceWrap.apply)
+            .map(sw => GlobalSequenceWrap(sw, seq))
         case AlignedDiagrams.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
             direction, polarity, properties, tipSpecs, classes, id) =>
           val topGlobals = rec(topSubdiagram)
