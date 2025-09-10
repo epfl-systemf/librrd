@@ -70,6 +70,7 @@ h1 {
     overflow: hidden;
     border: 1px solid var(--ui-gray);
     border-radius: 2px;
+    margin-bottom: 8em;
 }
 
 #output-canvas {
