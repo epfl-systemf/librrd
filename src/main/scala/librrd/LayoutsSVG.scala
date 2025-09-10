@@ -163,10 +163,10 @@ object LayoutsSVG extends Layouts[Tag]:
 
               case Polarity.- =>
                 def topPath(subTipY: Double) = path(d:=
-                  s"M $x,${bvc.bottomOffset}  L $x,${subTipY + 2*unitWidth} "
+                  s"M $x,${bvc.bottomOffset - Layout.rowGap/2}  L $x,${subTipY + 2*unitWidth} "
                   + s"$quarterArc $downwards ${sign*radius},${-radius}")
                 def bottomPath(subTipY: Double) = path(d:=
-                  s"M $x,${bvc.bottomOffset}  L $x,${subTipY - 2*unitWidth} "
+                  s"M $x,${bvc.bottomOffset - Layout.rowGap/2}  L $x,${subTipY - 2*unitWidth} "
                   + s"$quarterArc $upwards ${sign*radius},$radius")
                 val inners = (1 to topSublayout.numRows(side))
                   .map(r => topPath(topSublayout.tipY(side, Logical(r))))
