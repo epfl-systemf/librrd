@@ -35,7 +35,38 @@ object LayoutsSVG extends Layouts[Tag]:
 
   val unitWidth = Layout.unitWidth
   val radius = 2*unitWidth
-  val quarterArc = s"a $radius,$radius 90 0"
+  val quarterArc = s"a $radius,$radius 0 0"
+
+  def positiveBrackets(tipY: Double, subTipYs: Seq[Double], sign: Int, x: Double) =
+    val upwards: Int = -(sign - 1)/2
+    val downwards = 1 - upwards
+
+    def upPath(subTipY: Double) = path(d:=
+      s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
+      + s"$quarterArc $upwards ${sign*radius},${-radius} "
+      + s"L $x,${subTipY + 2*unitWidth} "
+      + s"$quarterArc $downwards ${sign*radius},${-radius}")
+    def downPath(subTipY: Double) = path(d:=
+      s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
+      + s"$quarterArc $downwards ${sign*radius},$radius "
+      + s"L $x,${subTipY - 2*unitWidth} "
+      + s"$quarterArc $upwards ${sign*radius},$radius")
+    val straightPath =
+      path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
+    def approxPath(subTipY: Double) =
+      val halfTip = (subTipY - tipY)/2
+      val theta = 2*Math.atan(halfTip/radius)
+      val r = radius/Math.sin(theta)
+      val (first, second) = if halfTip < 0 then (upwards, downwards) else (downwards, upwards)
+      path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
+            + s"a $r,$r 0 0 $first ${sign*radius},$halfTip "
+            + s"a $r,$r 0 0 $second ${sign*radius},$halfTip")
+
+    val (ups, notUps) = subTipYs.partition(_ <= tipY - 2*radius)
+    val (notUpDowns, downs) = notUps.partition(_ <= tipY + 2*radius)
+    val (straights, approxs) = notUpDowns.partition(_ ~= tipY)
+    straights.map(_ => straightPath) ++ ups.map(upPath) ++ downs.map(downPath)
+      ++ approxs.map(approxPath)
 
   override def render(layout: Layout) =
     val inner = layout match
@@ -97,30 +128,14 @@ object LayoutsSVG extends Layouts[Tag]:
         val brackets = List((Side.Left, extraWidths.left, +1),
                             (Side.Right, extraWidths.left + first.width + ivc.markerWidth, -1))
           .flatMap((side, x, sign) =>
-            val upwards: Int = -(sign - 1)/2
-            val downwards = 1 - upwards
-            val tipY = ivc.tipY(side)
             tipSpecs(side) match
               case TipSpecification.Physical(p) if p != extraP(side) =>
-                def upPath(subTipY: Double) = path(d:=
-                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
-                  + s"$quarterArc $upwards ${sign*2*unitWidth},${-2*unitWidth} "
-                  + s"L $x,${subTipY + 2*unitWidth} "
-                  + s"$quarterArc $downwards ${sign*2*unitWidth},${-2*unitWidth}")
-                def downPath(subTipY: Double) = path(d:=
-                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
-                  + s"$quarterArc $downwards ${sign*2*unitWidth},${2*unitWidth} "
-                  + s"L $x,${subTipY - 2*unitWidth} "
-                  + s"$quarterArc $upwards ${sign*2*unitWidth},${2*unitWidth}")
-                val straightPath =
-                  path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
-
-                val (ups, notUps) = (1 to ends(side).numRows(side))
-                  .map(r => ivc.tipY(side, TipSpecification.Logical(r)))
-                  .partition(_ <= tipY - 4*unitWidth)
-                val (notUpDowns, downs) = notUps.partition(_ <= tipY + 4*unitWidth)
-                val (straights, approxs) = notUpDowns.partition(_ ~= tipY)
-                straights.map(_ => straightPath) ++ ups.map(upPath) ++ downs.map(downPath)
+                positiveBrackets(
+                  ivc.tipY(side),
+                  (1 to ends(side).numRows(side))
+                    .map(r => ivc.tipY(side, TipSpecification.Logical(r))),
+                  sign,
+                  x)
               case _ => List())
 
         inners ++ brackets
@@ -139,41 +154,27 @@ object LayoutsSVG extends Layouts[Tag]:
             polarity match
               case Polarity.+ => tipSpecs(side) match
                 case Vertical => List()
-                case _ =>
-                  def upPath(subTipY: Double) = path(d:=
-                    s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
-                    + s"$quarterArc $upwards ${sign*2*unitWidth},${-2*unitWidth} "
-                    + s"L $x,${subTipY + 2*unitWidth} "
-                    + s"$quarterArc $downwards ${sign*2*unitWidth},${-2*unitWidth}")
-                  def downPath(subTipY: Double) = path(d:=
-                    s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
-                    + s"$quarterArc $downwards ${sign*2*unitWidth},${2*unitWidth} "
-                    + s"L $x,${subTipY - 2*unitWidth} "
-                    + s"$quarterArc $upwards ${sign*2*unitWidth},${2*unitWidth}")
-                  val straightPath =
-                    path(d:=s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
-
-                  val (ups, notUps) = (1 to (topSublayout.numRows(side) + bottomSublayout.numRows(side)))
-                    .map(r => bvc.tipY(side, Logical(r)))
-                    .partition(_ <= tipY - 4*unitWidth)
-                  val (notUpDowns, downs) = notUps.partition(_ <= tipY + 4*unitWidth)
-                  val (straights, approxs) = notUpDowns.partition(_ ~= tipY)
-                  straights.map(_ => straightPath) ++ ups.map(upPath) ++ downs.map(downPath)
+                case _ => positiveBrackets(
+                            tipY,
+                            (1 to (topSublayout.numRows(side) + bottomSublayout.numRows(side)))
+                              .map(r => bvc.tipY(side, Logical(r))),
+                            sign,
+                            x)
 
               case Polarity.- =>
                 def topPath(subTipY: Double) = path(d:=
                   s"M $x,${bvc.bottomOffset}  L $x,${subTipY + 2*unitWidth} "
-                  + s"$quarterArc $downwards ${sign*2*unitWidth},${-2*unitWidth}")
+                  + s"$quarterArc $downwards ${sign*radius},${-radius}")
                 def bottomPath(subTipY: Double) = path(d:=
                   s"M $x,${bvc.bottomOffset}  L $x,${subTipY - 2*unitWidth} "
-                  + s"$quarterArc $upwards ${sign*2*unitWidth},${2*unitWidth}")
+                  + s"$quarterArc $upwards ${sign*radius},$radius")
                 val inners = (1 to topSublayout.numRows(side))
                   .map(r => topPath(topSublayout.tipY(side, Logical(r))))
                   ++ (1 to bottomSublayout.numRows(side))
                   .map(r => bottomPath(bvc.bottomOffset + bottomSublayout.tipY(side, Logical(r))))
                 val outerPath = path(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
-                  + s"$quarterArc $upwards ${sign*2*unitWidth},${-2*unitWidth}")
+                  + s"$quarterArc $upwards ${sign*radius},${-radius}")
                 val straight = path(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
 
