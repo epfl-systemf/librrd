@@ -191,7 +191,9 @@ object LayoutsSVG extends Layouts[Tag]:
         ) ++ brackets
 
     val withGroup = inner
-      :+ rect(x:=0, y:=0, svgWidth:=layout.width, svgHeight:=layout.height, `class`:="librrd-group")
+      :+ rect(x:=(-unitWidth), y:=(-2*unitWidth),
+              svgWidth:=layout.width + 2*unitWidth, svgHeight:=layout.height + 4*unitWidth,
+              `class`:="librrd-group")
       :+ (`class`:=(layout.classes).mkString(" "))
       :+ (id:=layout.id)
     g(withGroup*)

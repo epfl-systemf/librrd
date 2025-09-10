@@ -204,6 +204,8 @@ trait Layouts[T]:
 
   object BlockVerticalConcatenation:
     val `class` = "librrd-vconcat-block"
+    val positiveClass = "librrd-vconcat-block-positive"
+    val negativeClass = "librrd-vconcat-block-negative"
 
   case class BlockVerticalConcatenation(
       topSublayout: Layout,
@@ -216,7 +218,11 @@ trait Layouts[T]:
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout:
 
-    val classes = initClasses + BlockVerticalConcatenation.`class`
+    val classes = initClasses
+      + BlockVerticalConcatenation.`class`
+      + (polarity match
+           case Polarity.+ => BlockVerticalConcatenation.positiveClass
+           case Polarity.- => BlockVerticalConcatenation.negativeClass)
     val id = initId.getOrElse(freshID())
 
     assert(topSublayout.width ~= bottomSublayout.width,
