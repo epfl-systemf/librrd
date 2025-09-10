@@ -6,7 +6,6 @@
     <title>librrd playground</title>
     <link rel="stylesheet" href="style.css?version=1">
     <script type="module" src="main.js"></script>
-    <style id="custom-style"></style>
   </head>
   <body>
     <header>
@@ -34,8 +33,11 @@
         </div>
       </div>
       <div id="output">
-        <svg id="output-canvas"></svg>
+        <svg id="output-canvas">
+          <style id="output-style"></style>
+        </svg>
       </div>
+      <button id="save-output" type="button">save SVG</button>
     </main>
   </body>
 </html>

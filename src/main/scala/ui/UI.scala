@@ -84,6 +84,8 @@ object UI:
         customTypingState()
       })
 
+  lazy val outputDiv = document.getElementById("output")
+
   object ResizeState:
     var width = 500.0
     private val debouncer = Debouncer(reLayOut, 10)
@@ -99,13 +101,26 @@ object UI:
             width = newWidth - 20
             debouncer.trigger()
         }
-      }.observe(document.getElementById("output"))
+      }.observe(outputDiv)
 
+  lazy val saveOutputButton = document.getElementById("save-output")
   def registerInputs(): Unit =
     ResizeState.register()
     InputsPresets.Diagram.register(true)
     InputsPresets.LayoutStylesheet.register(true)
     InputsPresets.RenderingStylesheet.register()
+    saveOutputButton.addEventListener("click", (event) => {
+      val serialized = dom.XMLSerializer().serializeToString(outputCanvas)
+      val blob = dom.Blob(scalajs.js.Array(serialized),
+        new dom.BlobPropertyBag { `type` = "image/svg+xml" })
+      val downloader = document.createElement("a")
+      downloader.setAttribute("href", dom.URL.createObjectURL(blob))
+      downloader.setAttribute("download", "librrd.svg")
+      downloader.setAttribute("style", "display: none;")
+      outputDiv.appendChild(downloader)
+      downloader.dispatchEvent(dom.PointerEvent("click"))
+      outputDiv.removeChild(downloader)
+    })
 
   var oldSVG: Option[org.scalajs.dom.Node] = None
   def reLayOut(): Unit =
@@ -120,9 +135,9 @@ object UI:
       outputCanvas.appendChild(mySVG)
     oldSVG = Some(mySVG)
 
-  lazy val customStyleElement = document.getElementById("custom-style")
+  lazy val outputStyleElement = document.getElementById("output-style")
   def reRender(): Unit =
-    customStyleElement.innerHTML = InputsPresets.RenderingStylesheet.get
+    outputStyleElement.innerHTML = InputsPresets.RenderingStylesheet.get
 
   @main def main(): Unit =
     document.addEventListener("DOMContentLoaded", (event) => {
