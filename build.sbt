@@ -17,6 +17,7 @@ lazy val root = project.in(file("."))
       "-Ysafe-init",
       "-Wunused:all",
       "-Wvalue-discard",
+      "-deprecation",
     ),
 
     libraryDependencies ++= Seq(
