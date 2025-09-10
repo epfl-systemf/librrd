@@ -140,8 +140,7 @@ object AlignedDiagrams:
               (spaces, spaces)
 
             case 1 =>
-              val inner = rec(subdiagrams(0), SidedProperty.forEach(s =>
-                if justifyContent.flush(s, direction) then connectability(s) else Neither))
+              val inner = rec(subdiagrams(0), connectability)
               (inner, inner)
 
             case _ =>
