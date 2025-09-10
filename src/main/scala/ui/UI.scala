@@ -104,6 +104,7 @@ object UI:
       }.observe(outputDiv)
 
   lazy val saveOutputButton = document.getElementById("save-output")
+  lazy val helpDialog = document.getElementById("help-dialog").asInstanceOf[dom.HTMLDialogElement]
   def registerInputs(): Unit =
     ResizeState.register()
     InputsPresets.Diagram.register(true)
@@ -120,6 +121,9 @@ object UI:
       outputDiv.appendChild(downloader)
       downloader.dispatchEvent(dom.PointerEvent("click"))
       outputDiv.removeChild(downloader)
+    })
+    document.getElementById("help-button").addEventListener("click", (event) => {
+      helpDialog.showModal()
     })
 
   var oldSVG: Option[org.scalajs.dom.Node] = None

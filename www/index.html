@@ -10,6 +10,7 @@
   <body>
     <header>
       <h1>librrd playground</h1>
+      <button id="help-button" type="button" class="help">HELP</button>
     </header>
     <main>
       <div class="control-boxes-container">
@@ -38,6 +39,46 @@
         </svg>
       </div>
       <button id="save-output" type="button">save SVG</button>
+      <dialog id="help-dialog" closedby="any" class="help">
+        <p>This dialog provides terse explanations of some details that you may not be able to figure out just by carefully studying and playing with the examples.</p>
+        <section>
+          <h2>diagrams</h2>
+          <p>Terminal stations can be written as <code>"label"</code> or <code>'label'</code>.</p>
+          <p>Any diagram expression can be surrounded by braces <code>{}</code> in order to then specify a class, ID, or both.</p>
+          <p>Unwanted collapsing can be prevented with empty sequences.</p>
+        </section>
+        <section>
+          <h2>layout stylesheets</h2>
+          <p>The language is modeled after CSS.
+            The selector language has 4 tags (<code>terminal</code>, <code>nonterminal</code>, <code>sequence</code>, <code>stack</code>); wildcard, class, and ID selectors; a <code>:root</code> pseudo-selector; and descendant and child combinators.
+            Specificity and cascading is as in CSS.
+            The possible properties are explained below.</p>
+          <p><code>align-items</code> controls vertical alignment of a container's items.
+            It is an inherited property.
+            <code>align-self</code> on an item controls its own alignment, overriding the container.
+            The possible values for both properties are <code>top</code>, <code>center</code>, <code>bottom</code>, and <code>baseline</code>.
+            The default value is <code>top</code>.
+            If two values are given for <code>align-self</code>, they apply to the left and right sides of the item, respectively.</p>
+          <p><code>justify-content</code> controls horizontal justification of a container's items.
+            It is an inherited property.
+            The possible values are <code>left</code>, <code>right</code>, <code>start</code>, <code>end</code>, <code>center</code>, <code>space-around</code>, <code>space-between</code>, and <code>space-evenly</code>.
+            The default value is <code>space-between</code>.</p>
+          <p>Other properties (all non-inherited) are
+            <ul>
+              <li><code>flex-absorb</code>, a proportion between 0 and 1, default 0;</li>
+              <li><code>gap</code> a nonnegative number, default 0;</li>
+              <li><code>continuation-marker</code>, a string, default <code>…</code>; and</li>
+              <li><code>font</code>, up to 4 space-separated strings, being the font family, style, weight, and size, respectively, taking their default values if omitted, which are <code>sans-serif</code>, <code>normal</code>, <code>normal</code>, and <code>1rem</code>.</li>
+            </ul>
+          </p>
+        </section>
+        <section>
+          <h2>rendering stylesheets</h2>
+          <p>This is literally CSS applied to the rendered SVG.
+            Elements in the SVG have classes corresponding to the layout constructors, in addition to classes and IDs carried down from the diagram, and are nested in the same way as the diagram constructors (modulo intervening <code>g</code> tags).
+            Don’t change the font (even though you can) because text extents (and hence the widths of stations) are computed at layout time, not rendering time, and depend on the font.</p>
+        </section>
+      </dialog>
     </main>
   </body>
 </html>

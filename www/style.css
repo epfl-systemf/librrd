@@ -3,6 +3,7 @@
     color: black;
     background-color: white;
     --ui-gray: #555;
+    --helpful-green: hsl(150 100% 80%);
     --small-space: 0.3rem;
     --negative-small-space: -0.3rem;
     --medium-space: 0.6rem;
@@ -29,6 +30,16 @@ h1 {
     font-size: 2em;
     text-align: center;
     margin-bottom: var(--large-space);
+}
+
+h2 {
+    font-size: 1.3em;
+    margin-top: 1.5rem;
+    margin-bottom: var(--big-space);
+}
+
+p, ul {
+    margin: var(--medium-space) 0;
 }
 
 .control-boxes-container {
@@ -60,6 +71,9 @@ h1 {
 
 .control-box textarea {
     min-height: 15em;
+}
+
+.control-box textarea, code {
     font-family: 'Overpass Mono', Iosevka, 'Fira Code', Menlo, Consolas, monospace;
 }
 
@@ -76,4 +90,32 @@ h1 {
 #output-canvas {
     width: 100%;
     height: 100%;
+}
+
+.help {
+    border: 2px solid red;
+    border-radius: 12px;
+}
+
+#help-button {
+    position: absolute;
+    top: var(--medium-space);
+    right: var(--medium-space);
+
+    font-size: 2em;
+    color: red;
+    background: var(--helpful-green);
+    padding: 0.3em 0.3em 0 0.3em;
+
+    cursor: help;
+}
+
+dialog::backdrop {
+    background-color: var(--helpful-green);
+    opacity: 0.4;
+}
+
+dialog {
+    width: 90%;
+    max-width: 50em;
 }

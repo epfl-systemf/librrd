@@ -112,15 +112,3 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
 
 object IdentityParser extends InputParser[String]:
   def apply(input: String) = Success(input)
-
-/*
-((+ ("WITH" (+ () "RECURSIVE") (- [common-table-expression] ",")) ())
-      (+ "REPLACE" ("INSERT" (+ () ("OR" (+ "ABORT" (+ "FAIL" (+ "IGNORE" (+ "REPLACE" "ROLLBACK"))))))))
-      "INTO"
-      (+ () ("schema-name" ".")) "table-name" (+ ("AS" "alias") ())
-      (+ ("(" (- "column-name" ",") ")") ())
-      (+ ("VALUES" (- ("(" (- [expr] ",") ")") ",") (+ () [upsert-clause]))
-          (+ ([select-stmt] (+ () [upsert-clause]))
-              ("DEFAULT" "VALUES")))
-      (+ () [returning-clause]))
-*/
