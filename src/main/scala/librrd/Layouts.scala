@@ -89,7 +89,7 @@ trait Layouts[T]:
     val nonterminalClass = "librrd-nonterminal"
 
     val paddingX = Layout.unitWidth
-    val paddingY = Layout.unitWidth
+    val paddingY = 1.5*Layout.unitWidth
 
   case class Station(
       label: String,

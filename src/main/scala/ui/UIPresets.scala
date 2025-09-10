@@ -30,7 +30,15 @@ object UIPresets:
         | (- [select-core] (+ (+ "UNION" ("UNION" "ALL")) (+ "INTERSECT" "EXCEPT")))
         | (+ ("ORDER" "BY" (- [ordering-term] ",")) ())
         | (+ ("LIMIT" [expr] (+ () (+ ("OFFSET" [expr]) ("," [expr])))) ()))""".stripMargin,
-    "JSON list" -> """("[" (+ () (- [token] ",")) "]")""",
+    "JSON number" ->
+      """((+ () "-")
+        | (+ "0" ([digit 1-9] (- () [digit])))
+        | (+ () ("." (- [digit] ())))
+        | (+ ()
+        |    ({(+ "E" "e") class="bottom-aligned"}
+        |     {(+ (+ "-" ()) "+") class="center-aligned"}
+        |     (- [digit] ()))))""".stripMargin,
+    "JSON array" -> """("[" (+ [whitespace] (- [value] ",")) "]")""",
   )
 
   val layoutPresets = Map(
@@ -47,20 +55,52 @@ object UIPresets:
         |.punct {
         |    font: sans-serif normal bold;
         |}""".stripMargin,
-    "JSON" -> "",
+    "JSON" ->
+      """.bottom-aligned { align-self: bottom; }
+        |.center-aligned { align-self: center; }
+        |
+        |:root {
+        |  justify-content: space-evenly;
+        |}
+        |
+        |nonterminal {
+        |  font: 'Gill Sans' normal bold 1.4em;
+        |}
+        |
+        |terminal {
+        |  font: Inconsolata normal normal 1.4em;
+        |}""".stripMargin,
   )
 
   val renderingPresets = Map(
-    "default" ->
+    "SQLite" ->
       """.librrd-rail, .librrd-station rect, path {
         |    stroke-width: 1px;
         |    stroke: black;
         |    fill: none;
         |}
         |
-        |.librrd-station text {
-        |    fill: black;
+        |rect.librrd-group {
+        |    fill: none;
         |    stroke: none;
+        |}
+        |
+        |.librrd-selected > rect.librrd-group {
+        |    fill: hsl(0 0% 75% / 0.5);
+        |    stroke: hsl(0 0% 50%);
+        |    stroke-width: 2px;
+        |    stroke-dasharray: 4 2;
+        |}""".stripMargin,
+
+    "JSON" ->
+      """.librrd-rail, .librrd-station rect, path {
+        |    stroke-width: 3px;
+        |    stroke: black;
+        |    fill: none;
+        |}
+        |
+        |.librrd-station rect {
+        |    stroke-width: 2px;
         |}
         |
         |rect.librrd-group {

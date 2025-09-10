@@ -66,7 +66,7 @@ object UI:
     def get: T = parser(input.value).get
 
     def register(suppressInitialDone: Boolean = false): Unit =
-      (presets.keys.toVector :+ customPreset).map{ key =>
+      (presets.keys.toVector.sorted :+ customPreset).map{ key =>
           val opt = document.createElement("option")
           opt.innerText = key
           opt
