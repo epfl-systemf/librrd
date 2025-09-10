@@ -14,7 +14,8 @@ object DiagramParser extends RegexParsers, InputParser[Diagrams.Diagram]:
 
   def terminalLabel: Parser[String] = ("\"" ~> """[^"]+""".r <~ "\"") | ("\'" ~> """[^']+""".r <~ "\'")
   def terminal: Parser[TerminalToken] = withClassId(terminalLabel) ^^ TerminalToken.apply
-  def nonterminalLabel = "[" ~> """[^\]]+""".r <~ "]"
+  def nonterminalLabel = ("""\[\]{2,}""".r ^^ (s => ("]".repeat(s.length - 2)): String))
+    | "[" ~> """[^\]]+""".r <~ "]"
   def nonterminal: Parser[NonterminalToken] = withClassId(nonterminalLabel) ^^ NonterminalToken.apply
   def sequence: Parser[Sequence] = withClassId("(" ~> diagram.* <~ ")") ^^ Sequence.apply
   def polarity: Parser[Polarity] = ("+" | "-") ^^ { case "+" => Polarity.+; case "-" => Polarity.- }
