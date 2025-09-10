@@ -52,8 +52,12 @@ object UIPresets:
         |    flex-absorb: 0.3;
         |}
         |
+        |terminal, nonterminal {
+        |    font: Verdana;
+        |}
+        |
         |.punct {
-        |    font: sans-serif normal bold;
+        |    font: Verdana normal bold;
         |}""".stripMargin,
     "JSON" ->
       """.bottom-aligned { align-self: bottom; }
@@ -75,7 +79,7 @@ object UIPresets:
   val renderingPresets = Map(
     "SQLite" ->
       """.librrd-rail, .librrd-station rect, path {
-        |    stroke-width: 1px;
+        |    stroke-width: 2px;
         |    stroke: black;
         |    fill: none;
         |}
