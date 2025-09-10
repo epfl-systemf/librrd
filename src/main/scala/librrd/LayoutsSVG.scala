@@ -75,7 +75,7 @@ object LayoutsSVG extends Layouts[Tag]:
       case station: Station =>
         val width = station.width
         val height = station.height
-        val rounded = if station.isTerminal then 0 else radius
+        val rounded = if station.isTerminal then radius else 0
         List(
           rect(x:=Station.paddingX, y:=0, rx:=rounded, ry:=rounded,
                svgWidth:=width - 2*Station.paddingX, svgHeight:=height),
