@@ -7,6 +7,24 @@ inaccuracies in first draft of paper
 * perhaps - inside + should not collapse at all (because they cannot always)
 
 
+todo
+ * bigger library of presets
+ * decide whether to switch to Typeable properties
+ * global wrapping properties
+
+DONE
+
+* global wrapping
+* make negative stacks sometimes have vertical tips
+* watching Kacper use librrd
+  * center is broken on table-constraint
+    + minimized: ((+ "A" ()) ())
+  * how to make the output box taller
+  * []]
+  * extra sequence around introduces extra tips
+  * bug with - with epsilon bottom tips?
+
+
 2025-09-01
 ==========
 
