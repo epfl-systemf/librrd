@@ -4,7 +4,7 @@ import org.scalajs.dom
 import org.scalajs.dom.document
 import librrd.LibRRD
 
-object UI:
+object GUI:
   lazy val outputCanvas = document.getElementById("output-canvas")
 
   class Debouncer(private val action: () => Unit, val timeout: Int):
@@ -26,21 +26,21 @@ object UI:
     case Diagram extends InputsPresets(
       "diagram-input",
       "diagram-preset",
-      UIPresets.diagramPresets,
+      GUIPresets.diagramPresets,
       DiagramParser,
       reLayOutAndSyncPresets)
 
     case LayoutStylesheet extends InputsPresets(
       "layout-input",
       "layout-preset",
-      UIPresets.layoutPresets,
+      GUIPresets.layoutPresets,
       StylesheetParser,
       reLayOut)
 
     case RenderingStylesheet extends InputsPresets(
       "rendering-input",
       "rendering-preset",
-      UIPresets.renderingPresets,
+      GUIPresets.renderingPresets,
       IdentityParser,
       reRender)
 

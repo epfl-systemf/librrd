@@ -1,6 +1,6 @@
 package ui
 
-object UIPresets:
+object GUIPresets:
   val diagramPresets = Map(
     "SQLite create-table" ->
       """("CREATE"
