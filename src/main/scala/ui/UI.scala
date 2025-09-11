@@ -28,7 +28,7 @@ object UI:
       "diagram-preset",
       UIPresets.diagramPresets,
       DiagramParser,
-      reLayOut)
+      reLayOutAndSyncPresets)
 
     case LayoutStylesheet extends InputsPresets(
       "layout-input",
@@ -125,6 +125,18 @@ object UI:
     document.getElementById("help-button").addEventListener("click", (event) => {
       helpDialog.showModal()
     })
+
+  def reLayOutAndSyncPresets(): Unit =
+    val firstWordIdx = InputsPresets.Diagram.preset.value.indexOf(' ')
+    if firstWordIdx >= 0 then
+      val style = InputsPresets.Diagram.preset.value.substring(0, firstWordIdx)
+      def syncPreset[T](ip: InputsPresets[T]) =
+        if ip.presets.contains(style) && ip.preset.value != customPreset then
+          ip.preset.value = style
+          ip.preset.dispatchEvent(dom.InputEvent("change")): Unit
+      syncPreset(InputsPresets.LayoutStylesheet)
+      syncPreset(InputsPresets.RenderingStylesheet)
+    reLayOut()
 
   var oldSVG: Option[org.scalajs.dom.Node] = None
   def reLayOut(): Unit =
