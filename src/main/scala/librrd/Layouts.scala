@@ -7,7 +7,8 @@ def linearInterpolate(xStart: Double, yStart: Double,
                       xEnd: Double, yEnd: Double, x: Double): Double =
   yStart + (yEnd - yStart) * (x - xStart)/(xEnd - xStart)
 
-case class FontInfo(family: String, style: String, weight: String, size: String)
+case class FontInfo(family: String, style: String, weight: String, size: String):
+  def toCSSFont: String = s"$style $weight $size $family"
 
 trait Layouts[T]:
 

@@ -1,22 +1,14 @@
 package librrd
 
-import org.scalajs.dom.{SVGTextElement, document}
-import scalatags.JsDom.all.*
-import scalatags.JsDom.svgTags.*
-import scalatags.JsDom.svgAttrs.width as svgWidth
-import scalatags.JsDom.svgAttrs.height as svgHeight
-import scalatags.JsDom.svgAttrs.{x, y, x1, x2, y1, y2, rx, ry, d, transform}
+import scalatags.generic.{TypedTag, Bundle}
 
-object LayoutsSVG extends Layouts[Tag]:
-
-  lazy val textMetricsElement =
-    val elem = document.createElementNS("http://www.w3.org/2000/svg", "text")
-      .asInstanceOf[SVGTextElement]
-    elem.style.setProperty("visibility", "hidden")
-    elem.style.setProperty("fill", "black")
-    document.getElementById("output-canvas").appendChild(elem)
-    elem
-  val baselineCorrection = -2.0
+abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
+    (bundle: Bundle[Builder, Output, FragT]) extends Layouts[TypedTag[Builder, Output, FragT]]:
+  import bundle.all.*
+  import bundle.svgTags.*
+  import bundle.svgAttrs.width as svgWidth
+  import bundle.svgAttrs.height as svgHeight
+  import bundle.svgAttrs.{x, y, x1, x2, y1, y2, rx, ry, d, transform}
 
   def fontToStyleString(font: FontInfo) =
     s"font-family: ${font.family}; " +
@@ -24,15 +16,7 @@ object LayoutsSVG extends Layouts[Tag]:
     s"font-weight: ${font.weight}; " +
     s"font-style: ${font.style};"
 
-  override def measure(text: String, font: FontInfo) =
-    textMetricsElement.textContent = text
-    textMetricsElement.style.setProperty("font-family", font.family)
-    textMetricsElement.style.setProperty("font-size", font.size)
-    textMetricsElement.style.setProperty("font-weight", font.weight)
-    textMetricsElement.style.setProperty("font-style", font.style)
-    val bbox = textMetricsElement.getBBox()
-    (bbox.width, bbox.height)
-
+  val baselineCorrection = -2.0
   val unitWidth = Layout.unitWidth
   val radius = 2*unitWidth
   val quarterArc = s"a $radius,$radius 0 0"
@@ -197,3 +181,24 @@ object LayoutsSVG extends Layouts[Tag]:
       :+ (`class`:=(layout.classes).mkString(" "))
       :+ (id:=layout.id)
     g(withGroup*)
+
+
+object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
+  import org.scalajs.dom.{SVGTextElement, document}
+
+  lazy val textMetricsElement =
+    val elem = document.createElementNS("http://www.w3.org/2000/svg", "text")
+      .asInstanceOf[SVGTextElement]
+    elem.style.setProperty("visibility", "hidden")
+    elem.style.setProperty("fill", "black")
+    document.getElementById("output-canvas").appendChild(elem)
+    elem
+
+  override def measure(text: String, font: FontInfo) =
+    textMetricsElement.textContent = text
+    textMetricsElement.style.setProperty("font-family", font.family)
+    textMetricsElement.style.setProperty("font-size", font.size)
+    textMetricsElement.style.setProperty("font-weight", font.weight)
+    textMetricsElement.style.setProperty("font-style", font.style)
+    val bbox = textMetricsElement.getBBox()
+    (bbox.width, bbox.height)
