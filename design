@@ -9,12 +9,12 @@ inaccuracies in first draft of paper
 
 todo
  * bigger library of presets
- * decide whether to switch to Typeable properties
  * global wrapping properties
 
 DONE
 
 * global wrapping
+* decide whether to switch to Typeable properties -- no, not worth it
 * make negative stacks sometimes have vertical tips
 * watching Kacper use librrd
   * center is broken on table-constraint
