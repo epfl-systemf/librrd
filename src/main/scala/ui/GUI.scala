@@ -4,6 +4,7 @@ import org.scalajs.dom
 import org.scalajs.dom.document
 import librrd.LibRRD
 
+@scalajs.js.annotation.JSExportTopLevel("GUI", "gui")
 object GUI:
   lazy val outputCanvas = document.getElementById("output-canvas")
 
@@ -155,7 +156,7 @@ object GUI:
   def reRender(): Unit =
     outputStyleElement.innerHTML = InputsPresets.RenderingStylesheet.get
 
-  def main(): Unit =
+  def main: Unit =
     document.addEventListener("DOMContentLoaded", (event) => {
       registerInputs()
     })

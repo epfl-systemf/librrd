@@ -74,6 +74,10 @@ object GUIPresets:
         |terminal {
         |  font: Inconsolata normal normal 1.4em;
         |}""".stripMargin,
+    "default" ->
+      """terminal {
+        |  font: 'Overpass Mono' normal normal 14px;
+        |}""".stripMargin,
   )
 
   val renderingPresets = Map(
@@ -105,6 +109,29 @@ object GUIPresets:
         |
         |.librrd-station rect {
         |    stroke-width: 2px;
+        |}
+        |
+        |rect.librrd-group {
+        |    fill: none;
+        |    stroke: none;
+        |}
+        |
+        |.librrd-selected > rect.librrd-group {
+        |    fill: hsl(0 0% 75% / 0.5);
+        |    stroke: hsl(0 0% 50%);
+        |    stroke-width: 2px;
+        |    stroke-dasharray: 4 2;
+        |}""".stripMargin,
+
+    "default" ->
+      """.librrd-rail, .librrd-station rect, path {
+        |    stroke-width: 1px;
+        |    stroke: black;
+        |    fill: none;
+        |}
+        |
+        |.librrd-station rect {
+        |    stroke-width: 1px;
         |}
         |
         |rect.librrd-group {

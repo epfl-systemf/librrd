@@ -3,7 +3,9 @@
 /.metals/
 /project/
 /target/
-/trial.svg
-/www/*.js
-/www/*.js.map
+/cli/*.js
+/cli/*.js.map
+/cli/examples/*.svg
+/gui/*.js
+/gui/*.js.map
 /node_modules/

@@ -2,7 +2,7 @@ package librrd
 
 import scalajs.js.annotation.*
 
-@JSExportTopLevel("LibRRDFile", "main")
+@JSExportTopLevel("LibRRDFile", "cli")
 object LibRRDFile:
 
   val SVGFileWD = WrappedDiagrams(LayoutsSVGFile)

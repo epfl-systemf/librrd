@@ -11,10 +11,10 @@ lazy val root = project.in(file("."))
     Global / onChangedBuildSource := ReloadOnSourceChanges,
 
     name := "librrd",
-    scalaJSUseMainModuleInitializer := true,
-    Compile / scalaJSModuleInitializers += {
-      ModuleInitializer.mainMethod("ui.GUI", "main").withModuleID("gui")
-    },
+    Compile / scalaJSModuleInitializers ++= Seq(
+      ModuleInitializer.mainMethod("ui.GUI", "main").withModuleID("gui"),
+      ModuleInitializer.mainMethod("ui.CLI", "main").withModuleID("cli")
+    ),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
     scalacOptions ++= Seq(
       s"-scalajs-mapSourceURI:file://${baseDirectory.value}->/",
@@ -28,6 +28,7 @@ lazy val root = project.in(file("."))
       "org.scala-js" %%% "scalajs-dom" % "2.8.0",
       "com.lihaoyi" %%% "scalatags" % "0.13.1",
       "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.4.0",
+      "org.rogach" %%% "scallop" % "5.2.0",
     ),
 
     Compile / deploy := {
@@ -37,11 +38,15 @@ lazy val root = project.in(file("."))
       val targetPath = target.value.toPath()
         .resolve("scala-" + scalaVersion.value)
         .resolve(name.value + "-fastopt")
-      targetPath.toFile().listFiles().foreach { f =>
-        Files.copy(
-          f.toPath(),
-          Paths.get("www", f.getName()),
-          StandardCopyOption.REPLACE_EXISTING)
-      }
+      def deployModule(id: String) =
+        targetPath.toFile().listFiles()
+          .map(_.toPath())
+          .filter { p =>
+            val n = p.getFileName().toString()
+            n.startsWith(id) || n.startsWith("internal") }
+          .foreach(p => Files.copy(p, Paths.get(id, p.getFileName().toString()),
+            StandardCopyOption.REPLACE_EXISTING))
+      deployModule("gui")
+      deployModule("cli")
     }
   )

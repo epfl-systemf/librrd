@@ -1,0 +1,11 @@
+:root {
+  justify-content: space-evenly;
+}
+
+nonterminal {
+  font: 'Gill Sans' normal bold 1.4em;
+}
+
+terminal {
+  font: Inconsolata normal normal 1.4em;
+}
