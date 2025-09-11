@@ -1,6 +1,7 @@
 enablePlugins(ScalaJSPlugin)
 
 import sbt.Keys.streams
+import org.scalajs.linker.interface.ModuleInitializer
 
 ThisBuild / scalaVersion := "3.3.6"
 val deploy = taskKey[Unit]("copy JS modules to www")
@@ -11,6 +12,9 @@ lazy val root = project.in(file("."))
 
     name := "librrd",
     scalaJSUseMainModuleInitializer := true,
+    Compile / scalaJSModuleInitializers += {
+      ModuleInitializer.mainMethod("ui.GUI", "main").withModuleID("gui")
+    },
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
     scalacOptions ++= Seq(
       s"-scalajs-mapSourceURI:file://${baseDirectory.value}->/",
@@ -28,20 +32,16 @@ lazy val root = project.in(file("."))
 
     Compile / deploy := {
       streams.value.log.info("copying output js files and sourcemaps…")
+      val output = (Compile / fastLinkJS).value
       import java.nio.file.*
       val targetPath = target.value.toPath()
         .resolve("scala-" + scalaVersion.value)
         .resolve(name.value + "-fastopt")
-      val output = (Compile / fastLinkJS).value
-      output.data.publicModules.foreach { module =>
+      targetPath.toFile().listFiles().foreach { f =>
         Files.copy(
-          targetPath.resolve(module.jsFileName),
-          Paths.get("www", module.jsFileName),
+          f.toPath(),
+          Paths.get("www", f.getName()),
           StandardCopyOption.REPLACE_EXISTING)
-        module.sourceMapName.foreach(n => Files.copy(
-          targetPath.resolve(n),
-          Paths.get("www", n),
-          StandardCopyOption.REPLACE_EXISTING))
       }
     }
   )

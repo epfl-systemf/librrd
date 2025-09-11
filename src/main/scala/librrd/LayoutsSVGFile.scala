@@ -3,6 +3,7 @@ package librrd
 import scalajs.js
 import js.annotation.*
 
+@JSExportTopLevel("LayoutsSVGFile", "main")
 object LayoutsSVGFile extends LayoutsScalatags(scalatags.Text):
 
   @js.native

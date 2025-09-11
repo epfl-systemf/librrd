@@ -155,7 +155,7 @@ object GUI:
   def reRender(): Unit =
     outputStyleElement.innerHTML = InputsPresets.RenderingStylesheet.get
 
-  @main def main(): Unit =
+  def main(): Unit =
     document.addEventListener("DOMContentLoaded", (event) => {
       registerInputs()
     })
