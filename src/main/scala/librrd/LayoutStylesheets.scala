@@ -102,7 +102,7 @@ object LayoutStylesheets:
     val default = "…"
   case object Font extends PropertyName:
     type Value = FontInfo
-    val default = FontInfo("sans-serif", "normal", "normal", "1rem")
+    val default = FontInfo("sans-serif", "normal", "normal", "14px")
 
   class Property(val name: PropertyName, val value: name.Value):
     name.check(value)

@@ -98,7 +98,7 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
       ^^ { _ match { case family ~ style ~ weight ~ size =>
       Property(Font, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
-                              size.getOrElse("1rem"))) }}) <~ ";"
+                              size.getOrElse("14px"))) }}) <~ ";"
 
   def selector: Parser[Selector] = "[^,{]+".r ^? SelectorParser
   def rule: Parser[Rule] = (rep1sep(selector, ",") <~ "{") ~ property.* <~ "}"
