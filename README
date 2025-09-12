@@ -1,0 +1,10 @@
+LibRRD
+======
+
+Build: sbt deploy
+
+CLI prereqs: node v20, npm
+Set up CLI: npm install
+Run CLI: node cli/cli.js [args…]
+
+Run GUI: launch webserver in gui/ and open in browser
