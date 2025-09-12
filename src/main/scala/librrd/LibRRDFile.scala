@@ -14,7 +14,9 @@ object LibRRDFile:
       width: Double,
       filename: String) =
     val myWrappedDiagram = SVGFileWD.wrapLocally(LibRRD.preLayOut(diagram, layoutStylesheet))
-    val myLayout = JustifiedDiagrams.justify(SVGFileWD)(myWrappedDiagram, width)
+    val myWidth = Math.max(width * (if width <= 1 then myWrappedDiagram.maxContent else 1),
+                           myWrappedDiagram.minContent)
+    val myLayout = JustifiedDiagrams.justify(SVGFileWD)(myWrappedDiagram, myWidth)
     LayoutsSVGFile.renderToFile(SVGFileWD.backend.render(myLayout).render, renderingStylesheet,
                                 myLayout.width, myLayout.height, filename)
 
