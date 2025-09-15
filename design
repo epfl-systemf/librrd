@@ -1,12 +1,6 @@
 2025-09-09
 ==========
 
-inaccuracies in first draft of paper
-* number of rows of negative stacks with vertical tip = 1
-* aligned diagrams sequences have one- and multi-row versions of sidemosts
-* perhaps - inside + should not collapse at all (because they cannot always)
-
-
 todo
  * bigger library of presets
  * global wrapping properties
