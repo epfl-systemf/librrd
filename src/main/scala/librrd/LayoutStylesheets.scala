@@ -17,6 +17,7 @@ object LayoutStylesheets:
                 .maxOption
                 .map(s => (s, rule.properties))
               }
+            .reverse
             .sortBy(_._1)
             .flatMap(_._2))
         .addAllUnlessExists(inheritable)
