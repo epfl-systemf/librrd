@@ -37,12 +37,28 @@ object CLI:
       descr = "path to layout stylesheet file, OR layout stylesheet preset name",
       validate = (d => layoutPresets.contains(d) || existsSync(d)),
     )
+    val layoutStylesheetAppend = opt[String](
+      name = "layout-stylesheet-append",
+      short = 'L',
+      descr = "path to layout stylesheet file to append to existing stylesheet",
+      validate = existsSync,
+    )
     val renderingStylesheet = opt[String](
       name = "rendering-stylesheet",
       descr = "path to rendering stylesheet file, OR rendering stylesheet preset name",
       validate = (d => renderingPresets.contains(d) || existsSync(d)),
     )
+    val renderingStylesheetAppend = opt[String](
+      name = "rendering-stylesheet-append",
+      short = 'R',
+      descr = "path to rendering stylesheet file to append to existing stylesheet",
+      validate = existsSync,
+    )
     val output = opt[String](name = "output", descr = "path to output file")
+    val time = opt[Boolean](
+      name = "time",
+      descr = "whether to measure and report elapsed time for layout"
+    )
     val diagram = trailArg[String](
       name = "diagram",
       descr = "path to diagram file, OR diagram preset name",
@@ -61,24 +77,27 @@ object CLI:
       if existsSync(config.diagram()) then readFileSync(config.diagram(), ReadUTF8)
       else diagramPresets(config.diagram())
     val layoutStylesheet =
-      if config.layoutStylesheet.isEmpty
-      then firstWord(config.diagram())
-        .flatMap(layoutPresets.get)
-        .getOrElse(layoutPresets("default"))
-      else if existsSync(config.layoutStylesheet())
-      then readFileSync(config.layoutStylesheet(), ReadUTF8)
-      else layoutPresets(config.layoutStylesheet())
+      (if config.layoutStylesheet.isEmpty
+       then firstWord(config.diagram())
+         .flatMap(layoutPresets.get)
+         .getOrElse(layoutPresets("default"))
+       else if existsSync(config.layoutStylesheet())
+       then readFileSync(config.layoutStylesheet(), ReadUTF8)
+       else layoutPresets(config.layoutStylesheet()))
+      + config.layoutStylesheetAppend.map(readFileSync(_, ReadUTF8)).getOrElse("")
     val renderingStylesheet =
-      if config.renderingStylesheet.isEmpty
-      then firstWord(config.diagram())
-        .flatMap(renderingPresets.get)
-        .getOrElse(renderingPresets("default"))
-      else if existsSync(config.renderingStylesheet())
-      then readFileSync(config.renderingStylesheet(), ReadUTF8)
-      else renderingPresets(config.renderingStylesheet())
+      (if config.renderingStylesheet.isEmpty
+       then firstWord(config.diagram())
+         .flatMap(renderingPresets.get)
+         .getOrElse(renderingPresets("default"))
+       else if existsSync(config.renderingStylesheet())
+       then readFileSync(config.renderingStylesheet(), ReadUTF8)
+       else renderingPresets(config.renderingStylesheet()))
+      + config.renderingStylesheetAppend.map(readFileSync(_, ReadUTF8)).getOrElse("")
     librrd.LibRRDFile.layOutToSVGFile(
       DiagramParser(diagram).get,
       StylesheetParser(layoutStylesheet).get,
       IdentityParser(renderingStylesheet).get,
       config.width(),
-      config.output.getOrElse(withSuffixSVG(config.diagram())))
+      config.output.getOrElse(withSuffixSVG(config.diagram())),
+      config.time())

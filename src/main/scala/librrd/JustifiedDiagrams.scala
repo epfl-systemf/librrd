@@ -48,7 +48,11 @@ object JustifiedDiagrams:
             distributed.indices.foreach { i => distributed(i) += maxGrowth * growth(i)/growthSum }
             remaining -= maxGrowth
 
-          val flexAbsorbed = (if n == 1 then 0 else hc.properties.get(LayoutStylesheets.FlexAbsorb)) * remaining
+          val centered = hc.properties.get(LayoutStylesheets.JustifyContent) match
+              case JustifyContentPolicy.Center | JustifyContentPolicy.SpaceAround
+                | JustifyContentPolicy.SpaceBetween | JustifyContentPolicy.SpaceEvenly => true
+              case _ => false
+          val flexAbsorbed = (if n == 1 && centered then 0 else hc.properties.get(LayoutStylesheets.FlexAbsorb)) * remaining
           absorbed += flexAbsorbed
           remaining -= flexAbsorbed
 

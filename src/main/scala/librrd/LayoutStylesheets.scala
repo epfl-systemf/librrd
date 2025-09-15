@@ -91,6 +91,7 @@ object LayoutStylesheets:
   case object FlexAbsorb extends PropertyName:
     type Value = Double
     val default = 0
+    override val inheritable = true
     override def check(value: Value) =
       assert(0 <= value && value <= 1, "flex-absorb value must be in [0, 1]")
   case object Gap extends PropertyName:
