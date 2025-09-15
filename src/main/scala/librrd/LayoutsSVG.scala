@@ -55,7 +55,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
   override def render(layout: Layout) =
     val inner = layout match
       case rail: Rail => List(line(x1:=0, y1:=0, x2:=rail.width, y2:=0))
-      case _: Space => List(path(d:="none"))
+      case _: Space => List(path(d:=""))
       case station: Station =>
         val width = station.width
         val height = station.height
