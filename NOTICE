@@ -1,0 +1,7 @@
+This software depends on:
+
+* scala-js-dom, MIT License, copyright 2013 Li Haoyi
+* scalatags, MIT License, copyright 2013 Li Haoyi
+* scala-parser-combinators, Apache License 2.0, copyright 2002--2025 EPFL; copyright 2011--2025 Lightbend, Inc. dba Akka
+* scallops, MIT License, copyright 2012 Platon Pronko and Chris Hodapp
+* node-canvas, MIT License, copyright 2010 LearnBoost, and contributors; copyright 2014 Automattic, Inc and contributors
