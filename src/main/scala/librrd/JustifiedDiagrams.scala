@@ -37,7 +37,7 @@ object JustifiedDiagrams:
         case hc: wd.HorizontalConcatenation[_] =>
           val subdiagrams = hc.subdiagrams.toVector
           val n = subdiagrams.count(!_.isInstanceOf[wd.Space])
-          var absorbed = Math.max(0, (n-1)*MIN_GAP)
+          var absorbed = Math.max(0, (n-1)*hc.properties.get(LayoutStylesheets.Gap))
           val distributed = subdiagrams.map(_.minContent).toArray
           var remaining = targetWidth - absorbed - distributed.sum
 
@@ -72,7 +72,7 @@ object JustifiedDiagrams:
             "justification implementation error")
 
           val justificationRails = hc.properties.get(LayoutStylesheets.JustifyContent)
-            .distribute(absorbed, n, hc.direction)
+            .distribute(absorbed, n, hc.direction, hc.properties.get(LayoutStylesheets.Gap))
             .map(w => l.Rail(w, hc.direction))
           val (maybeSpaces, justifiedSubdiagrams) =
             trimSides(subdiagrams.zip(distributed).map(depthRec.tupled), { case sp: l.Space => sp })

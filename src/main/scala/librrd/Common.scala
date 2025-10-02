@@ -89,8 +89,6 @@ extension (self: Double)
     other - self < TOLERANCE
 
 
-val MIN_GAP = 0.0
-
 enum JustifyContentPolicy:
   case Start, Left, Right, End
   case SpaceBetween, SpaceAround, SpaceEvenly, Center
@@ -104,33 +102,33 @@ enum JustifyContentPolicy:
     case (Start, Side.Right, RTL) | (End, Side.Left, RTL) => true
     case _ => false
 
-  def distribute(space: Double, numItems: Int, direction: Direction): List[Double] =
+  def distribute(space: Double, numItems: Int, direction: Direction, gap: Double): List[Double] =
     if numItems == 0 then List(space) else {
-    assert(space ~>= (numItems - 1)*MIN_GAP,
-      "space to justify must be at least MIN_GAP*(N-1)")
-    val extra = space - (numItems - 1)*MIN_GAP
+    assert(space ~>= (numItems - 1)*gap,
+      "space to justify must be at least gap*(N-1)")
+    val extra = space - (numItems - 1)*gap
     val distributed = (this, direction) match
       case (Left, _) | (Start, LTR) | (End, RTL) =>
-        0.0 +: List.fill(numItems - 1)(MIN_GAP) :+ extra
+        0.0 +: List.fill(numItems - 1)(gap) :+ extra
       case (Right, _) | (Start, RTL) | (End, LTR) =>
-        extra +: List.fill(numItems - 1)(MIN_GAP) :+ 0.0
+        extra +: List.fill(numItems - 1)(gap) :+ 0.0
       case (SpaceBetween, _) =>
         if numItems == 1 then List(space/2, space/2)
         else 0.0 +: List.fill(numItems - 1)(space/(numItems - 1)) :+ 0.0
       case (SpaceAround, _) =>
-        val inner = Math.max(MIN_GAP, space/numItems)
+        val inner = Math.max(gap, space/numItems)
         val outer = (space - inner*(numItems - 1))/2
         outer +: List.fill(numItems - 1)(inner) :+ outer
       case (SpaceEvenly, _) =>
-        val inner = Math.max(MIN_GAP, space/(numItems + 1))
+        val inner = Math.max(gap, space/(numItems + 1))
         val outer = (space - inner*(numItems - 1))/2
         outer +: List.fill(numItems - 1)(inner) :+ outer
       case (Center, _) =>
-        extra/2 +: List.fill(numItems - 1)(MIN_GAP) :+ extra/2
+        extra/2 +: List.fill(numItems - 1)(gap) :+ extra/2
 
     assert((distributed.length == numItems + 1)
         && (distributed.sum ~= space)
-        && (distributed.drop(1).dropRight(1).forall(MIN_GAP ~<= _)),
+        && (distributed.drop(1).dropRight(1).forall(gap ~<= _)),
       "justify-content implementation error")
     distributed
     }

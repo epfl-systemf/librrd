@@ -77,7 +77,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       initNumRows: Option[NumRows],
       classes: Set[String] = Set.empty,
       id: Option[String] = None) extends SequenceWrap[D]:
-    val minGap = (if subdiagrams.isEmpty then 0 else (subdiagrams.length - 1) * MIN_GAP)
+    val minGap = if subdiagrams.isEmpty then 0 else ((subdiagrams.count(!_.isInstanceOf[Space]) - 1)
+      * properties.get(LayoutStylesheets.Gap))
     val minContent = subdiagrams.map(_.minContent).sum + minGap
     val maxContent = subdiagrams.map(_.maxContent).sum + minGap
     val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
