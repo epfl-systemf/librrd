@@ -71,6 +71,7 @@ p, ul {
 
 .control-box textarea {
     min-height: 15em;
+    resize: none;
 }
 
 .control-box textarea, code {
@@ -105,7 +106,7 @@ p, ul {
     font-size: 2em;
     color: red;
     background: var(--helpful-green);
-    padding: 0.3em 0.3em 0 0.3em;
+    padding: 0.5em 0em 0em 0.3em;
 
     cursor: help;
 }

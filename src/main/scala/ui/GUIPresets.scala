@@ -2,6 +2,14 @@ package ui
 
 object GUIPresets:
   val diagramPresets = Map(
+    "demo" ->
+      """("a terminal"
+        | [a nonterminal]
+        | {"a terminal with class" class="special"}
+        | (+ "a" (+ (+ "stack" "of") "terminals"))
+        | "a really long one that forces it to wrap"
+        | (+ ("resize" "the" "layout" "(" "bottom" "right" ")")
+        |    ("to" "make" "this" "inner" "sequence" "wrap" "too")))""".stripMargin,
     "SQLite create-table" ->
       """("CREATE"
         | (+ (+ () "TEMP") "TEMPORARY") "TABLE"
@@ -42,6 +50,21 @@ object GUIPresets:
   )
 
   val layoutPresets = Map(
+    "demo" ->
+      """:root {
+        |  justify-content: end;
+        |  align-items: bottom;
+        |  align-self: top;
+        |  flex-absorb: 1;
+        |}
+        |
+        |stack > sequence {
+        |  gap: 10;
+        |}
+        |
+        |.special {
+        |  font: 'Times New Roman' normal bold 18px;
+        |}""".stripMargin,
     "SQLite" ->
       """:root {
         |    align-items: top;
@@ -81,6 +104,25 @@ object GUIPresets:
   )
 
   val renderingPresets = Map(
+    "demo" ->
+      """.special text {
+        |  fill: red;
+        |}
+        |
+        |.librrd-rail, .librrd-station rect, path {
+        |    stroke-width: 2px;
+        |    stroke: black;
+        |    fill: none;
+        |}
+        |
+        |.librrd-station rect {
+        |    stroke-width: 1px;
+        |}
+        |
+        |rect.librrd-group {
+        |    fill: none;
+        |    stroke: none;
+        |}""".stripMargin,
     "SQLite" ->
       """.librrd-rail, .librrd-station rect, path {
         |    stroke-width: 2px;

@@ -66,12 +66,13 @@ object GUI:
 
     def get: T = parser(input.value).get
 
-    def register(suppressInitialDone: Boolean = false): Unit =
+    def register(initialPreset: String, suppressInitialDone: Boolean = false): Unit =
       (presets.keys.toVector.sorted :+ customPreset).map{ key =>
           val opt = document.createElement("option")
           opt.innerText = key
           opt
         }.foreach(preset.appendChild)
+      preset.value = initialPreset
       presetState(suppressInitialDone)
       preset.addEventListener("change", (event) => {
         if preset.value == customPreset then
@@ -108,9 +109,9 @@ object GUI:
   lazy val helpDialog = document.getElementById("help-dialog").asInstanceOf[dom.HTMLDialogElement]
   def registerInputs(): Unit =
     ResizeState.register()
-    InputsPresets.Diagram.register(true)
-    InputsPresets.LayoutStylesheet.register(true)
-    InputsPresets.RenderingStylesheet.register()
+    InputsPresets.Diagram.register("demo", true)
+    InputsPresets.LayoutStylesheet.register("demo", true)
+    InputsPresets.RenderingStylesheet.register("demo")
     saveOutputButton.addEventListener("click", (event) => {
       val serialized = dom.XMLSerializer().serializeToString(outputCanvas)
       val blob = dom.Blob(scalajs.js.Array(serialized),
