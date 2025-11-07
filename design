@@ -1,3 +1,36 @@
+2025-11-07
+==========
+
+s-blocks extension
+
+Diagram language: no change.
+
+Immediate diagram language: stacks are preserved.
+
+
+
+* separation between
+  + "does it have brackets" (depends on post-wrapping context)
+    - in multirow sequence, start and end lose brackets depending on parent physical 0/1
+    - in any sequence, start and end lose brackets depending on parent vertical
+    - in multirow sequence, start of any row that is epsilon-+stack or any -stack loses start;
+      and end loses end (due to special inlineish layouts)
+    - in stack, regular collapsing rules
+  + and "if it had brackets, where would they be" (depends only on self and policy)
+
+* all layouts have
+  + #rows
+  + width
+  + indent of start row <= width
+  + width of end row <= width
+  + height of middle rows (or only row)
+  + height of start row
+  + tip height of start row
+  + height of end row
+  + tip height of end row
+  + direction
+
+
 2025-09-09
 ==========
 
