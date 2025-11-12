@@ -183,7 +183,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
     g(withGroup*)
 
 
-object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
+trait SVGTextMetrics:
   import org.scalajs.dom.{SVGTextElement, document}
 
   lazy val textMetricsElement =
@@ -194,7 +194,7 @@ object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
     document.getElementById("output-canvas").appendChild(elem)
     elem
 
-  override def measure(text: String, font: FontInfo) =
+  def measure(text: String, font: FontInfo) =
     textMetricsElement.textContent = text
     textMetricsElement.style.setProperty("font-family", font.family)
     textMetricsElement.style.setProperty("font-size", font.size)
@@ -202,3 +202,5 @@ object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
     textMetricsElement.style.setProperty("font-style", font.style)
     val bbox = textMetricsElement.getBBox()
     (bbox.width, bbox.height)
+
+object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom) with SVGTextMetrics

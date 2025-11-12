@@ -1,3 +1,27 @@
+2025-11-12
+==========
+
+what's up with HC tip specs?
+* can be Vertical => sidemosts must also be Vertical
+* can be Logical(1) => sidemosts must be non-Vertical
+* can be Physical(p) => start must be Vertical if p != 0 on start side, != 1 on end
+    -- why though. just changes extraWidth if not vertical
+
+any other configuration is ill-formed?
+
+clarify purpose of:
+* tipRows = if vertical, then Internal, else 1
+* tipRowsInternal
+* tipY(s) = the actual tip on that side
+* tipY(s, ts) = potential tip Ys -- uses Internal
+
+which is used for rendering? which is used for forming stacks?
+
+2025-11-10
+==========
+
+S-blocks extension: See weekly report.
+
 2025-11-07
 ==========
 
@@ -7,16 +31,17 @@ Diagram language: no change.
 
 Immediate diagram language: stacks are preserved.
 
-
-
 * separation between
   + "does it have brackets" (depends on post-wrapping context)
     - in multirow sequence, start and end lose brackets depending on parent physical 0/1
     - in any sequence, start and end lose brackets depending on parent vertical
     - in multirow sequence, start of any row that is epsilon-+stack or any -stack loses start;
       and end loses end (due to special inlineish layouts)
-    - in stack, regular collapsing rules
+    this happens during wrapping
+
   + and "if it had brackets, where would they be" (depends only on self and policy)
+    this happens during alignment
+    includes inner stack collapsing
 
 * all layouts have
   + #rows
@@ -29,6 +54,7 @@ Immediate diagram language: stacks are preserved.
   + height of end row
   + tip height of end row
   + direction
+
 
 
 2025-09-09

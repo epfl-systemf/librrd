@@ -29,6 +29,11 @@ case class SidedProperty[T](left: T, right: T):
   def map[U](f: T => U) = SidedProperty(f(left), f(right))
 trait SidedPropertyCommon:
   def forEach[U](f: Side => U) = SidedProperty(f(Side.Left), f(Side.Right))
+  def apply[T](direction: Direction, start: T, `end`: T): SidedProperty[T] =
+    SidedProperty.apply[T].tupled(direction.swap((start, `end`)))
+  def apply[T](direction: Direction, start: SidedProperty[T], `end`: SidedProperty[T])
+      : SidedProperty[T] = direction.swap((start, `end`)) match
+    case (left, right) => SidedProperty(left(Side.Left), right(Side.Right))
 trait SidedPropertyCompanion[T] extends SidedPropertyCommon:
   def apply(left: T, right: T) = SidedProperty(left, right)
 object SidedProperty extends SidedPropertyCommon
@@ -87,6 +92,8 @@ extension (self: Double)
     self - other < TOLERANCE
   def ~>=(other: Double): Boolean =
     other - self < TOLERANCE
+  def ~~(low: Double, high: Double): Boolean =
+    (low ~<= self) && (self ~<= high)
 
 
 enum JustifyContentPolicy:
