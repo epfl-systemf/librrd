@@ -11,42 +11,46 @@ object SBlocksTestGUI:
   lazy val outputCanvas = document.getElementById("output-canvas")
 
   val adjusted1 = HorizontalConcatenation.adjustHeights(List(
-        Station("aa", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
-        Station("b", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "3em")),
-        Space(2*Layout.unitWidth, Direction.LTR, Side.Right),
-        LineBreak(100, Direction.LTR),
-        Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
-        Station("c", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
-        Space(2*Layout.unitWidth, Direction.LTR, Side.Right),
-        LineBreak(100, Direction.LTR),
-        Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
-        Station("ccc", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
-        Station("dddd", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "2em")),
-        Station("eeeee", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
-        Space(2*Layout.unitWidth, Direction.LTR, Side.Right),
+        Station("aa", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+        Station("b", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "3em")),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Left),
+        LineBreak(100, Direction.RTL),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
+        Station("c", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Left),
+        LineBreak(100, Direction.RTL),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
+        Station("ccc", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+        Station("dddd", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "2em")),
+        Station("eeeee", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Left),
       ))
   val adjusted2 = HorizontalConcatenation.adjustHeights(List(
-        Station("a", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
-        HorizontalConcatenation(adjusted1, TipSpecifications(Logical(1), Vertical)),
-        LineBreak(100, Direction.LTR),
-        Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
-        Station("c", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
-        Station("d", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "3em")),
-        Station("f", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "3em")),
-        Station("g", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
-        Station("h", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
-        Station("e", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "2em")),
+        Station("a", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+        HorizontalConcatenation(adjusted1, TipSpecifications(Vertical, Logical(1))),
+        LineBreak(100, Direction.RTL),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
+        Station("c", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+        Station("d", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "3em")),
+        Station("f", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "3em")),
+        Station("g", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+        Station("h", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+        Station("e", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "2em")),
       ))
   val adjusted3 = HorizontalConcatenation.adjustHeights(List(
-        Station("d", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "3em")),
-        Space(2*Layout.unitWidth, Direction.LTR, Side.Right),
-        LineBreak(200, Direction.LTR),
-        Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
+        Rail(180.8666, Direction.RTL),
+        Station("d", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "3em")),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Left),
+        LineBreak(200, Direction.RTL),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
         HorizontalConcatenation(adjusted2, TipSpecifications(Logical(1), Logical(1))),
-        Station("e", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "2em")),
+        Station("e", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "2em")),
+        Space(2*Layout.unitWidth, Direction.RTL, Side.Left),
       ))
   val testLayout: Layout =
-    HorizontalConcatenation(adjusted3, TipSpecifications(Logical(1), Logical(1)))
+    BlockedHorizontalConcatenation(TipSpecifications(Physical(0), Physical(1)),
+      HorizontalConcatenation(adjusted3, TipSpecifications(Vertical, Vertical)))
 
 
   @scalajs.js.annotation.JSExport

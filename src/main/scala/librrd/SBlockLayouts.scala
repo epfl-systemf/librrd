@@ -9,8 +9,6 @@ trait SBlockLayouts[T]:
   def measure(text: String, font: FontInfo): (Double, Double)
   def render(layout: Layout): T
 
-  enum RelativeSide { case Start, End }
-
   object Layout:
     val unitWidth = 4.0
     val `class` = "librrd"
@@ -57,17 +55,8 @@ trait SBlockLayouts[T]:
     final def tipY: SidedProperty[Double] =
       SidedProperty.forEach(s => tipSpecOffsets(s) + tipYInternal(s))
 
-    final def tipY(rs: RelativeSide): Double =
-      tipY((rs, direction) match
-        case (RelativeSide.Start, Direction.LTR) | (RelativeSide.End, Direction.RTL) => Side.Left
-        case _ => Side.Right)
-
     def tipYInternal(s: Side, ts: TipSpecification): Double
     def tipYInternal: SidedProperty[Double] = SidedProperty.forEach(s => tipYInternal(s, tipSpecs(s)))
-    def tipYInternal(rs: RelativeSide): Double =
-      tipYInternal((rs, direction) match
-        case (RelativeSide.Start, Direction.LTR) | (RelativeSide.End, Direction.RTL) => Side.Left
-        case _ => Side.Right)
 
 
   sealed trait BlockLayout extends Layout:
@@ -166,16 +155,17 @@ trait SBlockLayouts[T]:
 
 
   object HorizontalConcatenation:
-    import RelativeSide.*
     val `class` = "librrd-hconcat"
+    val blockedClass = "librrd-hconcat-blocked"
 
     def adjustHeights(sublayouts: Seq[Layout]): Seq[Layout] =
+      val (startSide, endSide) = sublayouts(0).direction.swap((Side.Left, Side.Right))
       def loop(prevEndHeight: Double, prevEndTipY: Double, prevSBlockRows: Int,
                subs: Seq[Layout]): Either[Double, Seq[Layout]] =
         subs match
           case Nil => Right(Nil)
           case sub :: rest =>
-            val topJoinHeightDiff = sub.tipYInternal(Start) - prevEndTipY
+            val topJoinHeightDiff = sub.tipYInternal(startSide) - prevEndTipY
             val bottomJoinHeightDiff = sub.startHeight - prevEndHeight - topJoinHeightDiff
             if (prevSBlockRows > 1 && topJoinHeightDiff > 0) then
               Left(topJoinHeightDiff)
@@ -190,7 +180,7 @@ trait SBlockLayouts[T]:
               val joinHeight = prevEndHeight + joinHeightDiff
               val endHeight = if maybeStartGrownSub.sBlockRows == 1 then joinHeight
                               else maybeStartGrownSub.endHeight
-              val endTipY = maybeStartGrownSub.tipYInternal(End)
+              val endTipY = maybeStartGrownSub.tipYInternal(endSide)
                 + (if maybeStartGrownSub.sBlockRows == 1 then Math.max(-topJoinHeightDiff, 0) else 0)
               val sBlockRows = prevSBlockRows + maybeStartGrownSub.sBlockRows - 1
               val maybeAdjustedRest = loop(endHeight, endTipY, sBlockRows, rest)
@@ -204,9 +194,19 @@ trait SBlockLayouts[T]:
                 case Right(result) => Right(maybeStartGrownSub +: result)
 
       val head = sublayouts.head
-      loop(head.endHeight, head.tipYInternal(End), 1, sublayouts) match
+      loop(head.endHeight, head.tipYInternal(endSide), 1, sublayouts) match
         case Right(result) => result
         case Left(_) => throw RuntimeException(s"could not adjust heights of sequence! $sublayouts")
+
+    def extraWidths(direction: Direction, tipSpecs: TipSpecifications): SidedProperty[Double] =
+      val extraP = SidedProperty(direction, 0, 1)
+      SidedProperty.forEach(s => tipSpecs(s) match
+        case Physical(p) if p != extraP(s) => 3*Layout.unitWidth
+        case _ => 0)
+
+    def extraWidth(direction: Direction, tipSpecs: TipSpecifications) =
+      val ws = extraWidths(direction, tipSpecs)
+      ws.left + ws.right
 
 
   case class HorizontalConcatenation(
@@ -214,7 +214,6 @@ trait SBlockLayouts[T]:
       tipSpecs: TipSpecifications,
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None) extends Layout:
-    import RelativeSide.*
     val classes = initClasses + HorizontalConcatenation.`class`
 
     assert(!sublayouts.isEmpty, "horizontal concatenation must have at least 1 sublayout")
@@ -224,14 +223,8 @@ trait SBlockLayouts[T]:
     val direction = sublayouts(0).direction
     private val first = sublayouts.head
     private val last = sublayouts.last // could be same as first!
-    private val sidemosts = SidedProperty(direction, first, last)
-
-    Side.values.foreach(s => tipSpecs(s) match
-      case Vertical => assert(sidemosts(s).tipSpecs(s) == Vertical)
-      case Physical(p) => ()
-      case Logical(r) =>
-        assert(r == 1)
-        assert(sidemosts(s).tipSpecs(s) != Vertical))
+    val sidemosts = SidedProperty(direction, first, last)
+    val (startSide, endSide) = direction.swap((Side.Left, Side.Right))
 
     private case class HCMeasure(
       startOffset: Double, endWidth: Double, width: Double, sBlockRows: Int,
@@ -240,8 +233,8 @@ trait SBlockLayouts[T]:
     private object HCMeasure:
       def apply(l: Layout): HCMeasure =
         HCMeasure(l.startOffset, l.endWidth, l.width, l.sBlockRows,
-                  l.startHeight, l.tipYInternal(Start), l.middleHeight,
-                  l.endHeight, l.tipYInternal(End))
+                  l.startHeight, l.tipYInternal(startSide), l.middleHeight,
+                  l.endHeight, l.tipYInternal(endSide))
 
     val (startOffset, endWidth, width, sBlockRows,
          startHeight, startTipY, middleHeight, endHeight, endTipY) =
@@ -277,20 +270,19 @@ trait SBlockLayouts[T]:
           )
       } match
         case HCMeasure(so, ew, w, sbr, sh, sty, mh, eh, ety) =>
-          // TODO: adjust width for brackets
           (so, ew, w, sbr, sh, sty, mh, eh, ety)
 
     val (subXs, subYs) =
-      val (tempXs, tempYs) = sublayouts.scanLeft((0.0, first.tipYInternal(Start))){
+      val (tempXs, tempYs) = sublayouts.scanLeft((0.0, first.tipYInternal(startSide))){
         case ((prevX, prevY), sub) =>
           (prevX - sub.startOffset + sub.endWidth,
-           prevY - sub.tipYInternal(Start) + sub.tipY(End))
+           prevY - sub.tipYInternal(startSide) + sub.tipY(endSide))
         }.dropRight(1)
          .zip(sublayouts)
          .map{ case ((x, y), sub) =>
            val startX = x - sub.startOffset
-           (direction match { case Direction.LTR => startX; case _ => -(startX + sub.width) },
-            y - sub.tipYInternal(Start)) }
+           ((direction match { case Direction.LTR => startX; case _ => -(startX + sub.width) }),
+            y - sub.tipYInternal(startSide)) }
          .unzip
       val minTempX = tempXs.min
       val minTempY = tempYs.min
@@ -317,16 +309,58 @@ trait SBlockLayouts[T]:
     override def growEndHeight(by: Double) = this.copy(sublayouts =
       sublayouts.updated(lastEndGrowable, sublayouts(lastEndGrowable).growEndHeight(by)))
 
-    override val tipYInternal = SidedProperty(direction, startTipY, endTipY)
+    private def physicalTip0 = startTipY + tipSpecOffsets(startSide)
+      - first.tipYInternal(startSide) + first.tipYInternal(startSide, Physical(0))
+    private def physicalTip1 = endTipY + tipSpecOffsets(endSide)
+      - last.tipYInternal(endSide) + last.tipYInternal(endSide, Physical(1))
+    private def physicalTipY(p: Double) =
+      linearInterpolate(0, physicalTip0, 1, physicalTip1, p)
 
     def tipYInternal(s: Side, ts: TipSpecification) =
       ts match
         case Vertical => 0.0
-        case Physical(p) => linearInterpolate(
-          0, sidemosts(s).tipYInternal(s, Physical(0)),
-          1, sidemosts(s).tipYInternal(s, Physical(1)),
-          p)
+        case Physical(p) => physicalTipY(p)
         case Logical(r) =>
           tipYInternal(s) - sidemosts(s).tipYInternal(s) + sidemosts(s).tipYInternal(s, ts)
 
+    Side.values.foreach(s => tipSpecs(s) match
+      case Vertical =>
+        assert(sidemosts(s).tipSpecs(s) == Vertical)
+      case Physical(_) =>
+        throw RuntimeException("horizontal concatenation must be blocked to have Physical tips!")
+      case Logical(r) =>
+        assert(r == 1)
+        assert(sidemosts(s).tipSpecs(s) != Vertical))
+
+    override val tipYInternal = SidedProperty(direction, startTipY, endTipY)
     val tipRowsPossible = NumRows(direction, first.tipRows, last.tipRows)
+
+
+  case class BlockedHorizontalConcatenation(
+      tipSpecs: TipSpecifications,
+      hc: HorizontalConcatenation) extends BlockLayout:
+
+    assert(hc.startOffset ~= 0,
+      s"blocked horizontal concatenation startOffset should be 0, got ${hc.startOffset}")
+    assert(hc.endWidth ~= hc.width,
+      s"blocked horizontal concatenation endWidth should equal width=${hc.width}, got ${hc.endWidth}")
+
+    override val direction = hc.direction
+    override val id = hc.id
+    override val classes = hc.classes + HorizontalConcatenation.blockedClass
+    override val startHeight = hc.height
+    val extraWidths = HorizontalConcatenation.extraWidths(direction, tipSpecs)
+    override val width = hc.width + extraWidths.left + extraWidths.right
+    override val tipRowsPossible = NumRows(1, 1)
+
+    override def tipYInternal(s: Side, ts: TipSpecification) = ts match
+      case Vertical =>
+        assert(hc.tipSpecs(s) == Vertical)
+        hc.tipY(s, ts)
+      case Physical(p) =>
+        assert(hc.tipSpecs(s) == Vertical)
+        hc.tipYInternal(s, ts) // don't relativize to hc.endHeight
+      case Logical(r) =>
+        assert(r == 1)
+        assert(hc.tipSpecs(s) != Vertical)
+        hc.tipY(s, ts)
