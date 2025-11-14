@@ -14,7 +14,7 @@ trait SBlockLayouts[T]:
   object Layout:
     val unitWidth = 4.0
     val `class` = "librrd"
-    val rowGap = 3*unitWidth
+    val rowGap = 4*unitWidth
 
   sealed trait Layout:
     def direction: Direction
@@ -101,11 +101,14 @@ trait SBlockLayouts[T]:
   case class Space(
       width: Double,
       direction: Direction,
+      verticalSide: Side,
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None) extends AtomicLayout:
     val classes = initClasses + Space.`class`
     val startHeight = 0
     def tipYInternal(s: Side, ts: TipSpecification) = 0
+    override val tipSpecs =
+      TipSpecifications(Logical(1), Logical(1)).update(verticalSide, Vertical)
 
 
   object Station:
@@ -155,11 +158,11 @@ trait SBlockLayouts[T]:
     override def growEndHeight(by: Double) = this.copy(endHeight = endHeight + by)
 
     val tipRowsPossible = NumRows(1, 1)
-    val tipSpecs = TipSpecifications(Vertical, Vertical)
+    val tipSpecs = TipSpecifications(Logical(1), Logical(1))
     override val tipYInternal = SidedProperty(direction, 0, endHeight)
     def tipYInternal(s: Side, ts: TipSpecification): Double = ts match
-      case Vertical => tipYInternal(s)
-      case _ => throw IllegalArgumentException("line breaks can only have vertical tips")
+      case Vertical => throw IllegalArgumentException("line breaks cannot have vertical tips")
+      case _ => tipYInternal(s)
 
 
   object HorizontalConcatenation:

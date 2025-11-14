@@ -41,17 +41,38 @@ abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
                `class`:=Rail.`class`),
         )
       case lb: LineBreak =>
+        val halfHeight = lb.startHeight + lb.middleHeight/2
         val p = path(d:=
-            s"M ${lb.startOffset},${lb.tipY(RelativeSide.Start)} "
-          + s"L ${lb.startOffset},${lb.startHeight} "
-          + s"L 0,${lb.startHeight + lb.middleHeight} "
-          + s"L 0,${lb.tipY(RelativeSide.End)}")
+            s"M ${lb.startOffset},${lb.tipY(RelativeSide.Start) + radius} "
+          + s"L ${lb.startOffset},${halfHeight - radius} $quarterArc 1 ${-radius},$radius"
+          + s"L $radius,${halfHeight} $quarterArc 0 ${-radius},$radius"
+          + s"L 0,${lb.tipY(RelativeSide.End) - radius}")
         lb.direction match
           case Direction.RTL => List(g(p, transform:=s"translate(${lb.width},0) scale(-1,1)"))
           case _ => List(p)
       case hc: HorizontalConcatenation =>
-        hc.sublayouts.zip(hc.subXs.zip(hc.subYs)).map{ case (sub, (subX, subY)) =>
-          g(render(sub), transform:=s"translate($subX,$subY)")
+        val (startSide, endSide) = hc.direction.swap((Side.Left, Side.Right))
+        val connectorArgs = List(
+          (startSide, 0,
+            (_: Double, y: Double) => s"M 0,${y - radius}  $quarterArc 0 $radius,$radius"),
+          (endSide, hc.sublayouts.length - 1,
+            (w: Double, y: Double) => s"M ${w - radius},$y  $quarterArc 1 $radius,$radius"))
+        hc.sublayouts.zipWithIndex.zip(hc.subXs.zip(hc.subYs)).map{
+          case ((sub, i), (subX, subY)) =>
+            val connectors = connectorArgs.flatMap{ case (side, sideI, sidePath) =>
+              if sub.tipSpecs(side) == TipSpecification.Vertical && i != sideI then
+                (1 to sub.tipRows(side))
+                  .map(r => sub.tipY(side, TipSpecification.Logical(r)))
+                  .map(y => path(d:=sidePath(sub.width, y)))
+              else List() }
+            val group =
+              (hc.direction match
+                case Direction.RTL =>
+                  List(g(connectors, transform:=s"translate(${sub.width},0) scale(-1,1)"))
+                case _ => connectors)
+              :+ render(sub)
+              :+ (transform:=s"translate($subX,$subY)")
+            g(group*)
         }
 
 /*
