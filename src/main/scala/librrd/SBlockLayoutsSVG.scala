@@ -1,6 +1,7 @@
 package librrd
 
 import scalatags.generic.{TypedTag, Bundle}
+import TipSpecification.*
 
 abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
     (bundle: Bundle[Builder, Output, FragT]) extends SBlockLayouts[TypedTag[Builder, Output, FragT]]:
@@ -20,6 +21,8 @@ abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
   val unitWidth = Layout.unitWidth
   val radius = 2*unitWidth
   val quarterArc = s"a $radius,$radius 0 0"
+
+  def rail(attrs: Modifier*) = path(attrs, `class`:=Rail.`class`)
 
   def positiveBrackets(tipY: Double, subTipYs: Seq[Double], sign: Int, x: Double) =
     val upwards: Int = -(sign - 1)/2
@@ -77,8 +80,8 @@ abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
         val (startSide, endSide) = lb.direction.swap((Side.Left, Side.Right))
         List(path(d:=
             s"M ${lb.startOffset},${lb.tipY(startSide) + radius}  "
-          + s"L ${lb.startOffset},${halfHeight - radius}  $quarterArc 1 ${-radius},$radius"
-          + s"L $radius,${halfHeight}  $quarterArc 0 ${-radius},$radius"
+          + s"L ${lb.startOffset},${halfHeight - radius}  $quarterArc 1 ${-radius},$radius  "
+          + s"L $radius,${halfHeight}  $quarterArc 0 ${-radius},$radius  "
           + s"L 0,${lb.tipY(endSide) - radius}",
           transform:=(lb.direction match
             case Direction.RTL => s"translate(${lb.width},0) scale(-1,1)"
@@ -87,49 +90,54 @@ abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
 
       case hc: HorizontalConcatenation =>
         val (startSide, endSide) = hc.direction.swap((Side.Left, Side.Right))
-        val connectorArgs = List(
-          (startSide, 0,
-            (_: Double, y: Double) => s"M 0,${y - radius}  $quarterArc 0 $radius,$radius"),
-          (endSide, hc.sublayouts.length - 1,
-            (w: Double, y: Double) => s"M ${w - radius},$y  $quarterArc 1 $radius,$radius"))
         hc.sublayouts.zipWithIndex.zip(hc.subXs.zip(hc.subYs)).map{
           case ((sub, i), (subX, subY)) =>
-            val connectors = connectorArgs.flatMap{ case (side, sideI, sidePath) =>
-              if sub.tipSpecs(side) == TipSpecification.Vertical && i != sideI then
-                (1 to sub.tipRows(side))
-                  .map(r => sub.tipY(side, TipSpecification.Logical(r)))
-                  .map(y => path(d:=sidePath(sub.width, y), `class`:=Rail.`class`))
-              else List() }
+            val startConnector =
+              if sub.tipSpecs(startSide) == Vertical && i != 0 then
+                val firstSubTip = sub.tipY(startSide, Logical(1))
+                (1 to sub.tipRows(startSide))
+                  .map(r => sub.tipY(startSide, Logical(r)))
+                  .map(y => rail(d:=s"M 0,${firstSubTip - radius}  L 0,${y - radius}  "
+                    + s"$quarterArc 0 $radius,$radius"))
+              else List()
+            val endConnector =
+              if sub.tipSpecs(endSide) == Vertical && i != hc.sublayouts.length - 1 then
+                val lastSubTip = sub.tipY(endSide, Logical(sub.tipRows(endSide)))
+                (1 to sub.tipRows(endSide))
+                  .map(r => sub.tipY(endSide, Logical(r)))
+                  .map(y => rail(d:=s"M ${sub.width - radius},$y  $quarterArc 1 $radius,$radius  "
+                    + s"L ${sub.width},${lastSubTip + radius}"))
+              else List()
+
             val group =
               (hc.direction match
-                case Direction.RTL =>
-                  List(g(connectors, transform:=s"translate(${sub.width},0) scale(-1,1)"))
-                case _ => connectors)
+                case Direction.RTL => List(g(startConnector ++ endConnector,
+                  transform:=s"translate(${sub.width},0) scale(-1,1)"))
+                case _ => startConnector ++ endConnector)
               :+ render(sub)
               :+ (transform:=s"translate($subX,$subY)")
             g(group*)
         }
 
-      case bhc @ BlockedHorizontalConcatenation(tipSpecs, hc) =>
+      case bhc @ BlockedHorizontalConcatenation(hc, _) =>
         val extraP = SidedProperty(bhc.direction, 0, 1)
         val extraWidths = bhc.extraWidths
         g(render(hc), transform:=s"translate(${extraWidths.left},0)")
         +: List((Side.Left, extraWidths.left, +1),
                 (Side.Right, bhc.width - extraWidths.right, -1))
           .flatMap((side, x, sign) =>
-            tipSpecs(side) match
-              case TipSpecification.Physical(p) if p != extraP(side) =>
+            bhc.tipSpecs(side) match
+              case Physical(p) if p != extraP(side) =>
                 positiveBrackets(
                   bhc.tipY(side),
                   (1 to hc.sidemosts(side).tipRowsPossible(side))
-                    .map(r => hc.tipY(side, TipSpecification.Logical(r))),
+                    .map(r => hc.tipY(side, Logical(r))),
                   sign,
                   x)
               case _ => List())
 
       case vc @ VerticalConcatenation(
           topSublayout, bottomSublayout, direction, polarity, tipSpecs, _, _) =>
-        import TipSpecification.*
         val leftExtraWidth = vc.extraWidths.left
 
         val brackets = List((Side.Left, leftExtraWidth, +1),
@@ -155,10 +163,10 @@ abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
                   .map(r => topPath(topSublayout.tipY(side, Logical(r))))
                   ++ (1 to bottomSublayout.tipRowsPossible(side))
                   .map(r => bottomPath(vc.bottomOffset + bottomSublayout.tipY(side, Logical(r))))
-                val outerPath = path(d:=
+                val outerPath = rail(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
                   + s"$quarterArc $upwards ${sign*radius},${-radius}")
-                val straight = path(d:=
+                val straight = rail(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
 
                 tipSpecs(side) match
@@ -168,10 +176,75 @@ abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
                     else straight +: outerPath +: inners
                   case _ => outerPath +: inners)
 
-        List(
-          g(render(topSublayout), transform:=s"translate($leftExtraWidth,0)"),
-          g(render(bottomSublayout), transform:=s"translate($leftExtraWidth,${vc.bottomOffset})")
-        ) ++ brackets
+        g(render(topSublayout), transform:=s"translate($leftExtraWidth,0)")
+        +: g(render(bottomSublayout), transform:=s"translate($leftExtraWidth,${vc.bottomOffset})")
+        +: brackets
+
+
+      case ve @ VerticalEpsilon(sub, width, direction, polarity, tipSpecs, _, _, _, _) =>
+        val (startSide, endSide) = (ve.startSide, ve.endSide)
+        val tipY = ve.tipY(startSide)
+        val startX = ve.startOffset + ve.extraWidth
+        val halfHeight = ve.startHeight + ve.middleHeight/2
+        val startBrackets =
+          (tipSpecs(startSide), polarity) match
+             case (Vertical, _) =>
+               (1 to sub.tipRows(startSide))
+                 .map(r => sub.tipY(startSide, Logical(r)))
+                 .map(y => rail(d:=s"M $startX,0  L $startX,${y - radius}  "
+                   + s"$quarterArc 0 $radius,$radius"))
+               :+ (polarity match
+                 case Polarity.+ => rail(d:=s"M $startX,0  L $startX,${ve.startHeight}")
+                 case Polarity.- => rail(d:=s"M ${startX + radius},${sub.tipY(startSide, Logical(1))} "
+                   + s"$quarterArc 0 ${-radius},$radius  L $startX,${ve.startHeight}",
+                   `class`:="blah"))
+             case (_, Polarity.+) =>
+               positiveBrackets(tipY,
+                 (1 to sub.tipRows(startSide)).map(r => sub.tipY(startSide, Logical(r))),
+                 1, startX)
+               :+ rail(d:=s"M ${ve.startOffset},$tipY  L ${startX - radius},$tipY  "
+                 + s"$quarterArc 1 $radius,$radius  L $startX,${ve.startHeight}")
+             case (_, Polarity.-) =>
+               val subPossible = sub.tipRows(startSide)
+               (if subPossible > 1 then
+                  positiveBrackets(tipY, // tipY must be lowest Logical
+                    (1 to subPossible).map(r => sub.tipY(startSide, Logical(r))), 1, startX)
+                  :+ rail(d:=s"M $startX,${ve.startHeight}  L $startX,${tipY + radius}  "
+                    + s"$quarterArc 1 $radius,${-radius}")
+                  :+ rail(d:=s"M $startX,${tipY + radius}  L $startX,${tipY - radius}")
+                else List(
+                  rail(d:=s"M ${ve.startOffset},$tipY l ${ve.extraWidth + radius},0"),
+                  rail(d:=s"M $startX,${ve.startHeight}  L $startX,${tipY + radius}  "
+                    + s"$quarterArc 1 $radius,${-radius}")))
+
+        val endBrackets = (1 to sub.tipRows(endSide))
+          .map(r => sub.tipY(endSide, Logical(r)))
+          .map(y => rail(d:=s"M ${width - radius},$y  $quarterArc 1 $radius,$radius  "
+            + s"L $width,${ve.startHeight}"))
+
+        val linebreak =
+          rail(d:=s"M $width,${ve.startHeight}  "
+            + s"L $width,${halfHeight - radius}  $quarterArc 1 ${-radius},$radius  "
+            + s"L ${ve.endWidth+radius},${halfHeight}  $quarterArc 0 ${-radius},$radius  "
+            + s"L ${ve.endWidth},${ve.height - radius}")
+
+        val linebreakConnector =
+          if polarity == Polarity.- then
+            rail(d:=s"M $startX,${ve.startHeight}  L $startX,${halfHeight - radius}  "
+            + s"$quarterArc 0 $radius,$radius")
+          else if width - ve.extraWidth ~= sub.width then
+            rail(d:=s"M $startX,${ve.startHeight}  L $startX,${halfHeight + radius}")
+          else rail(d:=s"M $startX,${ve.startHeight}  L $startX,${halfHeight - radius}  "
+            + s"$quarterArc 1 ${-radius},$radius")
+
+        val rails = (startBrackets :+ linebreakConnector) ++ (sub match
+          case _: BlockLayout => linebreak +: endBrackets
+          case _ => List())
+        ve.direction match
+          case Direction.RTL => List(g(render(sub)),
+            g(rails, transform:=s"translate($width,0) scale(-1,1)"))
+          case _ => g(render(sub), transform:=s"translate($startX,0)") +: rails
+
 
     val withGroup = (inner
       :+ rect(x:=(-unitWidth), y:=(-2*unitWidth),

@@ -80,7 +80,7 @@ trait SBlockLayouts[T]:
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None) extends AtomicLayout:
     val classes = initClasses + Rail.`class`
-    val startHeight = 0
+    val startHeight = 2*Layout.unitWidth
     def tipYInternal(s: Side, ts: TipSpecification) = 0
 
 
@@ -314,7 +314,7 @@ trait SBlockLayouts[T]:
 
     def tipYInternal(s: Side, ts: TipSpecification) =
       ts match
-        case Vertical => 0.0
+        case Vertical => tipYInternal(s)
         case Physical(p) => physicalTipY(p)
         case Logical(r) =>
           tipYInternal(s) - sidemosts(s).tipYInternal(s) + sidemosts(s).tipYInternal(s, ts)
@@ -331,10 +331,15 @@ trait SBlockLayouts[T]:
     override val tipYInternal = SidedProperty(direction, startTipY, endTipY)
     val tipRowsPossible = NumRows(direction, first.tipRows, last.tipRows)
 
+    val endsWithVerticalEpsilon: Boolean = last match
+      case l: HorizontalConcatenation => l.endsWithVerticalEpsilon
+      case _: VerticalEpsilon => true
+      case _ => false
+
 
   case class BlockedHorizontalConcatenation(
-      tipSpecs: TipSpecifications,
-      hc: HorizontalConcatenation) extends BlockLayout:
+      hc: HorizontalConcatenation,
+      maybeTipSpecs: Option[TipSpecifications] = None) extends BlockLayout:
 
     assert(hc.startOffset ~= 0,
       s"blocked horizontal concatenation startOffset should be 0, got ${hc.startOffset}")
@@ -345,20 +350,19 @@ trait SBlockLayouts[T]:
     override val id = hc.id
     override val classes = hc.classes + HorizontalConcatenation.blockedClass
     override val startHeight = hc.height
+    override val tipSpecs = maybeTipSpecs.getOrElse(hc.tipSpecs)
     val extraWidths = HorizontalConcatenation.extraWidths(direction, tipSpecs)
     override val width = hc.width + extraWidths.left + extraWidths.right
     override val tipRowsPossible = NumRows(1, 1)
 
     override def tipYInternal(s: Side, ts: TipSpecification) = ts match
       case Vertical =>
-        assert(hc.tipSpecs(s) == Vertical)
         hc.tipY(s, ts)
       case Physical(p) =>
         assert(hc.tipSpecs(s) == Vertical)
         hc.tipYInternal(s, ts) // don't relativize to hc.endHeight
       case Logical(r) =>
         assert(r == 1)
-        assert(hc.tipSpecs(s) != Vertical)
         hc.tipY(s, ts)
 
 
@@ -398,11 +402,11 @@ trait SBlockLayouts[T]:
     val bottomOffset = topSublayout.height + Layout.rowGap
     val startHeight = bottomOffset + bottomSublayout.height
 
-    assert(topSublayout.tipSpecs(Side.Left) == Vertical
-      && topSublayout.tipSpecs(Side.Right) == Vertical
-      && bottomSublayout.tipSpecs(Side.Left) == Vertical
-      && bottomSublayout.tipSpecs(Side.Right) == Vertical,
+    assert(Side.values.forall(s => topSublayout.tipSpecs(s) == Vertical)
+      && Side.values.forall(s => bottomSublayout.tipSpecs(s) == Vertical),
       "top and bottom sublayouts of vertical concatenation must have vertical tips!")
+    assert(topSublayout.isInstanceOf[BlockLayout] && bottomSublayout.isInstanceOf[BlockLayout],
+      "top and bottom sublayouts of vertical concatenation must be block layouts!")
 
     override val tipRowsPossible =
       polarity match
@@ -417,7 +421,7 @@ trait SBlockLayouts[T]:
       case _ => 1)
 
     override def tipYInternal(s: Side, ts: TipSpecification) = ts match
-      case Vertical => 0.0
+      case Vertical => tipYInternal(s, Logical(1))
       case Physical(p) => linearInterpolate(
           0, topSublayout.tipY(s, polarity match
             case Polarity.+ => Physical(0)
@@ -432,3 +436,77 @@ trait SBlockLayouts[T]:
             case Polarity.- =>
               if r == 1 then topSublayout.tipY(s, Logical(topRows))
               else bottomOffset + bottomSublayout.tipY(s, Logical(r - 1))
+
+
+  object VerticalEpsilon:
+    val `class` = "librrd-vepsilon"
+
+    def extraWidth(polarity: Polarity, startTipSpec: TipSpecification): Double =
+      startTipSpec match { case Vertical => 0 ; case _ => 3*Layout.unitWidth }
+
+  case class VerticalEpsilon(
+      sub: Layout,
+      width: Double,
+      direction: Direction,
+      polarity: Polarity,
+      tipSpecs: TipSpecifications,
+      extraStartHeight: Double = 0.0,
+      extraEndHeight: Double = 0.0,
+      initClasses: Set[String] = Set.empty,
+      id: Option[String] = None) extends Layout:
+    val `classes` = initClasses + VerticalEpsilon.`class`
+
+    val (startSide, endSide) = direction.swap((Side.Left, Side.Right))
+    assert(sub.direction == direction, "vertical epsilon sub must have same direction")
+
+    sub match
+      case _: BlockLayout =>
+        assert(Side.values.forall(s => sub.tipSpecs(s) == Vertical),
+          "vertical epsilon sub, if block, must have Vertical tips")
+      case hc: HorizontalConcatenation =>
+        assert(hc.endsWithVerticalEpsilon && hc.tipSpecs(startSide) == Vertical,
+          "vertical epsilon sub, if horizontal concatenation, must end with vertical epsilon "
+          + "and have Vertical start tip")
+      case ve: VerticalEpsilon =>
+        assert(ve.tipSpecs(startSide) match { case Logical(_) => true ; case _ => false },
+          "vertical epsilon sub, if vertical epsilon, must have Logical start tip ")
+      case _ => assert(false, s"vertical epsilon cannot have $sub as sub")
+
+    val extraWidth = VerticalEpsilon.extraWidth(polarity, tipSpecs(startSide))
+    sub match
+      case _: BlockLayout => assert(width ~>= sub.width + extraWidth,
+        s"vertical epsilon with block sub must have width $width no less than sum of "
+        + s"sub width ${sub.width} and extra width $extraWidth!")
+      case _ => assert(width ~= sub.width + extraWidth,
+        s"vertical epsilon with non-block sub must have width $width equal to sum of "
+        + s"sub width ${sub.width} and extra width $extraWidth!")
+    override val startOffset = width - sub.width - extraWidth
+    override val endWidth =
+      tipSpecs(startSide) match { case Logical(_) if (startOffset ~= 0) => extraWidth; case _ => 0 }
+
+    override val (startHeight, middleHeight, endHeight) = sub match
+      case _: BlockLayout => (sub.height + extraStartHeight, 2*Layout.rowGap, extraEndHeight)
+      case _ => (sub.startHeight, sub.middleHeight, sub.endHeight)
+
+    val sBlockRows = 2
+    override val startHeightGrowable = true
+    override def growStartHeight(by: Double) = sub match
+      case _: BlockLayout => this.copy(extraStartHeight = extraStartHeight + by)
+      case _ => this.copy(sub = sub.growStartHeight(by))
+    override val endHeightGrowable = true
+    override def growEndHeight(by: Double) = sub match
+      case _: BlockLayout => this.copy(extraEndHeight = extraEndHeight + by)
+      case _ => this.copy(sub = sub.growEndHeight(by))
+
+    override val tipRowsPossible = NumRows(direction,
+      polarity match { case Polarity.+ => sub.tipRows(startSide) case Polarity.- => 1 },
+      1)
+
+    assert(tipSpecs(endSide) == Logical(1), "vertical epsilon end side tip spec must be Logical(1)")
+
+    override def tipYInternal(s: Side, ts: TipSpecification): Double =
+      if s == startSide then
+        (ts, polarity) match
+          case (Logical(r), Polarity.-) => sub.tipYInternal(s, Logical(sub.tipRows(s)))
+          case _ => sub.tipYInternal(s, ts)
+      else endHeight
