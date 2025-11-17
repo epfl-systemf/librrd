@@ -3,7 +3,7 @@ package ui
 import org.scalajs.dom
 import org.scalajs.dom.document
 import librrd.SBlockLayoutsSVG.*
-import librrd.{Direction, FontInfo, TipSpecifications, Side}
+import librrd.{Direction, FontInfo, TipSpecifications, Side, Polarity}
 import librrd.TipSpecification.*
 
 @scalajs.js.annotation.JSExportTopLevel("SBlocksTestGUI", "gui-s-blocks-test")
@@ -49,8 +49,39 @@ object SBlocksTestGUI:
         Space(2*Layout.unitWidth, Direction.RTL, Side.Left),
       ))
   val testLayout: Layout =
-    BlockedHorizontalConcatenation(TipSpecifications(Physical(0), Physical(1)),
-      HorizontalConcatenation(adjusted3, TipSpecifications(Vertical, Vertical)))
+    // BlockedHorizontalConcatenation(TipSpecifications(Physical(0), Physical(1)),
+    //   HorizontalConcatenation(adjusted3, TipSpecifications(Vertical, Vertical)))
+    HorizontalConcatenation(HorizontalConcatenation.adjustHeights(List(
+      VerticalConcatenation(
+        VerticalConcatenation(
+          HorizontalConcatenation(List(
+            Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
+            Station("d", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
+            Space(2*Layout.unitWidth, Direction.LTR, Side.Right)),
+            TipSpecifications(Vertical, Vertical)),
+          HorizontalConcatenation(List(
+            Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
+            Station("d", true, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
+            Space(2*Layout.unitWidth, Direction.LTR, Side.Right)),
+            TipSpecifications(Vertical, Vertical)),
+          Direction.LTR,
+          Polarity.+,
+          TipSpecifications(Vertical, Vertical)),
+        HorizontalConcatenation(List(
+          Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
+          // Rail(14, Direction.LTR),
+          Station("d", true, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em")),
+          Space(2*Layout.unitWidth, Direction.RTL, Side.Left)),
+          TipSpecifications(Vertical, Vertical)),
+        Direction.LTR,
+        Polarity.-,
+        TipSpecifications(Logical(2), Physical(0))),
+      Station("aaaa", false, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")),
+      Space(2*Layout.unitWidth, Direction.LTR, Side.Right),
+      LineBreak(100, Direction.LTR),
+      Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
+      Station("aaaa", false, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em")))),
+    TipSpecifications(Logical(1), Logical(1)))
 
 
   @scalajs.js.annotation.JSExport

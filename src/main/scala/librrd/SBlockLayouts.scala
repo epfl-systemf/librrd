@@ -194,7 +194,7 @@ trait SBlockLayouts[T]:
                 case Right(result) => Right(maybeStartGrownSub +: result)
 
       val head = sublayouts.head
-      loop(head.endHeight, head.tipYInternal(endSide), 1, sublayouts) match
+      loop(head.startHeight, head.tipYInternal(startSide), 1, sublayouts) match
         case Right(result) => result
         case Left(_) => throw RuntimeException(s"could not adjust heights of sequence! $sublayouts")
 
@@ -364,3 +364,75 @@ trait SBlockLayouts[T]:
         assert(r == 1)
         assert(hc.tipSpecs(s) != Vertical)
         hc.tipY(s, ts)
+
+
+  object VerticalConcatenation:
+    val `class` = "librrd-vconcat"
+    val positiveClass = "librrd-vconcat-positive"
+    val negativeClass = "librrd-vconcat-negative"
+
+    def extraWidths(tipSpecs: TipSpecifications): SidedProperty[Double] = SidedProperty.forEach(s =>
+      if tipSpecs(s) == TipSpecification.Vertical then 0 else 3*Layout.unitWidth)
+
+  case class VerticalConcatenation(
+      topSublayout: Layout,
+      bottomSublayout: Layout,
+      direction: Direction,
+      polarity: Polarity,
+      tipSpecs: TipSpecifications,
+      initClasses: Set[String] = Set.empty,
+      id: Option[String] = None) extends BlockLayout:
+    val `classes` = initClasses
+      + VerticalConcatenation.`class`
+      + (polarity match
+           case Polarity.+ => VerticalConcatenation.positiveClass
+           case Polarity.- => VerticalConcatenation.negativeClass)
+
+    assert(topSublayout.width ~= bottomSublayout.width,
+      "top and bottom sublayouts of vertical concatenation must have same width " +
+      s"${topSublayout.width} ${bottomSublayout.width}!")
+    val extraWidths = VerticalConcatenation.extraWidths(tipSpecs)
+    val width = topSublayout.width + extraWidths.left + extraWidths.right
+
+    assert(topSublayout.direction == (polarity match
+        case Polarity.+ =>  bottomSublayout.direction
+        case Polarity.- =>  bottomSublayout.direction.reverse),
+      "bottom sublayout of vertical concatenation must have direction equal to " +
+      "top sublayout iff polarity is positive!")
+    val bottomOffset = topSublayout.height + Layout.rowGap
+    val startHeight = bottomOffset + bottomSublayout.height
+
+    assert(topSublayout.tipSpecs(Side.Left) == Vertical
+      && topSublayout.tipSpecs(Side.Right) == Vertical
+      && bottomSublayout.tipSpecs(Side.Left) == Vertical
+      && bottomSublayout.tipSpecs(Side.Right) == Vertical,
+      "top and bottom sublayouts of vertical concatenation must have vertical tips!")
+
+    override val tipRowsPossible =
+      polarity match
+        case Polarity.+ => NumRows.forEach(s =>
+          topSublayout.tipRows(s) + bottomSublayout.tipRows(s))
+        case Polarity.- => NumRows.forEach(s =>
+          topSublayout.tipRowsPossible(s) + bottomSublayout.tipRowsPossible(s)
+          - topSublayout.tipRows(s) + 1)
+
+    override val tipRows = NumRows.forEach(s => (tipSpecs(s), polarity) match
+      case (Vertical, Polarity.+) => tipRowsPossible(s)
+      case _ => 1)
+
+    override def tipYInternal(s: Side, ts: TipSpecification) = ts match
+      case Vertical => 0.0
+      case Physical(p) => linearInterpolate(
+          0, topSublayout.tipY(s, polarity match
+            case Polarity.+ => Physical(0)
+            case Polarity.- => Logical(topSublayout.tipRowsPossible(s))),
+          1, bottomOffset + bottomSublayout.tipY(s, Physical(1)), p)
+        case Logical(r) =>
+          val topRows = topSublayout.tipRows(s)
+          polarity match
+            case Polarity.+ =>
+              if r <= topRows then topSublayout.tipY(s, Logical(r))
+              else bottomOffset + bottomSublayout.tipY(s, Logical(r - topRows))
+            case Polarity.- =>
+              if r == 1 then topSublayout.tipY(s, Logical(topRows))
+              else bottomOffset + bottomSublayout.tipY(s, Logical(r - 1))

@@ -110,23 +110,68 @@ abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
             g(group*)
         }
 
-      case bhc: BlockedHorizontalConcatenation =>
-
+      case bhc @ BlockedHorizontalConcatenation(tipSpecs, hc) =>
         val extraP = SidedProperty(bhc.direction, 0, 1)
         val extraWidths = bhc.extraWidths
-        g(render(bhc.hc), transform:=s"translate(${extraWidths.left},0)")
+        g(render(hc), transform:=s"translate(${extraWidths.left},0)")
         +: List((Side.Left, extraWidths.left, +1),
                 (Side.Right, bhc.width - extraWidths.right, -1))
           .flatMap((side, x, sign) =>
-            bhc.tipSpecs(side) match
+            tipSpecs(side) match
               case TipSpecification.Physical(p) if p != extraP(side) =>
                 positiveBrackets(
                   bhc.tipY(side),
-                  (1 to bhc.hc.sidemosts(side).tipRowsPossible(side))
-                    .map(r => bhc.hc.tipY(side, TipSpecification.Logical(r))),
+                  (1 to hc.sidemosts(side).tipRowsPossible(side))
+                    .map(r => hc.tipY(side, TipSpecification.Logical(r))),
                   sign,
                   x)
               case _ => List())
+
+      case vc @ VerticalConcatenation(
+          topSublayout, bottomSublayout, direction, polarity, tipSpecs, _, _) =>
+        import TipSpecification.*
+        val leftExtraWidth = vc.extraWidths.left
+
+        val brackets = List((Side.Left, leftExtraWidth, +1),
+                            (Side.Right, leftExtraWidth + topSublayout.width, -1))
+          .flatMap((side, x, sign) =>
+            val upwards: Int = -(sign - 1)/2
+            val downwards = 1 - upwards
+            val tipY = vc.tipY(side)
+            polarity match
+              case Polarity.+ => tipSpecs(side) match
+                case Vertical => List()
+                case _ => positiveBrackets(tipY,
+                  (1 to vc.tipRowsPossible(side)).map(r => vc.tipY(side, Logical(r))), sign, x)
+
+              case Polarity.- =>
+                def topPath(subTipY: Double) = path(d:=
+                  s"M $x,${vc.bottomOffset - Layout.rowGap/2}  L $x,${subTipY + 2*unitWidth} "
+                  + s"$quarterArc $downwards ${sign*radius},${-radius}")
+                def bottomPath(subTipY: Double) = path(d:=
+                  s"M $x,${vc.bottomOffset - Layout.rowGap/2}  L $x,${subTipY - 2*unitWidth} "
+                  + s"$quarterArc $upwards ${sign*radius},$radius")
+                val inners = (1 to topSublayout.tipRowsPossible(side))
+                  .map(r => topPath(topSublayout.tipY(side, Logical(r))))
+                  ++ (1 to bottomSublayout.tipRowsPossible(side))
+                  .map(r => bottomPath(vc.bottomOffset + bottomSublayout.tipY(side, Logical(r))))
+                val outerPath = path(d:=
+                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
+                  + s"$quarterArc $upwards ${sign*radius},${-radius}")
+                val straight = path(d:=
+                  s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
+
+                tipSpecs(side) match
+                  case Vertical => inners
+                  case Physical(0) | Logical(1) =>
+                    if topSublayout.tipRowsPossible(side) == 1 then straight +: inners
+                    else straight +: outerPath +: inners
+                  case _ => outerPath +: inners)
+
+        List(
+          g(render(topSublayout), transform:=s"translate($leftExtraWidth,0)"),
+          g(render(bottomSublayout), transform:=s"translate($leftExtraWidth,${vc.bottomOffset})")
+        ) ++ brackets
 
     val withGroup = (inner
       :+ rect(x:=(-unitWidth), y:=(-2*unitWidth),
