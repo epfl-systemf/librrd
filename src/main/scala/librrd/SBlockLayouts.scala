@@ -12,7 +12,7 @@ trait SBlockLayouts[T]:
   object Layout:
     val unitWidth = 4.0
     val `class` = "librrd"
-    val rowGap = 4*unitWidth
+    val rowGap = 3*unitWidth
 
   sealed trait Layout:
     def direction: Direction
@@ -140,7 +140,7 @@ trait SBlockLayouts[T]:
     val startOffset = width
     val endWidth = 0
 
-    val middleHeight = Layout.rowGap
+    val middleHeight = 2*Layout.rowGap
 
     val sBlockRows = 2
     override def growStartHeight(by: Double) = this.copy(startHeight = startHeight + by)
@@ -203,10 +203,6 @@ trait SBlockLayouts[T]:
       SidedProperty.forEach(s => tipSpecs(s) match
         case Physical(p) if p != extraP(s) => 3*Layout.unitWidth
         case _ => 0)
-
-    def extraWidth(direction: Direction, tipSpecs: TipSpecifications) =
-      val ws = extraWidths(direction, tipSpecs)
-      ws.left + ws.right
 
 
   case class HorizontalConcatenation(
