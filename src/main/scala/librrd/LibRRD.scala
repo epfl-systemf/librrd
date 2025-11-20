@@ -7,7 +7,7 @@ object LibRRD:
       DirectedDiagrams.direct(
         ParameterizedDiagrams.parameterize(diagram, stylesheet)))
 
-  val SVGWD = WrappedDiagrams(LayoutsSVG)
+  val SVGWD = WrappedDiagrams(SBlockLayoutsSVG)
 
   def layOutToSVG(diagram: Diagrams.Diagram, stylesheet: LayoutStylesheets.Stylesheet,
                   width: Double) =
@@ -21,4 +21,3 @@ object LibRRD:
     val myLayout = JustifiedDiagrams.justify(SVGWD)(myWrappedDiagram, width)
     SVGWD.backend.render(myLayout)
 
-  def resetSVGID() = LayoutsSVG.resetID()

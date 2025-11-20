@@ -33,7 +33,7 @@ object AlignedDiagrams:
     def toDirectedDiagram =
       DirectedDiagrams.Station(label, isTerminal, direction, properties, classes, id)
 
-  case class Space(direction: Direction) extends AlignedDiagram:
+  case class Space(direction: Direction, verticalSide: Side) extends AlignedDiagram:
     val properties = PropertyMap(Seq())
     val classes = Set()
     val id = None
@@ -100,10 +100,14 @@ object AlignedDiagrams:
   def align(diagram: DirectedDiagrams.DirectedDiagram): AlignedDiagram =
     import Connectability.*
 
+    def sidedSpaces(direction: Direction, conditions: SidedProperty[Boolean]) =
+      val spaces = Side.values.map(s => if conditions(s) then Some(Space(direction, s)) else None)
+      (spaces(0), spaces(1))
+
     def maybeSurroundSpaces(ad: AlignedDiagram, conditions: SidedProperty[Boolean])
         : List[AlignedDiagram] =
-      val maybeSpaces = conditions.map(c => if c then List(Space(ad.direction)) else List())
-      maybeSpaces.left ++ (ad +: maybeSpaces.right)
+      val (leftSpace, rightSpace) = sidedSpaces(ad.direction, conditions)
+      leftSpace.toList ++ (ad +: rightSpace.toList)
 
     def singletonWithSpaces(ads: List[AlignedDiagram], direction: Direction, properties: PropertyMap) =
       if ads.length == 1 then ads(0)
@@ -130,14 +134,13 @@ object AlignedDiagrams:
               case AlignItemsPolicy.Baseline => /* doesn't matter */ Logical(1)
             case _ => Vertical)
 
-          if subdiagrams.isEmpty && Side.values.count(s => connectability(s).isEither) == 1
-          then List(Space(direction))
+          val (leftSpace, rightSpace) = sidedSpaces(direction, connectability.map(_.isEither))
+          val spaces = leftSpace.toList ++ rightSpace.toList
+          if subdiagrams.isEmpty && spaces.length == 1
+          then spaces
           else {
           val (alignedSubdiagramsOne, alignedSubdiagramsMulti) = subdiagrams.length match
-            case 0 =>
-              val spaces = Side.values.toList.flatMap(s =>
-                if connectability(s).isEither then Some(Space(direction)) else None)
-              (spaces, spaces)
+            case 0 => (spaces, spaces)
 
             case 1 =>
               val inner = rec(subdiagrams(0), connectability)

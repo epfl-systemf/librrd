@@ -134,6 +134,8 @@ abstract class SBlockLayoutsScalatags[Builder, Output <: FragT, FragT]
                     .map(r => hc.tipY(side, Logical(r))),
                   sign,
                   x)
+              case Logical(_) =>
+                List(rail(d:=s"M $x,${hc.tipY(side)}  l ${-sign*2*unitWidth},0"))
               case _ => List())
 
       case vc @ VerticalConcatenation(

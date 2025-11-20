@@ -142,7 +142,6 @@ object GUI:
 
   var oldSVG: Option[org.scalajs.dom.Node] = None
   def reLayOut(): Unit =
-    LibRRD.resetSVGID()
     val mySVG = LibRRD.layOutToSVG(
       InputsPresets.Diagram.get,
       InputsPresets.LayoutStylesheet.get,

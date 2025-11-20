@@ -13,8 +13,7 @@ object LibRRDFile:
   @JSImport("console", "timeEnd")
   def consoleTimeEnd(label: String): Unit = js.native
 
-
-  val SVGFileWD = WrappedDiagrams(LayoutsSVGFile)
+  val SVGFileWD = WrappedDiagrams(SBlockLayoutsSVGFile)
 
   def layOutToSVGFile(
       diagram: Diagrams.Diagram,
@@ -29,6 +28,6 @@ object LibRRDFile:
                            myWrappedDiagram.minContent)
     val myLayout = JustifiedDiagrams.justify(SVGFileWD)(myWrappedDiagram, myWidth)
     if time then consoleTimeEnd("layout")
-    LayoutsSVGFile.renderToFile(SVGFileWD.backend.render(myLayout).render, renderingStylesheet,
-                                myLayout.width, myLayout.height, filename)
-
+    SBlockLayoutsSVGFile.renderToFile(
+      SVGFileWD.backend.render(myLayout).render, renderingStylesheet,
+      myLayout.width, myLayout.height, filename)

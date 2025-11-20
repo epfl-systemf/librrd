@@ -16,21 +16,18 @@ object SBlocksTestGUI:
       BlockedHorizontalConcatenation(HorizontalConcatenation(List(
           Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
           Station("thing1a", true, Direction.LTR, FontInfo("monospace", "normal", "normal", "1em")),
-          Space(2*Layout.unitWidth, Direction.LTR, Side.Right)),
-        TipSpecifications(Vertical, Vertical))),
+          Space(2*Layout.unitWidth, Direction.LTR, Side.Right)))),
       BlockedHorizontalConcatenation(HorizontalConcatenation(List(
           Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
           Station("thing1b", true, Direction.LTR, FontInfo("monospace", "normal", "normal", "1em")),
-          Space(2*Layout.unitWidth, Direction.LTR, Side.Right)),
-        TipSpecifications(Vertical, Vertical))),
+          Space(2*Layout.unitWidth, Direction.LTR, Side.Right)))),
       Direction.LTR,
       Polarity.+,
       TipSpecifications(Vertical, Vertical))
 
   val thing2 = HorizontalConcatenation(List(
       Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
-      Station("thing2", false, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em"))),
-    TipSpecifications(Vertical, Logical(1)))
+      Station("thing2", false, Direction.LTR, FontInfo("sans-serif", "normal", "normal", "1em"))))
   val w = thing1.width
 
   val testLayout: Layout =
@@ -48,35 +45,30 @@ object SBlocksTestGUI:
         BlockedHorizontalConcatenation(HorizontalConcatenation(List(
             Space(2*Layout.unitWidth, Direction.LTR, Side.Left),
             Rail(66.51666, Direction.LTR),
-            Space(2*Layout.unitWidth, Direction.LTR, Side.Right)),
-          TipSpecifications(Vertical, Vertical))),
+            Space(2*Layout.unitWidth, Direction.LTR, Side.Right)))),
         Direction.LTR,
         Polarity.+,
         TipSpecifications(Vertical, Vertical)),
       LineBreak(100, Direction.LTR),
-      thing2)),
-      TipSpecifications(Logical(1), Logical(1)))
+      thing2)))
 
   val thing1rtl =
     VerticalConcatenation(
       BlockedHorizontalConcatenation(HorizontalConcatenation(List(
           Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
           Station("thing1a", true, Direction.RTL, FontInfo("monospace", "normal", "normal", "1em")),
-          Space(2*Layout.unitWidth, Direction.RTL, Side.Left)),
-        TipSpecifications(Vertical, Vertical))),
+          Space(2*Layout.unitWidth, Direction.RTL, Side.Left)))),
       BlockedHorizontalConcatenation(HorizontalConcatenation(List(
           Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
           Station("thing1b", true, Direction.RTL, FontInfo("monospace", "normal", "normal", "1em")),
-          Space(2*Layout.unitWidth, Direction.RTL, Side.Left)),
-        TipSpecifications(Vertical, Vertical))),
+          Space(2*Layout.unitWidth, Direction.RTL, Side.Left)))),
       Direction.RTL,
       Polarity.+,
       TipSpecifications(Vertical, Vertical))
 
   val thing2rtl = HorizontalConcatenation(List(
       Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
-      Station("thing2rtl", false, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em"))),
-    TipSpecifications(Logical(1), Vertical))
+      Station("thing2rtl", false, Direction.RTL, FontInfo("sans-serif", "normal", "normal", "1em"))))
   val wrtl = thing1rtl.width
 
   val testLayoutrtl: Layout =
@@ -88,8 +80,7 @@ object SBlocksTestGUI:
         BlockedHorizontalConcatenation(HorizontalConcatenation(List(
             Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
             Station("thing1", true, Direction.RTL, FontInfo("monospace", "normal", "normal", "1em")),
-            Space(2*Layout.unitWidth, Direction.RTL, Side.Left)),
-          TipSpecifications(Vertical, Vertical))),
+            Space(2*Layout.unitWidth, Direction.RTL, Side.Left)))),
         75.29999923706055, Direction.RTL, Polarity.-, TipSpecifications(Logical(1), Vertical)),
       thing2rtl,
       VerticalEpsilon(thing1rtl, wrtl + thing2rtl.width + 3*Layout.unitWidth, Direction.RTL, Polarity.-, TipSpecifications(Logical(1), Logical(1))),
@@ -98,14 +89,12 @@ object SBlocksTestGUI:
         BlockedHorizontalConcatenation(HorizontalConcatenation(List(
             Space(2*Layout.unitWidth, Direction.RTL, Side.Right),
             Rail(66.51666, Direction.RTL),
-            Space(2*Layout.unitWidth, Direction.RTL, Side.Left)),
-          TipSpecifications(Vertical, Vertical))),
+            Space(2*Layout.unitWidth, Direction.RTL, Side.Left)))),
         Direction.RTL,
         Polarity.+,
         TipSpecifications(Vertical, Vertical)),
       LineBreak(100, Direction.RTL),
-      thing2rtl)),
-      TipSpecifications(Logical(1), Logical(1)))
+      thing2rtl)))
 
 
   @scalajs.js.annotation.JSExport

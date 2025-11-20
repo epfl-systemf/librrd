@@ -58,6 +58,8 @@ trait SBlockLayouts[T]:
     def tipYInternal(s: Side, ts: TipSpecification): Double
     def tipYInternal: SidedProperty[Double] = SidedProperty.forEach(s => tipYInternal(s, tipSpecs(s)))
 
+    def block: BlockLayout
+
 
   sealed trait BlockLayout extends Layout:
     val sBlockRows = 1
@@ -65,6 +67,7 @@ trait SBlockLayouts[T]:
     def endWidth = width
     def endHeight = startHeight
     def middleHeight = -startHeight
+    override def block = this
 
   sealed trait AtomicLayout extends BlockLayout:
     val tipRowsPossible = NumRows(1, 1)
@@ -153,6 +156,8 @@ trait SBlockLayouts[T]:
       case Vertical => throw IllegalArgumentException("line breaks cannot have vertical tips")
       case _ => tipYInternal(s)
 
+    override def block = throw IllegalArgumentException("line breaks cannot be blocked")
+
 
   object HorizontalConcatenation:
     val `class` = "librrd-hconcat"
@@ -198,16 +203,9 @@ trait SBlockLayouts[T]:
         case Right(result) => result
         case Left(_) => throw RuntimeException(s"could not adjust heights of sequence! $sublayouts")
 
-    def extraWidths(direction: Direction, tipSpecs: TipSpecifications): SidedProperty[Double] =
-      val extraP = SidedProperty(direction, 0, 1)
-      SidedProperty.forEach(s => tipSpecs(s) match
-        case Physical(p) if p != extraP(s) => 3*Layout.unitWidth
-        case _ => 0)
-
 
   case class HorizontalConcatenation(
       sublayouts: Seq[Layout],
-      tipSpecs: TipSpecifications,
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None) extends Layout:
     val classes = initClasses + HorizontalConcatenation.`class`
@@ -319,22 +317,26 @@ trait SBlockLayouts[T]:
         case Logical(r) =>
           tipYInternal(s) - sidemosts(s).tipYInternal(s) + sidemosts(s).tipYInternal(s, ts)
 
-    Side.values.foreach(s => tipSpecs(s) match
-      case Vertical =>
-        assert(sidemosts(s).tipSpecs(s) == Vertical)
-      case Physical(_) =>
-        throw RuntimeException("horizontal concatenation must be blocked to have Physical tips!")
-      case Logical(r) =>
-        assert(r == 1)
-        assert(sidemosts(s).tipSpecs(s) != Vertical))
-
     override val tipYInternal = SidedProperty(direction, startTipY, endTipY)
+    override val tipSpecs = SidedProperty.forEach(s => sidemosts(s).tipSpecs(s))
     val tipRowsPossible = NumRows(direction, first.tipRows, last.tipRows)
+
+    override def block =
+      BlockedHorizontalConcatenation(this)
 
     val endsWithVerticalEpsilon: Boolean = last match
       case l: HorizontalConcatenation => l.endsWithVerticalEpsilon
       case _: VerticalEpsilon => true
       case _ => false
+
+
+  object BlockedHorizontalConcatenation:
+    def extraWidths(direction: Direction, tipSpecs: TipSpecifications): SidedProperty[Double] =
+      val extraP = SidedProperty(direction, 0, 1)
+      SidedProperty.forEach(s => tipSpecs(s) match
+        case Physical(p) if p != extraP(s) => 3*Layout.unitWidth
+        case Logical(_) => 2*Layout.unitWidth
+        case _ => 0)
 
 
   case class BlockedHorizontalConcatenation(
@@ -351,18 +353,17 @@ trait SBlockLayouts[T]:
     override val classes = hc.classes + HorizontalConcatenation.blockedClass
     override val startHeight = hc.height
     override val tipSpecs = maybeTipSpecs.getOrElse(hc.tipSpecs)
-    val extraWidths = HorizontalConcatenation.extraWidths(direction, tipSpecs)
+    val extraWidths = BlockedHorizontalConcatenation.extraWidths(direction, tipSpecs)
     override val width = hc.width + extraWidths.left + extraWidths.right
-    override val tipRowsPossible = NumRows(1, 1)
+    override val tipRowsPossible = hc.tipRowsPossible
 
     override def tipYInternal(s: Side, ts: TipSpecification) = ts match
       case Vertical =>
         hc.tipY(s, ts)
       case Physical(p) =>
-        assert(hc.tipSpecs(s) == Vertical)
+        assert(p == SidedProperty(direction, 0, 1)(s) || hc.tipSpecs(s) == Vertical)
         hc.tipYInternal(s, ts) // don't relativize to hc.endHeight
       case Logical(r) =>
-        assert(r == 1)
         hc.tipY(s, ts)
 
 
@@ -510,3 +511,5 @@ trait SBlockLayouts[T]:
           case (Logical(r), Polarity.-) => sub.tipYInternal(s, Logical(sub.tipRows(s)))
           case _ => sub.tipYInternal(s, ts)
       else endHeight
+
+    override def block = throw IllegalArgumentException("line breaks cannot be blocked")

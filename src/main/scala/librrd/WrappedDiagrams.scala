@@ -2,7 +2,7 @@ package librrd
 
 import LayoutStylesheets.PropertyMap
 
-class WrappedDiagrams[T](val backend: Layouts[T]):
+class WrappedDiagrams[T](val backend: SBlockLayouts[T]):
   val unitWidth = backend.Layout.unitWidth
 
   trait WrappedDiagramFields extends AlignedDiagrams.AlignedDiagramFields:
@@ -36,14 +36,14 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     def toAlignedDiagram =
       AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id)
 
-  case class Space(direction: Direction, numRows: NumRows)
+  case class Space(direction: Direction, numRows: NumRows, verticalSide: Side)
       extends LocallyWrappedDiagram, GlobalWrap:
     val properties = PropertyMap(Seq())
     val classes = Set()
     val id = None
     val minContent = 2*unitWidth
     val maxContent = minContent
-    def toAlignedDiagram = AlignedDiagrams.Space(direction)
+    def toAlignedDiagram = AlignedDiagrams.Space(direction, verticalSide)
 
 
   case class BlockVerticalConcatenation(
@@ -101,14 +101,9 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       "inline vertical concatenation must have at least 2 subdiagrams")
 
     val markerFont = LayoutStylesheets.Font.default
-    val markerWidth =
-      backend.measure(properties.get(LayoutStylesheets.ContinuationMarker), markerFont)._1
-      + 2*backend.InlineVerticalConcatenation.markerPadding
+    val markerWidth = 3*backend.Layout.unitWidth
 
-    val extraP = SidedProperty.apply.tupled(direction.swap((0, 1)))
-    val extraWidths = SidedProperty.forEach(s => tipSpecs(s) match
-        case TipSpecification.Physical(p) if p != extraP(s) => 3*unitWidth
-        case _ => 0)
+    val extraWidths = backend.BlockedHorizontalConcatenation.extraWidths(direction, tipSpecs)
     val extraWidth = extraWidths.left + extraWidths.right
     val (first, mids, last) = splitEnds(subdiagrams)
     val minContent = (List(first, last).map(_.minContent + markerWidth)
@@ -171,8 +166,11 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
            indices)
         else
           val (first, mids, last) = splitEnds(partition)
-          val withSpaces = (maybeSpaces.left.toList ++ first)
-            +: mids :+ (last ++ maybeSpaces.right.toList)
+          val leftSpace = Space(direction, NumRows(1, 1), Side.Left).asInstanceOf[D]
+          val rightSpace = Space(direction, NumRows(1, 1), Side.Right).asInstanceOf[D]
+          val withSpaces = ((maybeSpaces.left.toList ++ first) :+ rightSpace)
+            +: mids.map(m => leftSpace +: m :+ rightSpace)
+            :+ (leftSpace +: (last ++ maybeSpaces.right.toList))
           val spaceBetweenProperties =
             import LayoutStylesheets.{JustifyContent, Property}
             import JustifyContentPolicy.*
@@ -222,8 +220,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
       case AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
         Station(label, isTerminal, direction, properties, diagram.numRows,
                 properties.get(LayoutStylesheets.Font), classes, id)
-      case AlignedDiagrams.Space(direction) =>
-        Space(direction, diagram.numRows)
+      case AlignedDiagrams.Space(direction, verticalSide) =>
+        Space(direction, diagram.numRows, verticalSide)
       case AlignedDiagrams.Sequence(subdiagramsOne, subdiagramsMulti,
           direction, properties, tipSpecs, classes, id) =>
         LocallyWrappedSequence(subdiagramsOne.map(wrapLocally), subdiagramsMulti.map(wrapLocally),
@@ -240,8 +238,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
         case AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
           Vector(Station(label, isTerminal, direction, properties, diagram.numRows,
                          properties.get(LayoutStylesheets.Font), classes, id))
-        case AlignedDiagrams.Space(direction) =>
-          Vector(Space(direction, diagram.numRows))
+        case AlignedDiagrams.Space(direction, verticalSide) =>
+          Vector(Space(direction, diagram.numRows, verticalSide))
         case seq @ AlignedDiagrams.Sequence(subdiagramsOne, subdiagramsMulti,
             direction, properties, tipSpecs, classes, id) =>
           subdiagramsOne.zip(subdiagramsMulti)
