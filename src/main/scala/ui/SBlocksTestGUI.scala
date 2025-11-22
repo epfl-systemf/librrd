@@ -2,7 +2,7 @@ package ui
 
 import org.scalajs.dom
 import org.scalajs.dom.document
-import librrd.SBlockLayoutsSVG.*
+import librrd.LayoutsSVG.*
 import librrd.{Direction, FontInfo, TipSpecifications, Side, Polarity}
 import librrd.TipSpecification.*
 

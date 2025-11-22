@@ -2,7 +2,7 @@ package librrd
 
 import LayoutStylesheets.PropertyMap
 
-class WrappedDiagrams[T](val backend: SBlockLayouts[T]):
+class WrappedDiagrams[T](val backend: Layouts[T]):
   val unitWidth = backend.Layout.unitWidth
 
   trait WrappedDiagramFields extends AlignedDiagrams.AlignedDiagramFields:

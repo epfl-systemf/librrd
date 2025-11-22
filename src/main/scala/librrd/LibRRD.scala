@@ -7,7 +7,7 @@ object LibRRD:
       DirectedDiagrams.direct(
         ParameterizedDiagrams.parameterize(diagram, stylesheet)))
 
-  val SVGWD = WrappedDiagrams(SBlockLayoutsSVG)
+  val SVGWD = WrappedDiagrams(LayoutsSVG)
 
   def layOutToSVG(diagram: Diagrams.Diagram, stylesheet: LayoutStylesheets.Stylesheet,
                   width: Double) =
