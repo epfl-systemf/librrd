@@ -103,7 +103,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     val markerFont = LayoutStylesheets.Font.default
     val markerWidth = 3*backend.Layout.unitWidth
 
-    val extraWidths = backend.BlockedHorizontalConcatenation.extraWidths(direction, tipSpecs)
+    val extraWidths =
+      backend.BlockedHorizontalConcatenation.extraWidths(direction, tipSpecs, subdiagrams.length)
     val extraWidth = extraWidths.left + extraWidths.right
     val (first, mids, last) = splitEnds(subdiagrams)
     val minContent = (List(first, last).map(_.minContent + markerWidth)

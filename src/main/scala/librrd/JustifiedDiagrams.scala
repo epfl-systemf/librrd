@@ -12,7 +12,7 @@ object JustifiedDiagrams:
         case wd.Station(label, isTerminal, direction, properties, numRows, font, classes, id) =>
           l.Station(label, isTerminal, direction, font, classes, id)
         case wd.Space(direction, numRows, verticalSide) =>
-          l.Space(diagram.minContent, direction, verticalSide)
+          l.Space(direction, verticalSide)
         case bvc @ wd.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
             direction, polarity, properties, tipSpecs, numRows, classes, id) =>
           val width = targetWidth - bvc.extraWidth

@@ -123,8 +123,9 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
         val extraP = SidedProperty(bhc.direction, 0, 1)
         val extraWidths = bhc.extraWidths
         g(render(hc), transform:=s"translate(${extraWidths.left},0)")
-        +: List((Side.Left, extraWidths.left, +1),
-                (Side.Right, bhc.width - extraWidths.right, -1))
+        +: (if hc.sBlockRows == 1 then List()
+            else List((Side.Left, extraWidths.left, +1),
+                      (Side.Right, bhc.width - extraWidths.right, -1))
           .flatMap((side, x, sign) =>
             bhc.tipSpecs(side) match
               case Physical(p) if p != extraP(side) =>
@@ -134,9 +135,9 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
                     .map(r => hc.tipY(side, Logical(r))),
                   sign,
                   x)
-              case Logical(_) =>
+              case Physical(_) | Logical(_) =>
                 List(rail(d:=s"M $x,${hc.tipY(side)}  l ${-sign*2*unitWidth},0"))
-              case _ => List())
+              case _ => List()))
 
       case vc @ VerticalConcatenation(
           topSublayout, bottomSublayout, direction, polarity, tipSpecs, _, _) =>
