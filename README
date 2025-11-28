@@ -1,10 +1,8 @@
 LibRRD
 ======
 
-Build: sbt deploy
+To build the GUI, run `sbt deploy`.  Generated files are added to `gui/`.
+To build the CLI, run `npm install` (this requires Node.js v20 and npm).
 
-CLI prereqs: node v20, npm
-Set up CLI: npm install
-Run CLI: node cli/cli.js [args…]
-
-Run GUI: launch webserver in gui/ and open in browser
+To run the CLI: `node cli/cli.js [args…]`
+To run the GUI: launch a webserver in `gui/` and open `index.html` in your browser (e.g. run `python3 -m http.server` and browse to `http://localhost:8000`).
