@@ -1,0 +1,5 @@
+:root {
+  align-items: center;
+  justify-content: end;
+  flex-absorb: 0.4;
+}
