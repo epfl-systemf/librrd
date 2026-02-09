@@ -91,7 +91,7 @@ object GUIPresets:
         |}
         |
         |nonterminal {
-        |  font: 'Gill Sans' normal bold 1.4em;
+        |  font: 'Gillius ADF No2' normal bold 1.4em;
         |}
         |
         |terminal {
