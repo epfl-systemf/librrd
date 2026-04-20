@@ -78,22 +78,30 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
       case lb: LineBreak =>
         val halfHeight = lb.startHeight + lb.middleHeight/2
         val (startSide, endSide) = lb.direction.swap((Side.Left, Side.Right))
-        List(path(d:=
-            s"M ${lb.startOffset},${lb.tipY(startSide) + radius}  "
-          + s"L ${lb.startOffset},${halfHeight - radius}  $quarterArc 1 ${-radius},$radius  "
-          + s"L $radius,${halfHeight}  $quarterArc 0 ${-radius},$radius  "
-          + s"L 0,${lb.tipY(endSide) - radius}",
+
+        val rendering =
+          if lb.marker.isDefined then
+            val markerPadding = LineBreak.markerPadding
+            val markerElement = text(lb.marker, style:=fontToStyleString(lb.font))
+            g(markerElement(x:=lb.startOffset, y:=lb.tipY(startSide) + 5),
+              markerElement(x:=markerPadding, y:=lb.tipY(endSide) + 5))
+          else path(`class`:=Rail.`class`, d:=
+              s"M ${lb.startOffset},${lb.tipY(startSide) + radius}  "
+            + s"L ${lb.startOffset},${halfHeight - radius}  $quarterArc 1 ${-radius},$radius  "
+            + s"L ${lb.endWidth + radius},${halfHeight}  $quarterArc 0 ${-radius},$radius  "
+            + s"L ${lb.endWidth},${lb.tipY(endSide) - radius}")
+
+        List(rendering(
           transform:=(lb.direction match
             case Direction.RTL => s"translate(${lb.width},0) scale(-1,1)"
-            case _ => ""),
-          `class`:=Rail.`class`))
+            case _ => "")))
 
       case hc: HorizontalConcatenation =>
         val (startSide, endSide) = hc.direction.swap((Side.Left, Side.Right))
         hc.sublayouts.zipWithIndex.zip(hc.subXs.zip(hc.subYs)).map{
           case ((sub, i), (subX, subY)) =>
             val startConnector =
-              if sub.tipSpecs(startSide) == Vertical && i != 0 then
+              if sub.tipSpecs(startSide) == Vertical && i != 0 && hc.connectors then
                 val firstSubTip = sub.tipY(startSide, Logical(1))
                 (1 to sub.tipRows(startSide))
                   .map(r => sub.tipY(startSide, Logical(r)))
@@ -101,7 +109,8 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
                     + s"$quarterArc 0 $radius,$radius"))
               else List()
             val endConnector =
-              if sub.tipSpecs(endSide) == Vertical && i != hc.sublayouts.length - 1 then
+              if sub.tipSpecs(endSide) == Vertical
+                  && i != hc.sublayouts.length - 1 && hc.connectors then
                 val lastSubTip = sub.tipY(endSide, Logical(sub.tipRows(endSide)))
                 (1 to sub.tipRows(endSide))
                   .map(r => sub.tipY(endSide, Logical(r)))

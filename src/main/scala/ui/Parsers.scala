@@ -93,12 +93,17 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "justify-content:" ~> justifyContentValue ^^ (v => Property(JustifyContent, v))
     | "flex-absorb:" ~> """[0-9.]+""".r ^^ (v => Property(FlexAbsorb, v.toDouble))
     | "gap:" ~> """[0-9.]+""".r ^^ (v => Property(Gap, v.toDouble))
-    | "continuation-marker:" ~> """"\S+"""".r ^^ (v =>
-        Property(ContinuationMarker, v.substring(1, v.length() - 1)))
+    | "continuation-marker:" ~> (("none" ^^ (_ => Property(ContinuationMarker, None)))
+      | """"\S+"""".r ^^ (v => Property(ContinuationMarker, Some(v.substring(1, v.length() - 1)))))
     | "font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
       ^^ { _ match { case family ~ style ~ weight ~ size =>
       Property(Font, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
-                              size.getOrElse("14px"))) }}) <~ ";"
+                              size.getOrElse("14px"))) }}
+    | "continuation-font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
+      ^^ { _ match { case family ~ style ~ weight ~ size =>
+      Property(ContinuationFont, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
+                                          size.getOrElse("14px"))) }})
+     <~ ";"
 
   def selector: Parser[Selector] = "[^,{]+".r ^? SelectorParser
   def rule: Parser[Rule] = (rep1sep(selector, ",") <~ "{") ~ property.* <~ "}"

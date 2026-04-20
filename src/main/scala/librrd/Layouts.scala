@@ -143,19 +143,26 @@ trait Layouts[T]:
 
   object LineBreak:
     val `class` = "librrd-linebreak"
+    val markerPadding = 3*Layout.unitWidth
+    def markerWidth(marker: Option[String], font: FontInfo): Double =
+      marker.fold(0.0)(m => measure(m, font)._1) + markerPadding
 
-  trait LineBreakWidthProperties(initWidth: Double) extends LayoutWidthProperties:
+  trait LineBreakWidthProperties(initWidth: Double, val markerWidth: Double)
+      extends LayoutWidthProperties:
     override val width = initWidth
-    val startOffset = width
-    val endWidth = 0
+    val startOffset = width - markerWidth
+    val endWidth = markerWidth
 
   case class LineBreak(
       initWidth: Double,
       direction: Direction,
+      marker: Option[String],
+      font: FontInfo,
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None,
       startHeight: Double = 0.0,
-      endHeight: Double = 0.0) extends Layout, LineBreakWidthProperties(initWidth):
+      endHeight: Double = 0.0) extends Layout,
+        LineBreakWidthProperties(initWidth, LineBreak.markerWidth(marker, font)):
     val classes = initClasses + LineBreak.`class`
 
     val middleHeight = 2*Layout.rowGap
@@ -240,6 +247,7 @@ trait Layouts[T]:
 
   case class HorizontalConcatenation(
       sublayouts: Seq[Layout],
+      connectors: Boolean,
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None) extends Layout, HorizontalConcatenationWidthProperties(sublayouts):
     val classes = initClasses + HorizontalConcatenation.`class`
