@@ -1,8 +1,33 @@
 LibRRD
 ======
 
-To build the GUI, run `sbt deploy`.  Generated files are added to `gui/`.
-To build the CLI, run `npm install` (this requires Node.js v20 and npm).
+Setup
+-----
 
-To run the CLI: `node cli/cli.js [args…]`
-To run the GUI: launch a webserver in `gui/` and open `index.html` in your browser (e.g. run `python3 -m http.server` and browse to `http://localhost:8000`).
+- To build the project, you need Scala (v3.3.6) and SBT.
+  Follow official instructions at https://www.scala-lang.org/download/
+
+- To run the CLI, you need Node.js (v20) and NPM.
+  Follow official instructions at https://nodejs.org/en/download/
+  Then, run `npm install`.
+
+- To use the GUI, you need a webserver.
+  A simple one is provided with Python, which you can start with:
+    python3 -m http.server --directory gui/ 8080
+
+- The project automatically fetches the dependencies documented in NOTICE.
+  node-canvas is only needed for the CLI.
+
+
+Build
+-----
+
+1. `sbt deploy`
+
+
+Help
+----
+
+Help for the GUI is available by clicking the help button in the top right
+corner.
+Help for the CLI is available by running `node cli/cli.js --help`.

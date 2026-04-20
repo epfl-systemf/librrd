@@ -32,6 +32,7 @@ object CLI:
     (if suffixIdx > 0 then path.substring(0, suffixIdx) else path) + ".svg"
 
   class Config(args: Seq[String]) extends ScallopConf(args):
+    helpWidth(100)
     val layoutStylesheet = opt[String](
       name = "layout-stylesheet",
       descr = "path to layout stylesheet file, OR layout stylesheet preset name",
@@ -58,6 +59,10 @@ object CLI:
     val time = opt[Boolean](
       name = "time",
       descr = "whether to measure and report elapsed time for layout"
+    )
+    val globalWrapping = opt[Boolean](
+      name = "global-wrapping",
+      descr = "whether to wrap globally"
     )
     val diagram = trailArg[String](
       name = "diagram",
@@ -94,7 +99,9 @@ object CLI:
        then readFileSync(config.renderingStylesheet(), ReadUTF8)
        else renderingPresets(config.renderingStylesheet()))
       + config.renderingStylesheetAppend.map(readFileSync(_, ReadUTF8)).getOrElse("")
-    librrd.LibRRDFile.layOutToSVGFile(
+    (if config.globalWrapping()
+     then librrd.LibRRDFile.layOutGloballyToSVGFile
+     else librrd.LibRRDFile.layOutToSVGFile)(
       DiagramParser(diagram).get,
       StylesheetParser(layoutStylesheet).get,
       IdentityParser(renderingStylesheet).get,

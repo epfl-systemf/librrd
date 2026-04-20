@@ -144,7 +144,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     def bestUnder(width: Double, depth: Int): GlobalWrap =
       options
         .filter(_.minContent <= width)
-        .maxByOption(_.maxContent)
+        .maxByOption(gw => gw.minContent * gw.maxContent * gw.maxContent)
         .getOrElse(minContentOption)
 
 

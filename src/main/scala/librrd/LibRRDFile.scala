@@ -28,6 +28,21 @@ object LibRRDFile:
                            myWrappedDiagram.minContent)
     val myLayout = JustifiedDiagrams.justify(SVGFileWD)(myWrappedDiagram, myWidth)
     if time then consoleTimeEnd("layout")
-    LayoutsSVGFile.renderToFile(
-      SVGFileWD.backend.render(myLayout).render, renderingStylesheet,
-      myLayout.width, myLayout.height, filename)
+    LayoutsSVGFile.renderToFile(SVGFileWD.backend.render(myLayout).render, renderingStylesheet,
+                                myLayout.width, myLayout.height, filename)
+
+  def layOutGloballyToSVGFile(
+      diagram: Diagrams.Diagram,
+      layoutStylesheet: LayoutStylesheets.Stylesheet,
+      renderingStylesheet: String,
+      width: Double,
+      filename: String,
+      time: Boolean = false) =
+    if time then consoleTime("layout")
+    val myWrappedDiagram = SVGFileWD.wrapGlobally(LibRRD.preLayOut(diagram, layoutStylesheet))
+    val myWidth = Math.max(width * (if width <= 1 then myWrappedDiagram.maxContent else 1),
+                           myWrappedDiagram.minContent)
+    val myLayout = JustifiedDiagrams.justify(SVGFileWD)(myWrappedDiagram, myWidth)
+    if time then consoleTime("layout")
+    LayoutsSVGFile.renderToFile(SVGFileWD.backend.render(myLayout).render, renderingStylesheet,
+                                myLayout.width, myLayout.height, filename)
