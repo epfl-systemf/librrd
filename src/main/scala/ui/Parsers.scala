@@ -2,8 +2,7 @@ package ui
 
 import util.parsing.combinator.RegexParsers
 import util.{Try, Success}
-import librrd.{Diagrams, LayoutStylesheets, AlignItemsPolicy, JustifyContentPolicy,
-               Polarity, SidedProperty, FontInfo}
+import librrd.*
 
 trait InputParser[T]:
   def apply(input: String): Try[T]
@@ -106,6 +105,63 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
   def stylesheet: Parser[Stylesheet] = rule.* ^^ (rs => Stylesheet(rs))
 
   def apply(input: String) = parseAll(stylesheet, input) match
+    case Success(result, _) => util.Success(result)
+    case e: NoSuccess => util.Failure(RuntimeException(e.msg))
+
+
+class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
+  def realNumber: Parser[Double] = """-?(\d+)?(\.\d+)?""".r ^^ { _.toDouble }
+  def wholeNumber: Parser[Integer] = """-?\d+""".r ^^ { _.toInt }
+
+  def direction: Parser[Direction] =
+    "ltr" ^^ (_ => Direction.LTR) | "rtl" ^^ (_ => Direction.RTL)
+  def width: Parser[Double] = realNumber.filter(_ >= 0)
+  def flag: Parser[Boolean] = "#t" ^^ (_ => true) | "#f" ^^ (_ => false)
+  def polarity: Parser[Polarity] = "+" ^^ (_ => Polarity.+) | "-" ^^ (_ => Polarity.-)
+  def rowNumber: Parser[Integer] = wholeNumber.filter(_ > 0)
+  def proportion: Parser[Double] = realNumber.filter(p => 0 <= p && p <= 1)
+  def side: Parser[Side] = "left" ^^ (_ => Side.Left) | "right" ^^ (_ => Side.Right)
+
+  def tipSpecification: Parser[TipSpecification] =
+      "vertical" ^^ (_ => TipSpecification.Vertical)
+    | "(" ~ "logical" ~> rowNumber <~ ")" ^^ { TipSpecification.Logical(_) }
+    | "(" ~ "physical" ~> proportion <~ ")" ^^ { TipSpecification.Physical(_) }
+
+  val terminalFont = FontInfo("Inconsolata", "normal", "normal", "14px")
+  val nonterminalFont = FontInfo("Linux Biolinum", "italic", "normal", "14px")
+
+  def layout: Parser[backend.Layout] =
+      ("(" ~ "rail") ~> (direction ~ width) <~ ")"
+        ^^ { _ match { case d ~ w => backend.Rail(w, d) } }
+    | ("(" ~ "space") ~> direction <~ ")"
+        ^^ { backend.Space(2*backend.Layout.unitWidth, _) }
+    | ("(" ~ "station") ~> (direction ~ """"[^"]+"""".r ~ flag) <~ ")"
+        ^^ { _ match { case d ~ l ~ t => backend.Station(l, t, d,
+          if t then terminalFont else nonterminalFont) } }
+    | ("(" ~ "hconcat") ~> (direction ~ layout.+) <~ ")"
+        ^^ { _ match { case d ~ ls => backend.HorizontalConcatenation(ls,
+          NumRows(ls.head.numRows.left, ls.last.numRows.right)) } }
+    | ("(" ~ "vconcat-inline") ~>
+        (direction ~ tipSpecification ~ tipSpecification ~ """"[^"]+"""".r ~ layout.+) <~ ")"
+        ^^ { _ match { case d ~ lts ~ rts ~ mk ~ ls =>
+          val tipSpecs = SidedProperty(lts, rts)
+          val extraP = SidedProperty.apply.tupled(d.swap((0, 1)))
+          val extraWidths = SidedProperty.forEach(s => tipSpecs(s) match
+            case TipSpecification.Physical(p) if p != extraP(s) => 3*backend.Layout.unitWidth
+            case _ => 0)
+          backend.InlineVerticalConcatenation(ls, mk, tipSpecs,
+            NumRows(ls.head.numRows.left, ls.last.numRows.right), extraWidths, terminalFont) } }
+    | ("(" ~ "vconcat-block") ~>
+        (direction ~ tipSpecification ~ tipSpecification ~ polarity ~ layout ~ layout) <~ ")"
+        ^^ { _ match { case d ~ lts ~ rts ~ pol ~ ltop ~ lbot =>
+          val tipSpecs = SidedProperty(lts, rts)
+          val extraWidths = SidedProperty.forEach(s =>
+            if tipSpecs(s) == TipSpecification.Vertical then 0 else 3*backend.Layout.unitWidth)
+          backend.BlockVerticalConcatenation(ltop, lbot, d, pol, tipSpecs,
+            NumRows(ltop.numRows.left + lbot.numRows.left, ltop.numRows.right + lbot.numRows.right),
+            extraWidths) } }
+
+  def apply(input: String) = parseAll(layout, input) match
     case Success(result, _) => util.Success(result)
     case e: NoSuccess => util.Failure(RuntimeException(e.msg))
 
