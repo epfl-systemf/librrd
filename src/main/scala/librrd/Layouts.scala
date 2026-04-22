@@ -48,7 +48,7 @@ trait Layouts[T]:
   object Layout:
     val unitWidth = 4.0
     val `class` = "librrd"
-    val rowGap = 3*unitWidth
+    val rowGap = 2*unitWidth
 
 
   trait InlineLayout:
@@ -183,10 +183,12 @@ trait Layouts[T]:
     val markerWidth = measure(marker, font)._1 + 2*InlineVerticalConcatenation.markerPadding
     val width = sublayouts.head.width + markerWidth + extraWidths.left + extraWidths.right
     assert(sublayouts.head.width ~= sublayouts.last.width,
-      "first and last sublayout of inline vertical concatenation must have same width")
+      "first and last sublayout of inline vertical concatenation must have same width "
+      + s"${sublayouts.head.width} ${sublayouts.last.width}")
     assert(sublayouts.drop(1).dropRight(1).forall(_.width ~= sublayouts.head.width - markerWidth),
       "middle sublayouts of inline vertical concatenation must all have width "
-      + "equal to the first minus the marker width")
+      + "equal to the first minus the marker width; "
+      + s"${sublayouts.map(_.width)} ${sublayouts.head.width - markerWidth}")
 
     val height = sublayouts.map(_.height).sum + Layout.rowGap * (sublayouts.length - 1)
 

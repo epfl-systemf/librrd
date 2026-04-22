@@ -129,6 +129,7 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
 
   val terminalFont = FontInfo("Inconsolata", "normal", "normal", "14px")
   val nonterminalFont = FontInfo("Linux Biolinum", "italic", "normal", "14px")
+  val markerFont = FontInfo("Linux Biolinum", "normal", "normal", "14px")
 
   def layout: Parser[backend.Layout] =
       ("(" ~ "rail") ~> (direction ~ width) <~ ")"
@@ -136,7 +137,7 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
     | ("(" ~ "space") ~> direction <~ ")"
         ^^ { backend.Space(2*backend.Layout.unitWidth, _) }
     | ("(" ~ "station") ~> (direction ~ """"[^"]+"""".r ~ flag) <~ ")"
-        ^^ { _ match { case d ~ l ~ t => backend.Station(l, t, d,
+        ^^ { _ match { case d ~ l ~ t => backend.Station(l.substring(1, l.length() - 1), t, d,
           if t then terminalFont else nonterminalFont) } }
     | ("(" ~ "hconcat") ~> (direction ~ layout.+) <~ ")"
         ^^ { _ match { case d ~ ls => backend.HorizontalConcatenation(ls,
@@ -149,8 +150,8 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
           val extraWidths = SidedProperty.forEach(s => tipSpecs(s) match
             case TipSpecification.Physical(p) if p != extraP(s) => 3*backend.Layout.unitWidth
             case _ => 0)
-          backend.InlineVerticalConcatenation(ls, mk, tipSpecs,
-            NumRows(ls.head.numRows.left, ls.last.numRows.right), extraWidths, terminalFont) } }
+          backend.InlineVerticalConcatenation(ls, mk.substring(1, mk.length() - 1), tipSpecs,
+            NumRows(ls.head.numRows.left, ls.last.numRows.right), extraWidths, markerFont) } }
     | ("(" ~ "vconcat-block") ~>
         (direction ~ tipSpecification ~ tipSpecification ~ polarity ~ layout ~ layout) <~ ")"
         ^^ { _ match { case d ~ lts ~ rts ~ pol ~ ltop ~ lbot =>
