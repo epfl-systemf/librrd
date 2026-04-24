@@ -105,6 +105,7 @@ object LayoutStylesheets:
   case object Font extends PropertyName:
     type Value = FontInfo
     val default = FontInfo("sans-serif", "normal", "normal", "14px")
+    override val inheritable = true
 
   class Property(val name: PropertyName, val value: name.Value):
     name.check(value)

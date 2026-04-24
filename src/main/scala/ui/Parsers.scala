@@ -129,7 +129,7 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
 
   val terminalFont = FontInfo("Inconsolata", "normal", "normal", "14px")
   val nonterminalFont = FontInfo("Linux Biolinum", "italic", "normal", "14px")
-  val markerFont = FontInfo("Linux Biolinum", "normal", "normal", "14px")
+  val markerFont = FontInfo("Linux Biolinum", "normal", "bold", "14px")
 
   def layout: Parser[backend.Layout] =
       ("(" ~ "rail") ~> (direction ~ width) <~ ")"

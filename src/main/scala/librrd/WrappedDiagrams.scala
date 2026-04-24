@@ -100,7 +100,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     assert(subdiagrams.length >= 2,
       "inline vertical concatenation must have at least 2 subdiagrams")
 
-    val markerFont = LayoutStylesheets.Font.default
+    val markerFont = properties.get(LayoutStylesheets.Font)
     val markerWidth =
       backend.measure(properties.get(LayoutStylesheets.ContinuationMarker), markerFont)._1
       + 2*backend.InlineVerticalConcatenation.markerPadding
