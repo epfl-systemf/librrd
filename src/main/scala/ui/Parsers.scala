@@ -84,6 +84,20 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "space-evenly" ^^ (_ => JustifyContentPolicy.SpaceEvenly)
     | "center" ^^ (_ => JustifyContentPolicy.Center)
   def otherValue: Parser[String] = """[A-Za-z0-9-.]+""".r
+  def textBoxOverEdgeValue: Parser[TextBoxOverEdge] =
+      "text" ^^ (_ => TextBoxOverEdge.Text)
+    | "cap" ^^ (_ => TextBoxOverEdge.Cap)
+    | "ex" ^^ (_ => TextBoxOverEdge.Ex)
+    | "ink" ^^ (_ => TextBoxOverEdge.Ink)
+  def textBoxUnderEdgeValue: Parser[TextBoxUnderEdge] =
+      "text" ^^ (_ => TextBoxUnderEdge.Text)
+    | "alphabetic" ^^ (_ => TextBoxUnderEdge.Alphabetic)
+    | "ink" ^^ (_ => TextBoxUnderEdge.Ink)
+  def textBoxTrimValue: Parser[TextBoxTrimPolicy] =
+      "none" ^^ (_ => TextBoxTrimPolicy.None)
+    | "trim-both" ^^ (_ => TextBoxTrimPolicy.TrimBoth)
+    | "trim-start" ^^ (_ => TextBoxTrimPolicy.TrimStart)
+    | "trim-end" ^^ (_ => TextBoxTrimPolicy.TrimEnd)
   def property: Parser[Property] =
      ("align-items:" ~> alignItemsValue ^^ (v => Property(AlignItems, v))
     | "align-self:" ~> alignItemsValue ~ alignItemsValue ^^ (_ match
@@ -94,6 +108,9 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "gap:" ~> """[0-9.]+""".r ^^ (v => Property(Gap, v.toDouble))
     | "continuation-marker:" ~> """"\S+"""".r ^^ (v =>
         Property(ContinuationMarker, v.substring(1, v.length() - 1)))
+    | "text-box-edge:" ~> textBoxOverEdgeValue ~ textBoxUnderEdgeValue ^^ (_ match
+        case over ~ under => Property(TextBoxEdge, TextBoxEdges(over, under)))
+    | "text-box-trim:" ~> textBoxTrimValue ^^ (v => Property(TextBoxTrim, v))
     | "font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
       ^^ { _ match { case family ~ style ~ weight ~ size =>
       Property(Font, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
@@ -138,7 +155,8 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
         ^^ { backend.Space(2*backend.Layout.unitWidth, _) }
     | ("(" ~ "station") ~> (direction ~ """"[^"]+"""".r ~ flag) <~ ")"
         ^^ { _ match { case d ~ l ~ t => backend.Station(l.substring(1, l.length() - 1), t, d,
-          if t then terminalFont else nonterminalFont) } }
+          if t then terminalFont else nonterminalFont,
+          TextBoxEdges.default, TextBoxTrimPolicy.default) } }
     | ("(" ~ "hconcat") ~> (direction ~ layout.+) <~ ")"
         ^^ { _ match { case d ~ ls => backend.HorizontalConcatenation(ls,
           NumRows(ls.head.numRows.left, ls.last.numRows.right)) } }

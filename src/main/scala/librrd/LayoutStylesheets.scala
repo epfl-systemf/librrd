@@ -106,6 +106,14 @@ object LayoutStylesheets:
     type Value = FontInfo
     val default = FontInfo("sans-serif", "normal", "normal", "14px")
     override val inheritable = true
+  case object TextBoxEdge extends PropertyName:
+    type Value = TextBoxEdges
+    val default = TextBoxEdges.default
+    override val inheritable = true
+  case object TextBoxTrim extends PropertyName:
+    type Value = TextBoxTrimPolicy
+    val default = TextBoxTrimPolicy.default
+    override val inheritable = true
 
   class Property(val name: PropertyName, val value: name.Value):
     name.check(value)
@@ -134,5 +142,6 @@ object LayoutStylesheets:
     private def compact(properties: Vector[Property]) = properties.distinctBy(_.name)
 
   val defaultProperties =
-    PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, ContinuationMarker, Font)
+    PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, ContinuationMarker,
+                     Font, TextBoxEdge, TextBoxTrim)
       .map(pn => Property(pn, pn.default)))

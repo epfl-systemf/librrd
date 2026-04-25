@@ -12,6 +12,8 @@ object LayoutsSVGFile extends LayoutsScalatags(scalatags.Text):
     val actualBoundingBoxRight: Double
     val actualBoundingBoxAscent: Double
     val actualBoundingBoxDescent: Double
+    val emHeightAscent: Double
+    val emHeightDescent: Double
 
   @js.native
   trait CanvasRenderingContext2D extends js.Object:
@@ -36,14 +38,18 @@ object LayoutsSVGFile extends LayoutsScalatags(scalatags.Text):
   def createWriteStream(filename: String): WritableStream = js.native
 
 
-  override val baselineCorrection = -1
   val textMetricsContext = createCanvas(1000, 100).getContext("2d")
-  override def measure(text: String, font: FontInfo) =
+
+  override protected def computeMetrics(text: String, font: FontInfo) = new Metrics:
     textMetricsContext.font = font.toCSSFont
-    val metrics = textMetricsContext.measureText(text)
-    TextDimensions(
-      metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
-      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent)
+    private val metrics = textMetricsContext.measureText(text)
+    val width = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight
+    val inkAscent = metrics.actualBoundingBoxAscent
+    val inkDescent = metrics.actualBoundingBoxDescent
+    val textAscent = metrics.emHeightAscent
+    val textDescent = metrics.emHeightDescent
+    lazy val capAscent = textMetricsContext.measureText(capProbe).actualBoundingBoxAscent
+    lazy val exAscent = textMetricsContext.measureText(exProbe).actualBoundingBoxAscent
 
   def renderToFile(renderingInner: String, stylesheet: String,
                    width: Double, height: Double, filename: String) =

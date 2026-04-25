@@ -12,6 +12,8 @@ object JustifiedDiagrams:
         case wd.Station(label, isTerminal, direction, properties, numRows, classes, id) =>
           l.Station(label, isTerminal, direction,
             properties.get(LayoutStylesheets.Font),
+            properties.get(LayoutStylesheets.TextBoxEdge),
+            properties.get(LayoutStylesheets.TextBoxTrim),
             classes, id)
         case wd.Space(direction, numRows) =>
           l.Space(diagram.minContent, direction)
