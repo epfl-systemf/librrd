@@ -152,6 +152,9 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
   val terminalFont = FontInfo("Inconsolata", "normal", "normal", "14px")
   val nonterminalFont = FontInfo("Linux Biolinum", "italic", "normal", "14px")
   val markerFont = FontInfo("Linux Biolinum", "normal", "bold", "14px")
+  val textBoxEdges = TextBoxEdges(TextBoxOverEdge.Cap, TextBoxUnderEdge.Alphabetic)
+  val textBoxTrim  = TextBoxTrimPolicy.TrimBoth
+  val textBoxAlign = TextBoxAlignPolicy.Baseline
 
   def layout: Parser[backend.Layout] =
       ("(" ~ "rail") ~> (direction ~ width) <~ ")"
@@ -161,7 +164,7 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
     | ("(" ~ "station") ~> (direction ~ """"[^"]+"""".r ~ flag) <~ ")"
         ^^ { _ match { case d ~ l ~ t => backend.Station(l.substring(1, l.length() - 1), t, d,
           if t then terminalFont else nonterminalFont,
-          TextBoxEdges.default, TextBoxTrimPolicy.default, TextBoxAlignPolicy.default) } }
+          textBoxEdges, textBoxTrim, textBoxAlign) } }
     | ("(" ~ "hconcat") ~> (direction ~ layout.+) <~ ")"
         ^^ { _ match { case d ~ ls => backend.HorizontalConcatenation(ls,
           NumRows(ls.head.numRows.left, ls.last.numRows.right)) } }
