@@ -28,9 +28,9 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
                      direction: Direction,
                      properties: PropertyMap,
                      numRows: NumRows,
-                     font: FontInfo,
                      classes: Set[String] = Set.empty,
                      id: Option[String] = None) extends LocallyWrappedDiagram, GlobalWrap:
+    val font = properties.get(LayoutStylesheets.Font)
     val minContent = backend.measure(label, font).width + 4*backend.Station.paddingX
     val maxContent = minContent
     def toAlignedDiagram =
@@ -220,8 +220,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
   def wrapLocally(diagram: AlignedDiagrams.AlignedDiagram): LocallyWrappedDiagram =
     diagram match
       case AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
-        Station(label, isTerminal, direction, properties, diagram.numRows,
-                properties.get(LayoutStylesheets.Font), classes, id)
+        Station(label, isTerminal, direction, properties, diagram.numRows, classes, id)
       case AlignedDiagrams.Space(direction) =>
         Space(direction, diagram.numRows)
       case AlignedDiagrams.Sequence(subdiagramsOne, subdiagramsMulti,
@@ -238,8 +237,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
     def rec(diagram: AlignedDiagrams.AlignedDiagram): Vector[GlobalWrap] =
       diagram match
         case AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
-          Vector(Station(label, isTerminal, direction, properties, diagram.numRows,
-                         properties.get(LayoutStylesheets.Font), classes, id))
+          Vector(Station(label, isTerminal, direction, properties, diagram.numRows, classes, id))
         case AlignedDiagrams.Space(direction) =>
           Vector(Space(direction, diagram.numRows))
         case seq @ AlignedDiagrams.Sequence(subdiagramsOne, subdiagramsMulti,

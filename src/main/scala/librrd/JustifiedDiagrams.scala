@@ -9,8 +9,10 @@ object JustifiedDiagrams:
             depth: Int): l.Layout =
       val depthRec = (d, w) => rec(d, w, depth + 1)
       diagram match
-        case wd.Station(label, isTerminal, direction, properties, numRows, font, classes, id) =>
-          l.Station(label, isTerminal, direction, font, classes, id)
+        case wd.Station(label, isTerminal, direction, properties, numRows, classes, id) =>
+          l.Station(label, isTerminal, direction,
+            properties.get(LayoutStylesheets.Font),
+            classes, id)
         case wd.Space(direction, numRows) =>
           l.Space(diagram.minContent, direction)
         case bvc @ wd.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
