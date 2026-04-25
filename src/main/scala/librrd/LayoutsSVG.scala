@@ -201,4 +201,4 @@ object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
     textMetricsElement.style.setProperty("font-weight", font.weight)
     textMetricsElement.style.setProperty("font-style", font.style)
     val bbox = textMetricsElement.getBBox()
-    (bbox.width, bbox.height)
+    TextDimensions(bbox.width, bbox.height)

@@ -41,8 +41,9 @@ object LayoutsSVGFile extends LayoutsScalatags(scalatags.Text):
   override def measure(text: String, font: FontInfo) =
     textMetricsContext.font = font.toCSSFont
     val metrics = textMetricsContext.measureText(text)
-    (metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
-     metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent)
+    TextDimensions(
+      metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
+      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent)
 
   def renderToFile(renderingInner: String, stylesheet: String,
                    width: Double, height: Double, filename: String) =
