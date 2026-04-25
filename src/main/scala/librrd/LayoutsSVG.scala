@@ -215,32 +215,37 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
 
 
 object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
-  import org.scalajs.dom.{SVGTextElement, document}
+  import org.scalajs.dom
+  import scala.scalajs.js
 
-  lazy val textMetricsElement =
-    val elem = document.createElementNS("http://www.w3.org/2000/svg", "text")
-      .asInstanceOf[SVGTextElement]
-    elem.style.setProperty("visibility", "hidden")
-    elem.style.setProperty("fill", "black")
-    document.getElementById("output-canvas").appendChild(elem)
-    elem
+  // The `TextMetrics` included in our version of scalajs-dom only has .width, so
+  // we redefine `TextMetrics` here.
+  @js.native
+  trait TextMetrics extends js.Object:
+    val actualBoundingBoxLeft: Double = js.native
+    val actualBoundingBoxRight: Double = js.native
+    val actualBoundingBoxAscent: Double = js.native
+    val actualBoundingBoxDescent: Double = js.native
+
+  // Firefox doesn't have `TextMetrics.emHeight`, so we approximate
+  // ascender/descender by rendering a tall character and a deep character in a
+  // hidden `<canvas>`.
+  lazy val textMetricsContext =
+    val canvas = dom.document.createElement("canvas").asInstanceOf[dom.HTMLCanvasElement]
+    canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
+  val tallProbe = "Áy"
+
+  private def metricsOf(s: String): TextMetrics =
+    textMetricsContext.measureText(s).asInstanceOf[TextMetrics]
 
   override protected def computeMetrics(text: String, font: FontInfo) = new Metrics:
-    private def setFont() =
-      textMetricsElement.style.setProperty("font-family", font.family)
-      textMetricsElement.style.setProperty("font-size", font.size)
-      textMetricsElement.style.setProperty("font-weight", font.weight)
-      textMetricsElement.style.setProperty("font-style", font.style)
-    private def bboxOf(s: String) =
-      setFont()
-      textMetricsElement.textContent = s
-      textMetricsElement.getBBox()
-    private val mainBBox = bboxOf(text)
-    val width = mainBBox.width
-    val inkAscent = -mainBBox.y
-    val inkDescent = mainBBox.y + mainBBox.height
-    val textAscent = inkAscent
-    lazy val textDescent =
-      val b = bboxOf("g"); b.y + b.height
-    lazy val capAscent = -bboxOf(capProbe).y
-    lazy val exAscent = -bboxOf(exProbe).y
+    textMetricsContext.font = font.toCSSFont
+    private val metrics = metricsOf(text)
+    private lazy val tall = metricsOf(tallProbe)
+    val width = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight
+    val inkAscent = metrics.actualBoundingBoxAscent
+    val inkDescent = metrics.actualBoundingBoxDescent
+    lazy val textAscent = tall.actualBoundingBoxAscent
+    lazy val textDescent = tall.actualBoundingBoxDescent
+    lazy val capAscent = metricsOf(capProbe).actualBoundingBoxAscent
+    lazy val exAscent = metricsOf(exProbe).actualBoundingBoxAscent
