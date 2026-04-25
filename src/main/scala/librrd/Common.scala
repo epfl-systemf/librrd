@@ -148,7 +148,7 @@ enum TextBoxUnderEdge:
   case Text, Alphabetic, Ink
 case class TextBoxEdges(over: TextBoxOverEdge, under: TextBoxUnderEdge)
 object TextBoxEdges:
-  val default = TextBoxEdges(TextBoxOverEdge.Ink, TextBoxUnderEdge.Ink)
+  val default = TextBoxEdges(TextBoxOverEdge.Cap, TextBoxUnderEdge.Alphabetic)
 
 enum TextBoxTrimPolicy:
   case None, TrimBoth, TrimStart, TrimEnd
@@ -160,4 +160,4 @@ object TextBoxTrimPolicy:
 enum TextBoxAlignPolicy:
   case Baseline, Center, Bottom
 object TextBoxAlignPolicy:
-  val default: TextBoxAlignPolicy = Bottom
+  val default: TextBoxAlignPolicy = Baseline
