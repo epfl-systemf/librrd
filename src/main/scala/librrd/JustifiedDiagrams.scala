@@ -14,6 +14,7 @@ object JustifiedDiagrams:
             properties.get(LayoutStylesheets.Font),
             properties.get(LayoutStylesheets.TextBoxEdge),
             properties.get(LayoutStylesheets.TextBoxTrim),
+            properties.get(LayoutStylesheets.TextBoxAlign),
             classes, id)
         case wd.Space(direction, numRows) =>
           l.Space(diagram.minContent, direction)

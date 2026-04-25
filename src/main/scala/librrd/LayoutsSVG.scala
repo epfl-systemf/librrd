@@ -50,7 +50,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
       case TextBoxUnderEdge.Ink        => m.inkDescent
     val asc  = if trim.trimStart then overEdge(edges.over)  else m.textAscent
     val desc = if trim.trimEnd   then underEdge(edges.under) else m.textDescent
-    TextDimensions(m.width, asc, desc)
+    TextDimensions(m.width, asc, desc, m.inkAscent)
 
   def positiveBrackets(tipY: Double, subTipYs: Seq[Double], sign: Int, x: Double) =
     val upwards: Int = -(sign - 1)/2
@@ -95,7 +95,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
           rect(x:=Station.paddingX, y:=0, rx:=rounded, ry:=rounded,
                svgWidth:=width - 2*Station.paddingX, svgHeight:=height),
           text(station.label, x:=2*Station.paddingX,
-               y:=Station.paddingY + station.td.ascent,
+               y:=station.baselineY,
                style:=fontToStyleString(station.font)),
           line(x1:=0, y1:=height/2, x2:=Station.paddingX, y2:=height/2,
                `class`:=Rail.`class`),

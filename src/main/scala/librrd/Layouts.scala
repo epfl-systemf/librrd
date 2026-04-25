@@ -10,7 +10,7 @@ def linearInterpolate(xStart: Double, yStart: Double,
 case class FontInfo(family: String, style: String, weight: String, size: String):
   def toCSSFont: String = s"$style $weight $size $family"
 
-case class TextDimensions(width: Double, ascent: Double, descent: Double)
+case class TextDimensions(width: Double, ascent: Double, descent: Double, inkAscent: Double)
 
 trait Layouts[T]:
 
@@ -105,11 +105,16 @@ trait Layouts[T]:
       font: FontInfo,
       edges: TextBoxEdges,
       trim: TextBoxTrimPolicy,
+      align: TextBoxAlignPolicy,
       initClasses: Set[String] = Set.empty,
       initId: Option[String] = None) extends Layout with InlineLayout:
     val td = measure(label, font, edges, trim)
     val width = td.width + 4*Station.paddingX
     val height = td.ascent + td.descent + 2*Station.paddingY
+    val baselineY = align match
+      case TextBoxAlignPolicy.Baseline => Station.paddingY + td.ascent
+      case TextBoxAlignPolicy.Center   => (height + td.inkAscent) / 2
+      case TextBoxAlignPolicy.Bottom   => height - Station.paddingY
 
     val classes = initClasses
       + Station.`class`

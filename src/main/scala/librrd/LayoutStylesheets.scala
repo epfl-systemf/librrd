@@ -114,6 +114,10 @@ object LayoutStylesheets:
     type Value = TextBoxTrimPolicy
     val default = TextBoxTrimPolicy.default
     override val inheritable = true
+  case object TextBoxAlign extends PropertyName:
+    type Value = librrd.TextBoxAlignPolicy
+    val default = librrd.TextBoxAlignPolicy.default
+    override val inheritable = true
 
   class Property(val name: PropertyName, val value: name.Value):
     name.check(value)
@@ -143,5 +147,5 @@ object LayoutStylesheets:
 
   val defaultProperties =
     PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, ContinuationMarker,
-                     Font, TextBoxEdge, TextBoxTrim)
+                     Font, TextBoxEdge, TextBoxTrim, TextBoxAlign)
       .map(pn => Property(pn, pn.default)))

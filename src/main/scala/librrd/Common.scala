@@ -138,7 +138,9 @@ enum AlignItemsPolicy:
   case Top, Center, Bottom, Baseline
 
 
-// CSS-like text-box-edge/trim plus `ink` to match the text's ink box.
+// CSS-like text-box-edge/trim, with two deviations: an additional `ink` value
+// to match the text's ink box, and a separate `align` property to decide where
+// to place the baseline in the box.
 
 enum TextBoxOverEdge:
   case Text, Cap, Ex, Ink
@@ -154,3 +156,8 @@ enum TextBoxTrimPolicy:
   def trimEnd: Boolean = this == TrimEnd || this == TrimBoth
 object TextBoxTrimPolicy:
   val default: TextBoxTrimPolicy = TrimBoth
+
+enum TextBoxAlignPolicy:
+  case Baseline, Center, Bottom
+object TextBoxAlignPolicy:
+  val default: TextBoxAlignPolicy = Bottom

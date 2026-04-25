@@ -98,6 +98,10 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "trim-both" ^^ (_ => TextBoxTrimPolicy.TrimBoth)
     | "trim-start" ^^ (_ => TextBoxTrimPolicy.TrimStart)
     | "trim-end" ^^ (_ => TextBoxTrimPolicy.TrimEnd)
+  def textBoxAlignValue: Parser[librrd.TextBoxAlignPolicy] =
+      "baseline" ^^ (_ => librrd.TextBoxAlignPolicy.Baseline)
+    | "center" ^^ (_ => librrd.TextBoxAlignPolicy.Center)
+    | "bottom" ^^ (_ => librrd.TextBoxAlignPolicy.Bottom)
   def property: Parser[Property] =
      ("align-items:" ~> alignItemsValue ^^ (v => Property(AlignItems, v))
     | "align-self:" ~> alignItemsValue ~ alignItemsValue ^^ (_ match
@@ -111,6 +115,7 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "text-box-edge:" ~> textBoxOverEdgeValue ~ textBoxUnderEdgeValue ^^ (_ match
         case over ~ under => Property(TextBoxEdge, TextBoxEdges(over, under)))
     | "text-box-trim:" ~> textBoxTrimValue ^^ (v => Property(TextBoxTrim, v))
+    | "text-box-align:" ~> textBoxAlignValue ^^ (v => Property(TextBoxAlign, v))
     | "font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
       ^^ { _ match { case family ~ style ~ weight ~ size =>
       Property(Font, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
@@ -156,7 +161,7 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
     | ("(" ~ "station") ~> (direction ~ """"[^"]+"""".r ~ flag) <~ ")"
         ^^ { _ match { case d ~ l ~ t => backend.Station(l.substring(1, l.length() - 1), t, d,
           if t then terminalFont else nonterminalFont,
-          TextBoxEdges.default, TextBoxTrimPolicy.default) } }
+          TextBoxEdges.default, TextBoxTrimPolicy.default, TextBoxAlignPolicy.default) } }
     | ("(" ~ "hconcat") ~> (direction ~ layout.+) <~ ")"
         ^^ { _ match { case d ~ ls => backend.HorizontalConcatenation(ls,
           NumRows(ls.head.numRows.left, ls.last.numRows.right)) } }
