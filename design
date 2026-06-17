@@ -1,3 +1,44 @@
+2026-06-16
+==========
+
+TODO for demo
+
+translators from:
+* EBNF
+* Menhir
+* JS regexes, classical and modern
+
+JS API
+* proper
+
+new layout+compiler features:
+* labeled groups
+* parametric row gap
+* parametric choice of (dis)continuous line breaks
+* for a set of diagrams:
+  + nonterminal names and links
+  + expand inline?
+* (stretch goal) highlight active editing
+
+webpage with live examples of everything
+* during the demo, fiddle with CSS properties
+
+experimental: structured control flow graphs
+* (stretch goal) vertical layout
+
+
+TODO for poster
+
+title: An expressive, customizable railroad layout engine
+
+
+
+""applications""
+* structured control flow graphs
+* VIS benchmark dataests structured graphs
+
+
+
 2025-11-12
 ==========
 
