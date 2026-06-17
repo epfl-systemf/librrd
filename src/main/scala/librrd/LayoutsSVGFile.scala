@@ -2,9 +2,11 @@ package librrd
 
 import scalajs.js
 import js.annotation.*
+import scalatags.Text
+import scalatags.Text.implicits.*
 
 @JSExportTopLevel("LayoutsSVGFile", "cli")
-object LayoutsSVGFile extends LayoutsScalatags(scalatags.Text):
+object LayoutsSVGFile extends LayoutsScalatags(Text):
 
   @js.native
   trait TextMetrics extends js.Object:
@@ -44,13 +46,10 @@ object LayoutsSVGFile extends LayoutsScalatags(scalatags.Text):
     (metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent)
 
-  def renderToFile(renderingInner: String, stylesheet: String,
-                   width: Double, height: Double, filename: String) =
-    val rendering =
-      """<svg xmlns="http://www.w3.org/2000/svg">"""
-      + "<style>" + stylesheet + "</style>"
-      + renderingInner
-      + """</svg>"""
+  def renderToFile(renderingInner: Text.Tag, stylesheet: String, filename: String) =
     val ws = createWriteStream(filename)
-    ws.write(rendering)
+    ws.write(Text.svgTags.svg(
+      renderingInner,
+      Text.tags2.style(stylesheet),
+      Text.attrs.xmlns:="http://www.w3.org/2000/svg").render)
     ws.`end`()

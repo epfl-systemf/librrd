@@ -268,15 +268,25 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
 
 
 object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
-  import org.scalajs.dom.{SVGTextElement, document}
+  import org.scalajs.dom.{SVGSVGElement, SVGTextElement, document}
 
   lazy val textMetricsElement =
+    val outerElem = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+      .asInstanceOf[SVGSVGElement]
+    outerElem.classList.add("librrd")
+    outerElem.style.setProperty("visibility", "hidden")
     val elem = document.createElementNS("http://www.w3.org/2000/svg", "text")
       .asInstanceOf[SVGTextElement]
-    elem.style.setProperty("visibility", "hidden")
     elem.style.setProperty("fill", "black")
-    document.getElementById("output-canvas").appendChild(elem)
+    document.body.appendChild(outerElem).appendChild(elem)
     elem
+
+  def renderToSVG(rendering: scalatags.JsDom.Tag): SVGSVGElement =
+    import scalatags.JsDom.svgTags.svg
+    import scalatags.JsDom.attrs.xmlns
+    import scalatags.JsDom.implicits.stringAttr
+    svg(rendering, xmlns:="http://www.w3.org/2000/svg")
+      .render.asInstanceOf[SVGSVGElement]
 
   def measure(text: String, font: FontInfo) =
     textMetricsElement.textContent = text
