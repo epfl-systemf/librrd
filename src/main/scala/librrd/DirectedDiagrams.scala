@@ -17,20 +17,22 @@ object DirectedDiagrams:
                      direction: Direction,
                      properties: LayoutStylesheets.PropertyMap,
                      classes: Set[String] = Set.empty,
-                     id: Option[String] = None)
+                     id: Option[String] = None,
+                     groupLabel: Option[String] = None)
       extends DirectedDiagram:
     def toParameterizedDiagram =
-      ParameterizedDiagrams.Station(label, isTerminal, properties, classes, id)
+      ParameterizedDiagrams.Station(label, isTerminal, properties, classes, id, groupLabel)
 
   case class Sequence(subdiagrams: Seq[DirectedDiagram],
                       direction: Direction,
                       properties: LayoutStylesheets.PropertyMap,
                       classes: Set[String] = Set.empty,
-                      id: Option[String] = None)
+                      id: Option[String] = None,
+                      groupLabel: Option[String] = None)
       extends DirectedDiagram:
     def toParameterizedDiagram =
       ParameterizedDiagrams.Sequence(subdiagrams.map(_.toParameterizedDiagram),
-                                     properties, classes, id)
+                                     properties, classes, id, groupLabel)
 
   case class Stack(topSubdiagram: DirectedDiagram,
                    bottomSubdiagram: DirectedDiagram,
@@ -38,25 +40,26 @@ object DirectedDiagrams:
                    polarity: Polarity,
                    properties: LayoutStylesheets.PropertyMap,
                    classes: Set[String] = Set.empty,
-                   id: Option[String] = None)
+                   id: Option[String] = None,
+                   groupLabel: Option[String] = None)
       extends DirectedDiagram:
     def toParameterizedDiagram =
       ParameterizedDiagrams.Stack(topSubdiagram.toParameterizedDiagram,
                                   bottomSubdiagram.toParameterizedDiagram,
-                                  polarity, properties, classes, id)
+                                  polarity, properties, classes, id, groupLabel)
 
 
   def direct(diagram: ParameterizedDiagrams.ParameterizedDiagram, direction: Direction = LTR)
       : DirectedDiagram =
     diagram match
-      case ParameterizedDiagrams.Station(label, isTerminal, properties, classes, id) =>
-        Station(label, isTerminal, direction, properties, classes, id)
-      case ParameterizedDiagrams.Sequence(subdiagrams, properties, classes, id) =>
+      case ParameterizedDiagrams.Station(label, isTerminal, properties, classes, id, gLabel) =>
+        Station(label, isTerminal, direction, properties, classes, id, gLabel)
+      case ParameterizedDiagrams.Sequence(subdiagrams, properties, classes, id, gLabel) =>
         Sequence(direction.reverse(subdiagrams).map(direct(_, direction)),
-          direction, properties, classes, id)
-      case ParameterizedDiagrams.Stack(topSubdiagram, bottomSubdiagram, polarity, properties, classes, id) =>
+          direction, properties, classes, id, gLabel)
+      case ParameterizedDiagrams.Stack(topSubdiagram, bottomSubdiagram, polarity, properties, classes, id, gLabel) =>
         Stack(
           direct(topSubdiagram, direction),
           direct(bottomSubdiagram,
             polarity match { case Polarity.- => direction.reverse; case _ => direction }),
-          direction, polarity, properties, classes, id)
+          direction, polarity, properties, classes, id, gLabel)

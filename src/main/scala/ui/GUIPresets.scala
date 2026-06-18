@@ -8,8 +8,8 @@ object GUIPresets:
         | {"a terminal with class" class="special"}
         | (+ "a" (+ (+ "stack" "of") "terminals"))
         | "a really long one that forces it to wrap"
-        | (+ ("resize" "the" "layout" "(" "bottom" "right" ")")
-        |    ("to" "make" "this" "inner" "sequence" "wrap" "too")))""".stripMargin,
+        | {(+ ("resize" "the" "layout" "(" {"bottom" label="foo"} "right" ")")
+        |     ("to" "make" "this" "inner" "sequence" "wrap" "too")) label="bar"})""".stripMargin,
     "SQLite create-table" ->
       """("CREATE"
         | (+ (+ () "TEMP") "TEMPORARY") "TABLE"
@@ -120,8 +120,10 @@ object GUIPresets:
         |}
         |
         |rect.librrd-group {
-        |    fill: none;
-        |    stroke: none;
+        |    fill: hsl(0 0% 75% / 0.5);
+        |    stroke: gray;
+        |    stroke-width: 2px;
+        |    stroke-dasharray: 6 4;
         |}""".stripMargin,
     "SQLite" ->
       """.librrd-rail, .librrd-station rect, path {

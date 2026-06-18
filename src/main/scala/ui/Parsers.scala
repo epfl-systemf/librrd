@@ -19,14 +19,19 @@ object DiagramParser extends RegexParsers, InputParser[Diagrams.Diagram]:
   def sequence: Parser[Sequence] = withClassId("(" ~> diagram.* <~ ")") ^^ Sequence.apply
   def polarity: Parser[Polarity] = ("+" | "-") ^^ { case "+" => Polarity.+; case "-" => Polarity.- }
   def stack: Parser[Stack] = withClassId("(" ~> polarity ~ diagram ~ diagram <~ ")") ^^ {
-    case (pol ~ top ~ bot, c, i) => Stack(top, bot, pol, classes = c, id = i) }
+    case (pol ~ top ~ bot, c, i, gl) => Stack(top, bot, pol, classes = c, id = i, groupLabel = gl) }
 
   def `class`: Parser[Set[String]] = ("class" ~> "=" ~> "\"" ~> """[^ \t\n\r"]+""".r.* <~ "\"") ^^ { _.toSet }
-  def `id`: Parser[Option[String]] = "id" ~> "=" ~> "\"" ~> """[^"]+""".r <~ "\"" ^^ { Some(_) }
-  def withClassId[T](p: Parser[T]): Parser[(T, Set[String], Option[String])] =
-      p ^^ { res => (res, Set(), None) }
-    | "{" ~> p ~ `class` ~ `id`.? <~ "}" ^^ (_ match { case l ~ c ~ i => (l, c, i.flatten) })
-    | "{" ~> p ~ `id` ~ `class`.? <~ "}" ^^ (_ match { case l ~ i ~ c => (l, c.getOrElse(Set()), i) })
+  def `id`: Parser[String] = "id" ~> "=" ~> "\"" ~> """[^"]+""".r <~ "\""
+  def groupLabel: Parser[String] = "label" ~> "=" ~> "\"" ~> """[^"]+""".r <~ "\""
+  def withClassId[T](p: Parser[T]): Parser[(T, Set[String], Option[String], Option[String])] =
+      p ^^ { res => (res, Set(), None, None) }
+    | "{" ~> p ~ `class` ~ `id`.? ~ groupLabel.? <~ "}" ^^ (_ match { case l ~ c ~ i ~ gl => (l, c, i, gl) })
+    | "{" ~> p ~ `class` ~ groupLabel.? ~ `id`.? <~ "}" ^^ (_ match { case l ~ c ~ gl ~ i => (l, c, i, gl) })
+    | "{" ~> p ~ `id` ~ groupLabel.? ~ `class`.? <~ "}" ^^ (_ match { case l ~ i ~ gl ~ c => (l, c.getOrElse(Set()), Some(i), gl) })
+    | "{" ~> p ~ `id` ~ `class`.? ~ groupLabel.? <~ "}" ^^ (_ match { case l ~ i ~ c ~ gl => (l, c.getOrElse(Set()), Some(i), gl) })
+    | "{" ~> p ~ groupLabel ~ `id`.? ~ `class`.? <~ "}" ^^ (_ match { case l ~ gl ~ i ~ c => (l, c.getOrElse(Set()), i, Some(gl)) })
+    | "{" ~> p ~ groupLabel ~ `class`.? ~ `id`.? <~ "}" ^^ (_ match { case l ~ gl ~ c ~ i => (l, c.getOrElse(Set()), i, Some(gl)) })
 
   def apply(input: String) = parseAll(diagram, input) match
     case Success(result, _) => util.Success(result)

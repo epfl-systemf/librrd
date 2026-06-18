@@ -28,15 +28,17 @@ object AlignedDiagrams:
                      direction: Direction,
                      properties: PropertyMap,
                      classes: Set[String] = Set.empty,
-                     id: Option[String] = None) extends AlignedDiagram:
+                     id: Option[String] = None,
+                     groupLabel: Option[String] = None) extends AlignedDiagram:
     val numRows = NumRows(1, 1)
     def toDirectedDiagram =
-      DirectedDiagrams.Station(label, isTerminal, direction, properties, classes, id)
+      DirectedDiagrams.Station(label, isTerminal, direction, properties, classes, id, groupLabel)
 
   case class Space(direction: Direction, verticalSide: Side) extends AlignedDiagram:
     val properties = PropertyMap(Seq())
     val classes = Set()
     val id = None
+    override val groupLabel = None
     val numRows = NumRows(1, 1)
     def toDirectedDiagram =
       DirectedDiagrams.Sequence(Seq(), direction, properties)
@@ -49,7 +51,8 @@ object AlignedDiagrams:
                       // if in multiple, Physical(p) respected, else ignored
                       tipSpecs: TipSpecifications,
                       classes: Set[String] = Set.empty,
-                      id: Option[String] = None) extends AlignedDiagram:
+                      id: Option[String] = None,
+                      groupLabel: Option[String] = None) extends AlignedDiagram:
 
     val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
     val sidemosts = SidedProperty(subdiagramsOneRow.headOption, subdiagramsOneRow.lastOption)
@@ -65,7 +68,7 @@ object AlignedDiagrams:
 
     def toDirectedDiagram =
       DirectedDiagrams.Sequence(subdiagramsOneRow.map(_.toDirectedDiagram),
-                                direction, properties, classes, id)
+                                direction, properties, classes, id, groupLabel)
 
 
   case class BlockVerticalConcatenation(
@@ -76,7 +79,8 @@ object AlignedDiagrams:
       properties: PropertyMap,
       tipSpecs: TipSpecifications,
       classes: Set[String] = Set.empty,
-      id: Option[String] = None) extends AlignedDiagram:
+      id: Option[String] = None,
+      groupLabel: Option[String] = None) extends AlignedDiagram:
 
     val innerNumRows = NumRows.forEach(s => bottomSubdiagram.numRows(s)
       + (polarity match { case Polarity.+ => topSubdiagram.numRows(s); case _ => 1 }))
@@ -94,7 +98,7 @@ object AlignedDiagrams:
 
     def toDirectedDiagram =
       DirectedDiagrams.Stack(topSubdiagram.toDirectedDiagram, bottomSubdiagram.toDirectedDiagram,
-                             direction, polarity, properties, classes, id)
+                             direction, polarity, properties, classes, id, groupLabel)
 
 
   def align(diagram: DirectedDiagrams.DirectedDiagram): AlignedDiagram =
@@ -117,13 +121,13 @@ object AlignedDiagrams:
     def rec(diagram: DirectedDiagrams.DirectedDiagram, connectability: SidedProperty[Connectability])
         : List[AlignedDiagram] =
       diagram match
-        case DirectedDiagrams.Station(label, isTerminal, direction, properties, classes, id) =>
+        case DirectedDiagrams.Station(label, isTerminal, direction, properties, classes, id, groupLabel) =>
           maybeSurroundSpaces(
-            Station(label, isTerminal, direction, properties, classes, id),
+            Station(label, isTerminal, direction, properties, classes, id, groupLabel),
             connectability.map(_.isEither))
 
 
-        case DirectedDiagrams.Sequence(subs, direction, properties, classes, id) =>
+        case DirectedDiagrams.Sequence(subs, direction, properties, classes, id, groupLabel) =>
           val justifyContent = properties.get(LayoutStylesheets.JustifyContent)
           val subdiagrams = subs.toVector
           val tipSpecs = TipSpecifications.forEach(s => connectability(s) match
@@ -177,12 +181,12 @@ object AlignedDiagrams:
                alignedEndsOneMulti(Side.Left)(1) ++ alignedMids ++ alignedEndsOneMulti(Side.Right)(1))
 
           List(Sequence(alignedSubdiagramsOne, alignedSubdiagramsMulti,
-                        direction, properties, tipSpecs, classes, id))
+                        direction, properties, tipSpecs, classes, id, groupLabel))
         }
 
 
         case DirectedDiagrams.Stack(topSubdiagram, bottomSubdiagram,
-                                    direction, polarity, properties, classes, id) =>
+                                    direction, polarity, properties, classes, id, groupLabel) =>
           val polarityConnectability = polarity match { case Polarity.+ => + ; case _ => - }
           val topConnectability = SidedProperty.forEach(s => polarityConnectability | connectability(s))
           val alignedTop = singletonWithSpaces(rec(topSubdiagram, topConnectability),
@@ -202,14 +206,14 @@ object AlignedDiagrams:
               case AlignItemsPolicy.Bottom => Logical(preNumRows(s))
               case AlignItemsPolicy.Baseline =>
                 topSubdiagram match
-                  case DirectedDiagrams.Sequence(subs, _, _, _, _)
+                  case DirectedDiagrams.Sequence(subs, _, _, _, _, _)
                     if subs.isEmpty && alignedBottom.numRows(s) == 1 => Logical(2)
                   case _ => Logical((preNumRows(s) + 1)/2)
             case _ => Vertical)
 
           maybeSurroundSpaces(
             BlockVerticalConcatenation(
-              alignedTop, alignedBottom, direction, polarity, properties, tipSpecs, classes, id),
+              alignedTop, alignedBottom, direction, polarity, properties, tipSpecs, classes, id, groupLabel),
             SidedProperty.forEach(s => connectability(s).isEither && tipSpecs(s) != Vertical))
 
 

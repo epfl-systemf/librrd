@@ -9,10 +9,10 @@ translators from:
 * JS regexes, classical and modern
 
 JS API
-* proper
+* done basic, need proper
 
 new layout+compiler features:
-* labeled groups
+* labeled groups DONE
 * parametric row gap
 * parametric choice of (dis)continuous line breaks
 * for a set of diagrams:

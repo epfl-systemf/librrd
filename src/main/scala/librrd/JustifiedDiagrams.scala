@@ -8,18 +8,18 @@ object JustifiedDiagrams:
             targetWidth: Double,
             depth: Int): l.Layout =
       val depthRec = (d, w) => rec(d, w, depth + 1)
-      diagram match
-        case wd.Station(label, isTerminal, direction, properties, classes, id) =>
-          l.Station(label, isTerminal, direction,
+      val (result, gLabel) = diagram match
+        case wd.Station(label, isTerminal, direction, properties, classes, id, gLabel) =>
+          (l.Station(label, isTerminal, direction,
             properties.get(LayoutStylesheets.Font),
             properties.get(LayoutStylesheets.TextBoxEdge),
             properties.get(LayoutStylesheets.TextBoxTrim),
             properties.get(LayoutStylesheets.TextBoxAlign),
-            classes, id)
+            classes, id), gLabel)
         case wd.Space(direction, verticalSide) =>
-          l.Space(direction, verticalSide)
+          (l.Space(direction, verticalSide), None)
         case bvc @ wd.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
-            direction, polarity, properties, tipSpecs, classes, id) =>
+            direction, polarity, properties, tipSpecs, classes, id, gLabel) =>
           val width = targetWidth - bvc.extraWidth
           val vc = l.VerticalConcatenation(
             depthRec(topSubdiagram, width).block,
@@ -27,7 +27,7 @@ object JustifiedDiagrams:
             direction, polarity, tipSpecs, classes, id)
           // assert(numRows == vc.tipRows)
           // assert(bvc.extraWidths == 0)
-          vc
+          (vc, gLabel)
         case ivc: wd.InlineVerticalConcatenation[_] =>
           val marker = ivc.properties.get(LayoutStylesheets.ContinuationMarker)
           val width = targetWidth - ivc.extraWidth
@@ -40,15 +40,15 @@ object JustifiedDiagrams:
             .zipAll(List(), l.Rail(0, ivc.direction), lineBreak)
             .flatMap(ss => List(ss._1, ss._2))
             .dropRight(1)
-          l.BlockedHorizontalConcatenation(l.HorizontalConcatenation(
+          (l.BlockedHorizontalConcatenation(l.HorizontalConcatenation(
             l.HorizontalConcatenation.adjustHeights(subsWithBreaks),
             marker.isEmpty, ivc.classes, ivc.id),
-            Some(ivc.tipSpecs))
+            Some(ivc.tipSpecs)), ivc.groupLabel)
         case gwd: wd.GloballyWrappedDiagram =>
-          depthRec(gwd.bestUnder(targetWidth, depth), targetWidth)
-        case gsw @ wd.GlobalSequenceWrap(sw, _) => depthRec(sw, targetWidth)
+          (depthRec(gwd.bestUnder(targetWidth, depth), targetWidth), None)
+        case gsw @ wd.GlobalSequenceWrap(sw, _) => (depthRec(sw, targetWidth), None)
         case lws: wd.LocallyWrappedSequence[_] =>
-          depthRec(lws.bestUnder(targetWidth, depth), targetWidth)
+          (depthRec(lws.bestUnder(targetWidth, depth), targetWidth), None)
 
         case hc: wd.HorizontalConcatenation[_] =>
           val subdiagrams = hc.subdiagrams.toVector
@@ -98,8 +98,18 @@ object JustifiedDiagrams:
                 +: justifiedSubdiagrams.zip(justificationRails.tail).flatMap[l.Layout](_.toList))
                .filterNot(_.width == 0)
             ++ maybeSpaces.right.toList
-          if sublayouts.isEmpty then l.Rail(0, hc.direction, hc.classes, hc.id)
-          else l.HorizontalConcatenation(hc.direction.reverse(sublayouts),
-            hc.properties.get(LayoutStylesheets.ContinuationMarker).isEmpty, hc.classes, hc.id)
+          (if sublayouts.isEmpty then l.Rail(0, hc.direction, hc.classes, hc.id)
+           else l.HorizontalConcatenation(hc.direction.reverse(sublayouts),
+             hc.properties.get(LayoutStylesheets.ContinuationMarker).isEmpty, hc.classes, hc.id),
+           hc.groupLabel)
+
+      if gLabel.isDefined then
+        l.LabeledBlockLayout(
+          result.block,
+          gLabel.get,
+          LayoutStylesheets.ContinuationFont.default,
+          l.LabeledBlockLayout.LabelPositionInline.Right,
+          l.LabeledBlockLayout.LabelPositionBlock.Top)
+      else result
 
     rec(diagram, targetWidth, 0)

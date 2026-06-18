@@ -289,11 +289,32 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
             g(rails, transform:=s"translate($width,0) scale(-1,1)"))
           case _ => g(render(sub), transform:=s"translate($startX,0)") +: rails
 
+      case lbl @ LabeledBlockLayout(sub, label, font, positionInline, positionBlock) =>
+        import LabeledBlockLayout.LabelPositionInline.*
+        import LabeledBlockLayout.LabelPositionBlock.*
+        val padY = LabeledBlockLayout.paddingY
+
+        val labelMeasure = measure(label, font)
+        val labelWidth = labelMeasure.width
+        val dx = SidedProperty.forEach(s => sub.tipSpecs(s) match
+          case Vertical => Layout.unitWidth
+          case _ => 0)
+        val labelX = (positionInline, lbl.direction) match
+          case (Left, _) | (Start, Direction.LTR) | (End, Direction.RTL) => dx(Side.Left)
+          case (Right, _) | (Start, Direction.RTL) | (End, Direction.LTR) => lbl.width - dx(Side.Right) - labelWidth
+          case (Center, _) => (lbl.width + dx(Side.Left) - dx(Side.Right) - labelWidth)/2
+        val (translateY, labelY) = positionBlock match
+          case Top => (padY, 0.5*padY)
+          case Bottom => (0.0, lbl.startHeight - 0.5*padY + labelMeasure.ascent)
+
+        List(rect(x:=(-dx(Side.Left)), y:=(translateY - 0.25*padY),
+               svgWidth:=(sub.width + dx(Side.Left) + dx(Side.Right)), svgHeight:=sub.height + 0.5*padY,
+               `class`:="librrd-group"),
+             g(render(sub), transform:=s"translate(0,$translateY)"),
+             text(label, x:=labelX, y:=labelY, style:=fontToStyleString(font)))
+
 
     val withGroup = (inner
-      :+ rect(x:=(-unitWidth), y:=(-2*unitWidth),
-              svgWidth:=layout.width + 2*unitWidth, svgHeight:=layout.height + 4*unitWidth,
-              `class`:="librrd-group")
       :+ (`class`:=(layout.classes).mkString(" ")))
       ++ layout.id.map(id:=_).toList
     g(withGroup*)
