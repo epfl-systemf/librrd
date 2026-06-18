@@ -31,9 +31,9 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
                      classes: Set[String] = Set.empty,
                      id: Option[String] = None) extends LocallyWrappedDiagram, GlobalWrap:
     val font = properties.get(LayoutStylesheets.Font)
-    val minContent = backend.measure(label, font,
-        properties.get(LayoutStylesheets.TextBoxEdge),
-        properties.get(LayoutStylesheets.TextBoxTrim)).width + 4*backend.Station.paddingX
+    val minContent = (new backend.StationWidthProperties(label, font,
+      properties.get(LayoutStylesheets.TextBoxEdge),
+      properties.get(LayoutStylesheets.TextBoxTrim)) { }).width
     val maxContent = minContent
     def toAlignedDiagram =
       AlignedDiagrams.Station(label, isTerminal, direction, properties, classes, id)

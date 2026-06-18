@@ -135,7 +135,7 @@ trait Layouts[T]:
       edges: TextBoxEdges,
       trim: TextBoxTrimPolicy) extends BlockLayoutWidthProperties:
     val td = measure(label, font, edges, trim)
-    val width = td.width + 4*Station.paddingX
+    val width = Math.max(Station.paddingX, td.width) + 4*Station.paddingX
     val startHeight = td.ascent + td.descent + 2*Station.paddingY
 
   case class Station(

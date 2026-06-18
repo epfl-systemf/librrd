@@ -6,7 +6,6 @@ import librrd.LibRRD
 
 @scalajs.js.annotation.JSExportTopLevel("GUI", "gui")
 object GUI:
-  lazy val outputCanvas = document.getElementById("output-canvas")
 
   class Debouncer(private val action: () => Unit, val timeout: Int):
     private var timer: Option[Int] = None
@@ -90,17 +89,15 @@ object GUI:
 
   object ResizeState:
     var width = 500.0
+    var height = 300.0
     private val debouncer = Debouncer(reLayOut, 10)
 
     def register(): Unit =
       dom.ResizeObserver{ (entries, o) =>
         entries.foreach{ entry =>
           if entry.target.id == "output" then
-            val newHeight = entry.borderBoxSize(0).blockSize
-            val newWidth = entry.borderBoxSize(0).inlineSize
-            // default value of preserveAspectRatio takes care of AR
-            outputCanvas.setAttribute("viewBox", s"-10 -10 $newWidth $newHeight")
-            width = newWidth - 20
+            height = entry.borderBoxSize(0).blockSize
+            width = entry.borderBoxSize(0).inlineSize
             debouncer.trigger()
         }
       }.observe(outputDiv)
@@ -113,7 +110,8 @@ object GUI:
     InputsPresets.LayoutStylesheet.register("demo", true)
     InputsPresets.RenderingStylesheet.register("demo")
     saveOutputButton.addEventListener("click", (event) => {
-      val serialized = dom.XMLSerializer().serializeToString(outputCanvas)
+      outputDiv.querySelector("svg").appendChild(outputDiv.querySelector("style").cloneNode())
+      val serialized = dom.XMLSerializer().serializeToString(outputDiv.querySelector("svg"))
       val blob = dom.Blob(scalajs.js.Array(serialized),
         new dom.BlobPropertyBag { `type` = "image/svg+xml" })
       val downloader = document.createElement("a")
@@ -145,16 +143,22 @@ object GUI:
     val mySVG = LibRRD.layOutToSVG(
       InputsPresets.Diagram.get,
       InputsPresets.LayoutStylesheet.get,
-      ResizeState.width)
+      ResizeState.width - 20)
+    // default value of preserveAspectRatio takes care of AR
+    mySVG.setAttribute("viewBox", s"-10 -10 ${ResizeState.width} ${ResizeState.height}")
     if oldSVG.isDefined then
-      outputCanvas.replaceChild(mySVG, oldSVG.get)
+      outputDiv.replaceChild(mySVG, oldSVG.get)
     else
-      outputCanvas.appendChild(mySVG)
+      outputDiv.appendChild(mySVG)
     oldSVG = Some(mySVG)
 
-  lazy val outputStyleElement = document.getElementById("output-style")
+  var oldCSS: Option[org.scalajs.dom.Element] = None
   def reRender(): Unit =
-    outputStyleElement.innerHTML = InputsPresets.RenderingStylesheet.get
+    if oldCSS.isEmpty then
+      val style = document.createElement("style")
+      outputDiv.append(style)
+      oldCSS = Some(style)
+    oldCSS.foreach(s => { s.innerHTML = InputsPresets.RenderingStylesheet.get })
 
   def main: Unit =
     document.addEventListener("DOMContentLoaded", (event) => {
