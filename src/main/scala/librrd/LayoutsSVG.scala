@@ -17,12 +17,44 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
     s"font-weight: ${font.weight}; " +
     s"font-style: ${font.style};"
 
-  val baselineCorrection = -2.0
   val unitWidth = Layout.unitWidth
   val radius = 2*unitWidth
   val quarterArc = s"a $radius,$radius 0 0"
 
   def rail(attrs: Modifier*) = path(attrs, `class`:=Rail.`class`)
+
+  // Measurement results.  Using an abstract class allows us to implement fields
+  // with lazy vals to avoid computing every value unnecessarily.
+  abstract class Metrics:
+    def width: Double
+    def inkAscent: Double
+    def inkDescent: Double
+    def textAscent: Double
+    def textDescent: Double
+    def capAscent: Double
+    def exAscent: Double
+
+  protected def computeMetrics(text: String, font: FontInfo): Metrics
+
+  val capProbe = "H"
+  val exProbe = "x"
+
+  override def measure(text: String, font: FontInfo,
+                       edges: TextBoxEdges, trim: TextBoxTrimPolicy) =
+    val m = computeMetrics(text, font)
+    def overEdge(mode: TextBoxOverEdge): Double = mode match
+      case TextBoxOverEdge.Text => m.textAscent
+      case TextBoxOverEdge.Cap  => m.capAscent
+      case TextBoxOverEdge.Ex   => m.exAscent
+      case TextBoxOverEdge.Ink  => m.inkAscent
+    def underEdge(mode: TextBoxUnderEdge): Double = mode match
+      case TextBoxUnderEdge.Text       => m.textDescent
+      case TextBoxUnderEdge.Alphabetic => 0.0
+      case TextBoxUnderEdge.Ink        => m.inkDescent
+    val asc  = if trim.trimStart then overEdge(edges.over)  else m.textAscent
+    val desc = if trim.trimEnd   then underEdge(edges.under) else m.textDescent
+    TextDimensions(m.width, asc, desc, m.inkAscent)
+
 
   def positiveBrackets(tipY: Double, subTipYs: Seq[Double], sign: Int, x: Double) =
     val upwards: Int = -(sign - 1)/2
@@ -68,7 +100,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
           rect(x:=Station.paddingX, y:=0, rx:=rounded, ry:=rounded,
                svgWidth:=width - 2*Station.paddingX, svgHeight:=height),
           text(station.label, x:=2*Station.paddingX,
-               y:=height - Station.paddingY + baselineCorrection,
+               y:=station.baselineY,
                style:=fontToStyleString(station.font)),
           line(x1:=0, y1:=height/2, x2:=Station.paddingX, y2:=height/2,
                `class`:=Rail.`class`),
@@ -268,21 +300,37 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
 
 
 object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
-  import org.scalajs.dom.{SVGTextElement, document}
+  import org.scalajs.dom
+  import scala.scalajs.js
 
-  lazy val textMetricsElement =
-    val elem = document.createElementNS("http://www.w3.org/2000/svg", "text")
-      .asInstanceOf[SVGTextElement]
-    elem.style.setProperty("visibility", "hidden")
-    elem.style.setProperty("fill", "black")
-    document.getElementById("output-canvas").appendChild(elem)
-    elem
+  // The `TextMetrics` included in our version of scalajs-dom only has .width, so
+  // we redefine `TextMetrics` here.
+  @js.native
+  trait TextMetrics extends js.Object:
+    val actualBoundingBoxLeft: Double = js.native
+    val actualBoundingBoxRight: Double = js.native
+    val actualBoundingBoxAscent: Double = js.native
+    val actualBoundingBoxDescent: Double = js.native
 
-  def measure(text: String, font: FontInfo) =
-    textMetricsElement.textContent = text
-    textMetricsElement.style.setProperty("font-family", font.family)
-    textMetricsElement.style.setProperty("font-size", font.size)
-    textMetricsElement.style.setProperty("font-weight", font.weight)
-    textMetricsElement.style.setProperty("font-style", font.style)
-    val bbox = textMetricsElement.getBBox()
-    (bbox.width, bbox.height)
+  // Firefox doesn't have `TextMetrics.emHeight`, so we approximate
+  // ascender/descender by rendering a tall character and a deep character in a
+  // hidden `<canvas>`.
+  lazy val textMetricsContext =
+    val canvas = dom.document.createElement("canvas").asInstanceOf[dom.HTMLCanvasElement]
+    canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
+  val tallProbe = "Áy"
+
+  private def metricsOf(s: String): TextMetrics =
+    textMetricsContext.measureText(s).asInstanceOf[TextMetrics]
+
+  override protected def computeMetrics(text: String, font: FontInfo) = new Metrics:
+    textMetricsContext.font = font.toCSSFont
+    private val metrics = metricsOf(text)
+    private lazy val tall = metricsOf(tallProbe)
+    val width = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight
+    val inkAscent = metrics.actualBoundingBoxAscent
+    val inkDescent = metrics.actualBoundingBoxDescent
+    lazy val textAscent = tall.actualBoundingBoxAscent
+    lazy val textDescent = tall.actualBoundingBoxDescent
+    lazy val capAscent = metricsOf(capProbe).actualBoundingBoxAscent
+    lazy val exAscent = metricsOf(exProbe).actualBoundingBoxAscent

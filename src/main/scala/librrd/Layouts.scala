@@ -11,9 +11,16 @@ def linearInterpolate(xStart: Double, yStart: Double,
 case class FontInfo(family: String, style: String, weight: String, size: String):
   def toCSSFont: String = s"$style $weight $size $family"
 
+case class TextDimensions(width: Double, ascent: Double, descent: Double, inkAscent: Double)
+
 trait Layouts[T]:
 
-  def measure(text: String, font: FontInfo): (Double, Double)
+  def measure(text: String, font: FontInfo,
+              edges: TextBoxEdges, trim: TextBoxTrimPolicy): TextDimensions
+
+  final def measure(text: String, font: FontInfo): TextDimensions =
+    measure(text, font, TextBoxEdges.default, TextBoxTrimPolicy.default)
+
   def render(layout: Layout): T
 
   object Layout:
@@ -63,7 +70,6 @@ trait Layouts[T]:
 
     final def tipY: SidedProperty[Double] =
       SidedProperty.forEach(s => tipSpecOffsets(s) + tipYInternal(s))
-
     def tipYInternal(s: Side, ts: TipSpecification): Double
     def tipYInternal: SidedProperty[Double] = SidedProperty.forEach(s => tipYInternal(s, tipSpecs(s)))
 
@@ -123,22 +129,35 @@ trait Layouts[T]:
     val paddingX = Layout.unitWidth
     val paddingY = 1.5*Layout.unitWidth
 
-  trait StationWidthProperties(label: String, font: FontInfo) extends BlockLayoutWidthProperties:
-    val (textWidth, textHeight) = measure(label, font)
-    val width = textWidth + 4*Station.paddingX
+  trait StationWidthProperties(
+      label: String,
+      font: FontInfo,
+      edges: TextBoxEdges,
+      trim: TextBoxTrimPolicy) extends BlockLayoutWidthProperties:
+    val td = measure(label, font, edges, trim)
+    val width = td.width + 4*Station.paddingX
+    val startHeight = td.ascent + td.descent + 2*Station.paddingY
 
   case class Station(
       label: String,
       isTerminal: Boolean,
       direction: Direction,
       font: FontInfo,
+      edges: TextBoxEdges,
+      trim: TextBoxTrimPolicy,
+      align: TextBoxAlignPolicy,
       initClasses: Set[String] = Set.empty,
-      id: Option[String] = None) extends AtomicLayout, StationWidthProperties(label, font):
+      id: Option[String] = None) extends AtomicLayout,
+        StationWidthProperties(label, font, edges, trim):
+    val baselineY = align match
+      case TextBoxAlignPolicy.Baseline => Station.paddingY + td.ascent
+      case TextBoxAlignPolicy.Center   => (startHeight + td.inkAscent) / 2
+      case TextBoxAlignPolicy.Bottom   => startHeight - Station.paddingY
+
     val classes = initClasses
       + Station.`class`
       + (if isTerminal then Station.terminalClass else Station.nonterminalClass)
-    val startHeight = textHeight + 2*Station.paddingY
-    def tipYInternal(s: Side, ts: TipSpecification) = height/2
+    def tipYInternal(s: Side, ts: TipSpecification) = startHeight/2
 
 
   object LineBreak:

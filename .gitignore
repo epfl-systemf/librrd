@@ -9,3 +9,4 @@
 /gui/*.js
 /gui/*.js.map
 /node_modules/
+*.uuid

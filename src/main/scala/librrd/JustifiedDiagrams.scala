@@ -9,18 +9,23 @@ object JustifiedDiagrams:
             depth: Int): l.Layout =
       val depthRec = (d, w) => rec(d, w, depth + 1)
       diagram match
-        case wd.Station(label, isTerminal, direction, properties, numRows, font, classes, id) =>
-          l.Station(label, isTerminal, direction, font, classes, id)
-        case wd.Space(direction, numRows, verticalSide) =>
+        case wd.Station(label, isTerminal, direction, properties, classes, id) =>
+          l.Station(label, isTerminal, direction,
+            properties.get(LayoutStylesheets.Font),
+            properties.get(LayoutStylesheets.TextBoxEdge),
+            properties.get(LayoutStylesheets.TextBoxTrim),
+            properties.get(LayoutStylesheets.TextBoxAlign),
+            classes, id)
+        case wd.Space(direction, verticalSide) =>
           l.Space(direction, verticalSide)
         case bvc @ wd.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
-            direction, polarity, properties, tipSpecs, numRows, classes, id) =>
+            direction, polarity, properties, tipSpecs, classes, id) =>
           val width = targetWidth - bvc.extraWidth
           val vc = l.VerticalConcatenation(
             depthRec(topSubdiagram, width).block,
             depthRec(bottomSubdiagram, width).block,
             direction, polarity, tipSpecs, classes, id)
-          assert(numRows == vc.tipRows)
+          // assert(numRows == vc.tipRows)
           // assert(bvc.extraWidths == 0)
           vc
         case ivc: wd.InlineVerticalConcatenation[_] =>

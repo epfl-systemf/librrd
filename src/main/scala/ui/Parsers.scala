@@ -2,8 +2,7 @@ package ui
 
 import util.parsing.combinator.RegexParsers
 import util.{Try, Success}
-import librrd.{Diagrams, LayoutStylesheets, AlignItemsPolicy, JustifyContentPolicy,
-               Polarity, SidedProperty, FontInfo}
+import librrd.*
 
 trait InputParser[T]:
   def apply(input: String): Try[T]
@@ -85,6 +84,24 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "space-evenly" ^^ (_ => JustifyContentPolicy.SpaceEvenly)
     | "center" ^^ (_ => JustifyContentPolicy.Center)
   def otherValue: Parser[String] = """[A-Za-z0-9-.]+""".r
+  def textBoxOverEdgeValue: Parser[TextBoxOverEdge] =
+      "text" ^^ (_ => TextBoxOverEdge.Text)
+    | "cap" ^^ (_ => TextBoxOverEdge.Cap)
+    | "ex" ^^ (_ => TextBoxOverEdge.Ex)
+    | "ink" ^^ (_ => TextBoxOverEdge.Ink)
+  def textBoxUnderEdgeValue: Parser[TextBoxUnderEdge] =
+      "text" ^^ (_ => TextBoxUnderEdge.Text)
+    | "alphabetic" ^^ (_ => TextBoxUnderEdge.Alphabetic)
+    | "ink" ^^ (_ => TextBoxUnderEdge.Ink)
+  def textBoxTrimValue: Parser[TextBoxTrimPolicy] =
+      "none" ^^ (_ => TextBoxTrimPolicy.None)
+    | "trim-both" ^^ (_ => TextBoxTrimPolicy.TrimBoth)
+    | "trim-start" ^^ (_ => TextBoxTrimPolicy.TrimStart)
+    | "trim-end" ^^ (_ => TextBoxTrimPolicy.TrimEnd)
+  def textBoxAlignValue: Parser[librrd.TextBoxAlignPolicy] =
+      "baseline" ^^ (_ => librrd.TextBoxAlignPolicy.Baseline)
+    | "center" ^^ (_ => librrd.TextBoxAlignPolicy.Center)
+    | "bottom" ^^ (_ => librrd.TextBoxAlignPolicy.Bottom)
   def property: Parser[Property] =
      ("align-items:" ~> alignItemsValue ^^ (v => Property(AlignItems, v))
     | "align-self:" ~> alignItemsValue ~ alignItemsValue ^^ (_ match
@@ -95,6 +112,10 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "gap:" ~> """[0-9.]+""".r ^^ (v => Property(Gap, v.toDouble))
     | "continuation-marker:" ~> (("none" ^^ (_ => Property(ContinuationMarker, None)))
       | """"\S+"""".r ^^ (v => Property(ContinuationMarker, Some(v.substring(1, v.length() - 1)))))
+    | "text-box-edge:" ~> textBoxOverEdgeValue ~ textBoxUnderEdgeValue ^^ (_ match
+        case over ~ under => Property(TextBoxEdge, TextBoxEdges(over, under)))
+    | "text-box-trim:" ~> textBoxTrimValue ^^ (v => Property(TextBoxTrim, v))
+    | "text-box-align:" ~> textBoxAlignValue ^^ (v => Property(TextBoxAlign, v))
     | "font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
       ^^ { _ match { case family ~ style ~ weight ~ size =>
       Property(Font, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
@@ -111,6 +132,64 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
   def stylesheet: Parser[Stylesheet] = rule.* ^^ (rs => Stylesheet(rs))
 
   def apply(input: String) = parseAll(stylesheet, input) match
+    case Success(result, _) => util.Success(result)
+    case e: NoSuccess => util.Failure(RuntimeException(e.msg))
+
+
+class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
+  def realNumber: Parser[Double] = """-?(\d+)?(\.\d+)?""".r ^^ { _.toDouble }
+  def wholeNumber: Parser[Integer] = """-?\d+""".r ^^ { _.toInt }
+
+  def direction: Parser[Direction] =
+    "ltr" ^^ (_ => Direction.LTR) | "rtl" ^^ (_ => Direction.RTL)
+  def width: Parser[Double] = realNumber.filter(_ >= 0)
+  def flag: Parser[Boolean] = "#t" ^^ (_ => true) | "#f" ^^ (_ => false)
+  def polarity: Parser[Polarity] = "+" ^^ (_ => Polarity.+) | "-" ^^ (_ => Polarity.-)
+  def rowNumber: Parser[Integer] = wholeNumber.filter(_ > 0)
+  def proportion: Parser[Double] = realNumber.filter(p => 0 <= p && p <= 1)
+  def side: Parser[Side] = "left" ^^ (_ => Side.Left) | "right" ^^ (_ => Side.Right)
+
+  def tipSpecification: Parser[TipSpecification] =
+      "vertical" ^^ (_ => TipSpecification.Vertical)
+    | "(" ~ "logical" ~> rowNumber <~ ")" ^^ { TipSpecification.Logical(_) }
+    | "(" ~ "physical" ~> proportion <~ ")" ^^ { TipSpecification.Physical(_) }
+
+  val terminalFont = FontInfo("Inconsolata", "normal", "normal", "14px")
+  val nonterminalFont = FontInfo("Linux Biolinum", "italic", "normal", "14px")
+  val markerFont = FontInfo("Linux Biolinum", "normal", "bold", "14px")
+  val textBoxEdges = TextBoxEdges(TextBoxOverEdge.Cap, TextBoxUnderEdge.Alphabetic)
+  val textBoxTrim  = TextBoxTrimPolicy.TrimBoth
+  val textBoxAlign = TextBoxAlignPolicy.Baseline
+
+  def layout: Parser[backend.Layout] =
+      ("(" ~ "rail") ~> (direction ~ width) <~ ")"
+        ^^ { _ match { case d ~ w => backend.Rail(w, d) } }
+    | ("(" ~ "space") ~> (direction ~ side) <~ ")"
+        ^^ { _ match { case d ~ s => backend.Space(d, s) } }
+    | ("(" ~ "station") ~> (direction ~ """"[^"]+"""".r ~ flag) <~ ")"
+        ^^ { _ match { case d ~ l ~ t => backend.Station(l.substring(1, l.length() - 1), t, d,
+          if t then terminalFont else nonterminalFont,
+          textBoxEdges, textBoxTrim, textBoxAlign) } }
+    | ("(" ~ "hconcat") ~> (direction ~ layout.+) <~ ")"
+        ^^ { _ match { case d ~ ls => backend.HorizontalConcatenation(backend.HorizontalConcatenation.adjustHeights(ls), false) } }
+    | ("(" ~ "vconcat-inline") ~>
+        (direction ~ tipSpecification ~ tipSpecification ~ """"[^"]+"""".r ~ layout.+) <~ ")"
+        ^^ { _ match { case d ~ lts ~ rts ~ mk ~ ls =>
+          val marker = mk.substring(1, mk.length() - 1)
+          val width = ls(0).width + backend.LineBreak.markerWidth(Some(marker), markerFont)
+          backend.HorizontalConcatenation(
+            backend.HorizontalConcatenation.adjustHeights(
+              ls.flatMap(l => Seq(l, backend.LineBreak(width, d, Some(marker), markerFont)))
+                .dropRight(1)),
+            false)
+        } }
+    | ("(" ~ "vconcat-block") ~>
+        (direction ~ tipSpecification ~ tipSpecification ~ polarity ~ layout ~ layout) <~ ")"
+        ^^ { _ match { case d ~ lts ~ rts ~ pol ~ ltop ~ lbot =>
+          val tipSpecs = SidedProperty(lts, rts)
+          backend.VerticalConcatenation(ltop.block, lbot.block, d, pol, tipSpecs) } }
+
+  def apply(input: String) = parseAll(layout, input) match
     case Success(result, _) => util.Success(result)
     case e: NoSuccess => util.Failure(RuntimeException(e.msg))
 
