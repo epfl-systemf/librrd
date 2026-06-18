@@ -38,15 +38,16 @@ lazy val root = project.in(file("."))
       val targetPath = target.value.toPath()
         .resolve("scala-" + scalaVersion.value)
         .resolve(name.value + "-fastopt")
-      def deployModule(id: String) =
+      def deployModule(id: String, dirName: Option[String] = None) =
         targetPath.toFile().listFiles()
           .map(_.toPath())
           .filter { p =>
             val n = p.getFileName().toString()
             n.startsWith(id) || n.startsWith("internal") }
-          .foreach(p => Files.copy(p, Paths.get(id, p.getFileName().toString()),
+          .foreach(p => Files.copy(p, Paths.get(dirName.getOrElse(id), p.getFileName().toString()),
             StandardCopyOption.REPLACE_EXISTING))
       deployModule("gui")
       deployModule("cli")
+      deployModule("librrd", Some("api"))
     }
   )

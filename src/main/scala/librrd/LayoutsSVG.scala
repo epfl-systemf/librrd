@@ -307,10 +307,9 @@ object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
   // we redefine `TextMetrics` here.
   @js.native
   trait TextMetrics extends js.Object:
-    val actualBoundingBoxLeft: Double = js.native
-    val actualBoundingBoxRight: Double = js.native
     val actualBoundingBoxAscent: Double = js.native
     val actualBoundingBoxDescent: Double = js.native
+    val width: Double = js.native
 
   // Firefox doesn't have `TextMetrics.emHeight`, so we approximate
   // ascender/descender by rendering a tall character and a deep character in a
@@ -327,10 +326,17 @@ object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
     textMetricsContext.font = font.toCSSFont
     private val metrics = metricsOf(text)
     private lazy val tall = metricsOf(tallProbe)
-    val width = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight
+    val width = metrics.width
     val inkAscent = metrics.actualBoundingBoxAscent
     val inkDescent = metrics.actualBoundingBoxDescent
     lazy val textAscent = tall.actualBoundingBoxAscent
     lazy val textDescent = tall.actualBoundingBoxDescent
     lazy val capAscent = metricsOf(capProbe).actualBoundingBoxAscent
     lazy val exAscent = metricsOf(exProbe).actualBoundingBoxAscent
+
+  def renderToSVG(rendering: scalatags.JsDom.Tag): dom.SVGSVGElement =
+    import scalatags.JsDom.svgTags.svg
+    import scalatags.JsDom.attrs.xmlns
+    import scalatags.JsDom.implicits.stringAttr
+    svg(rendering, xmlns:="http://www.w3.org/2000/svg")
+      .render.asInstanceOf[dom.SVGSVGElement]

@@ -12,12 +12,15 @@ object LibRRD:
   def layOutToSVG(diagram: Diagrams.Diagram, stylesheet: LayoutStylesheets.Stylesheet,
                   width: Double) =
     val myWrappedDiagram = SVGWD.wrapLocally(preLayOut(diagram, stylesheet))
-    val myLayout = JustifiedDiagrams.justify(SVGWD)(myWrappedDiagram, width)
-    SVGWD.backend.render(myLayout)
+    val myWidth = Math.max(if width <= 1 then width * myWrappedDiagram.maxContent else width,
+                           myWrappedDiagram.minContent)
+    val myLayout = JustifiedDiagrams.justify(SVGWD)(myWrappedDiagram, myWidth)
+    LayoutsSVG.renderToSVG(SVGWD.backend.render(myLayout))
 
   def layOutGloballyToSVG(diagram: Diagrams.Diagram, stylesheet: LayoutStylesheets.Stylesheet,
                         width: Double) =
     val myWrappedDiagram = SVGWD.wrapGlobally(preLayOut(diagram, stylesheet))
-    val myLayout = JustifiedDiagrams.justify(SVGWD)(myWrappedDiagram, width)
-    SVGWD.backend.render(myLayout)
-
+    val myWidth = Math.max(if width <= 1 then width * myWrappedDiagram.maxContent else width,
+                           myWrappedDiagram.minContent)
+    val myLayout = JustifiedDiagrams.justify(SVGWD)(myWrappedDiagram, myWidth)
+    LayoutsSVG.renderToSVG(SVGWD.backend.render(myLayout))

@@ -145,7 +145,7 @@ object GUI:
     val mySVG = LibRRD.layOutToSVG(
       InputsPresets.Diagram.get,
       InputsPresets.LayoutStylesheet.get,
-      ResizeState.width).render
+      ResizeState.width)
     if oldSVG.isDefined then
       outputCanvas.replaceChild(mySVG, oldSVG.get)
     else

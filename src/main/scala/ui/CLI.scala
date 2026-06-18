@@ -100,8 +100,8 @@ object CLI:
     if config.renderOnly() then
       val myLayoutParser = LayoutParser(LayoutsSVGFile)
       val myLayout = myLayoutParser(diagram).get
-      LayoutsSVGFile.renderToFile(myLayoutParser.backend.render(myLayout).render,
-        renderingStylesheet, myLayout.width, myLayout.height, outputFilename)
+      LayoutsSVGFile.renderToFile(myLayoutParser.backend.render(myLayout),
+        renderingStylesheet, outputFilename)
     else
       val layoutStylesheet =
         (if config.layoutStylesheet.isEmpty
