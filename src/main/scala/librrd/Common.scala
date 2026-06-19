@@ -175,3 +175,9 @@ enum TextBoxAlignPolicy:
   case Baseline, Center, Bottom
 object TextBoxAlignPolicy:
   val default: TextBoxAlignPolicy = Baseline
+
+enum LabelPositionInline:
+  case Left, Right, Center, Start, End
+enum LabelPositionBlock:
+  case Top, Bottom
+case class LabelPositionValue(block: LabelPositionBlock, `inline`: LabelPositionInline)

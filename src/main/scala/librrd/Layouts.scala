@@ -615,18 +615,13 @@ trait Layouts[T]:
 
   object LabeledBlockLayout:
     val `class` = "librrd-label"
-    val paddingY = 2*Layout.rowGap
-    enum LabelPositionInline:
-      case Left, Right, Center, Start, End
-    enum LabelPositionBlock:
-      case Top, Bottom
+    val paddingY = 3*Layout.rowGap
 
   case class LabeledBlockLayout(
       sub: BlockLayout,
       label: String,
       font: FontInfo,
-      positionInline: LabeledBlockLayout.LabelPositionInline,
-      positionBlock: LabeledBlockLayout.LabelPositionBlock) extends BlockLayout:
+      position: LabelPositionValue) extends BlockLayout:
     override val id = None
     override val classes = Set(LabeledBlockLayout.`class`)
     override val direction = sub.direction
@@ -636,6 +631,6 @@ trait Layouts[T]:
     override def tipRowsPossible = sub.tipRowsPossible
     override def tipSpecs = sub.tipSpecs
     override def tipYInternal(s: Side, ts: TipSpecification): Double =
-      sub.tipYInternal(s, ts) + (positionBlock match
-        case LabeledBlockLayout.LabelPositionBlock.Top => LabeledBlockLayout.paddingY
-        case LabeledBlockLayout.LabelPositionBlock.Bottom => 0)
+      sub.tipYInternal(s, ts) + (position.block match
+        case LabelPositionBlock.Top => 2.0/3
+        case LabelPositionBlock.Bottom => 1.0/3)*LabeledBlockLayout.paddingY

@@ -8,16 +8,16 @@ object JustifiedDiagrams:
             targetWidth: Double,
             depth: Int): l.Layout =
       val depthRec = (d, w) => rec(d, w, depth + 1)
-      val (result, gLabel) = diagram match
+      val (result, gLabel, gLabelProperties) = diagram match
         case wd.Station(label, isTerminal, direction, properties, classes, id, gLabel) =>
           (l.Station(label, isTerminal, direction,
             properties.get(LayoutStylesheets.Font),
             properties.get(LayoutStylesheets.TextBoxEdge),
             properties.get(LayoutStylesheets.TextBoxTrim),
             properties.get(LayoutStylesheets.TextBoxAlign),
-            classes, id), gLabel)
+            classes, id), gLabel, properties)
         case wd.Space(direction, verticalSide) =>
-          (l.Space(direction, verticalSide), None)
+          (l.Space(direction, verticalSide), None, LayoutStylesheets.PropertyMap())
         case bvc @ wd.BlockVerticalConcatenation(topSubdiagram, bottomSubdiagram,
             direction, polarity, properties, tipSpecs, classes, id, gLabel) =>
           val width = targetWidth - bvc.extraWidth
@@ -27,7 +27,7 @@ object JustifiedDiagrams:
             direction, polarity, tipSpecs, classes, id)
           // assert(numRows == vc.tipRows)
           // assert(bvc.extraWidths == 0)
-          (vc, gLabel)
+          (vc, gLabel, properties)
         case ivc: wd.InlineVerticalConcatenation[_] =>
           val marker = ivc.properties.get(LayoutStylesheets.ContinuationMarker)
           val width = targetWidth - ivc.extraWidth
@@ -35,7 +35,7 @@ object JustifiedDiagrams:
             +: ivc.mids.map(s => depthRec(s, width - 2*ivc.markerWidth))
             :+ depthRec(ivc.last, width - ivc.markerWidth)
           val lineBreak = l.LineBreak(width, ivc.direction, marker,
-                                      ivc.properties.get(LayoutStylesheets.ContinuationFont))
+                                      ivc.properties.get(LayoutStylesheets.SystemFont))
           val subsWithBreaks = subs
             .zipAll(List(), l.Rail(0, ivc.direction), lineBreak)
             .flatMap(ss => List(ss._1, ss._2))
@@ -43,12 +43,12 @@ object JustifiedDiagrams:
           (l.BlockedHorizontalConcatenation(l.HorizontalConcatenation(
             l.HorizontalConcatenation.adjustHeights(subsWithBreaks),
             marker.isEmpty, ivc.classes, ivc.id),
-            Some(ivc.tipSpecs)), ivc.groupLabel)
+            Some(ivc.tipSpecs)), ivc.groupLabel, ivc.properties)
         case gwd: wd.GloballyWrappedDiagram =>
-          (depthRec(gwd.bestUnder(targetWidth, depth), targetWidth), None)
-        case gsw @ wd.GlobalSequenceWrap(sw, _) => (depthRec(sw, targetWidth), None)
+          (depthRec(gwd.bestUnder(targetWidth, depth), targetWidth), None, LayoutStylesheets.PropertyMap())
+        case gsw @ wd.GlobalSequenceWrap(sw, _) => (depthRec(sw, targetWidth), None, LayoutStylesheets.PropertyMap())
         case lws: wd.LocallyWrappedSequence[_] =>
-          (depthRec(lws.bestUnder(targetWidth, depth), targetWidth), None)
+          (depthRec(lws.bestUnder(targetWidth, depth), targetWidth), None, LayoutStylesheets.PropertyMap())
 
         case hc: wd.HorizontalConcatenation[_] =>
           val subdiagrams = hc.subdiagrams.toVector
@@ -101,15 +101,14 @@ object JustifiedDiagrams:
           (if sublayouts.isEmpty then l.Rail(0, hc.direction, hc.classes, hc.id)
            else l.HorizontalConcatenation(hc.direction.reverse(sublayouts),
              hc.properties.get(LayoutStylesheets.ContinuationMarker).isEmpty, hc.classes, hc.id),
-           hc.groupLabel)
+           hc.groupLabel, hc.properties)
 
       if gLabel.isDefined then
         l.LabeledBlockLayout(
           result.block,
           gLabel.get,
-          LayoutStylesheets.ContinuationFont.default,
-          l.LabeledBlockLayout.LabelPositionInline.Right,
-          l.LabeledBlockLayout.LabelPositionBlock.Top)
+          gLabelProperties.get(LayoutStylesheets.SystemFont),
+          gLabelProperties.get(LayoutStylesheets.LabelPosition))
       else result
 
     rec(diagram, targetWidth, 0)

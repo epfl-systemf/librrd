@@ -300,9 +300,9 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
             g(rails, transform:=s"translate($width,0) scale(-1,1)"))
           case _ => g(render(sub), transform:=s"translate($startX,0)") +: rails
 
-      case lbl @ LabeledBlockLayout(sub, label, font, positionInline, positionBlock) =>
-        import LabeledBlockLayout.LabelPositionInline.*
-        import LabeledBlockLayout.LabelPositionBlock.*
+      case lbl @ LabeledBlockLayout(sub, label, font, position) =>
+        import LabelPositionInline.*
+        import LabelPositionBlock.*
         val padY = LabeledBlockLayout.paddingY
 
         val labelMeasure = measure(label, font)
@@ -310,16 +310,16 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
         val dx = SidedProperty.forEach(s => sub.tipSpecs(s) match
           case Vertical => Layout.unitWidth
           case _ => 0)
-        val labelX = (positionInline, lbl.direction) match
+        val labelX = (position.`inline`, lbl.direction) match
           case (Left, _) | (Start, Direction.LTR) | (End, Direction.RTL) => dx(Side.Left)
           case (Right, _) | (Start, Direction.RTL) | (End, Direction.LTR) => lbl.width - dx(Side.Right) - labelWidth
           case (Center, _) => (lbl.width + dx(Side.Left) - dx(Side.Right) - labelWidth)/2
-        val (translateY, labelY) = positionBlock match
-          case Top => (padY, 0.5*padY)
-          case Bottom => (0.0, lbl.startHeight - 0.5*padY + labelMeasure.ascent)
+        val (translateY, labelY) = position.block match
+          case Top => (2*padY/3, padY/3)
+          case Bottom => (padY/3, lbl.startHeight - padY/3 + labelMeasure.ascent)
 
-        List(rect(x:=(-dx(Side.Left)), y:=(translateY - 0.25*padY),
-               svgWidth:=(sub.width + dx(Side.Left) + dx(Side.Right)), svgHeight:=sub.height + 0.5*padY,
+        List(rect(x:=(-dx(Side.Left)), y:=(translateY - padY/6),
+               svgWidth:=(sub.width + dx(Side.Left) + dx(Side.Right)), svgHeight:=sub.height + padY/3,
                `class`:="librrd-group"),
              g(render(sub), transform:=s"translate(0,$translateY)"),
              text(label, x:=labelX, y:=labelY, style:=fontToStyleString(font)))

@@ -102,7 +102,7 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
 
     val markerWidth = backend.LineBreak.markerWidth(
       properties.get(LayoutStylesheets.ContinuationMarker),
-      properties.get(LayoutStylesheets.ContinuationFont))
+      properties.get(LayoutStylesheets.SystemFont))
 
     val extraWidths =
       backend.BlockedHorizontalConcatenation.extraWidths(direction, tipSpecs, subdiagrams.length)

@@ -90,7 +90,7 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "space-around" ^^ (_ => JustifyContentPolicy.SpaceAround)
     | "space-evenly" ^^ (_ => JustifyContentPolicy.SpaceEvenly)
     | "center" ^^ (_ => JustifyContentPolicy.Center)
-  def otherValue: Parser[String] = """[A-Za-z0-9-.]+""".r
+
   def textBoxOverEdgeValue: Parser[TextBoxOverEdge] =
       "text" ^^ (_ => TextBoxOverEdge.Text)
     | "cap" ^^ (_ => TextBoxOverEdge.Cap)
@@ -109,6 +109,19 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
       "baseline" ^^ (_ => librrd.TextBoxAlignPolicy.Baseline)
     | "center" ^^ (_ => librrd.TextBoxAlignPolicy.Center)
     | "bottom" ^^ (_ => librrd.TextBoxAlignPolicy.Bottom)
+
+  def labelPositionBlockValue: Parser[LabelPositionBlock] =
+      "top" ^^^ LabelPositionBlock.Top
+    | "bottom" ^^^ LabelPositionBlock.Bottom
+  def labelPositionInlineValue: Parser[LabelPositionInline] =
+      "left" ^^^ LabelPositionInline.Left
+    | "right" ^^^ LabelPositionInline.Right
+    | "center" ^^^ LabelPositionInline.Center
+    | "start" ^^^ LabelPositionInline.Start
+    | "end" ^^^ LabelPositionInline.End
+
+  def otherValue: Parser[String] = """[A-Za-z0-9-.]+""".r
+
   def property: Parser[Property] =
      ("align-items:" ~> alignItemsValue ^^ (v => Property(AlignItems, v))
     | "align-self:" ~> alignItemsValue ~ alignItemsValue ^^ (_ match
@@ -123,14 +136,16 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
         case over ~ under => Property(TextBoxEdge, TextBoxEdges(over, under)))
     | "text-box-trim:" ~> textBoxTrimValue ^^ (v => Property(TextBoxTrim, v))
     | "text-box-align:" ~> textBoxAlignValue ^^ (v => Property(TextBoxAlign, v))
+    | "label-position:" ~> labelPositionBlockValue ~ labelPositionInlineValue ^^ (_ match
+        case bv ~ iv => Property(LabelPosition, LabelPositionValue(bv, iv)))
     | "font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
       ^^ { _ match { case family ~ style ~ weight ~ size =>
       Property(Font, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
                               size.getOrElse("14px"))) }}
-    | "continuation-font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
+    | "system-font:" ~> """[A-Za-z0-9-]+|('[^']+')|("[^"]+")""".r ~ otherValue.? ~ otherValue.? ~ otherValue.?
       ^^ { _ match { case family ~ style ~ weight ~ size =>
-      Property(ContinuationFont, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
-                                          size.getOrElse("14px"))) }})
+      Property(SystemFont, FontInfo(family, style.getOrElse("normal"), weight.getOrElse("normal"),
+                                    size.getOrElse("14px"))) }})
      <~ ";"
 
   def selector: Parser[Selector] = "[^,{]+".r ^? SelectorParser

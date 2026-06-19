@@ -106,9 +106,10 @@ object LayoutStylesheets:
     type Value = FontInfo
     val default = FontInfo("sans-serif", "normal", "normal", "14px")
     override val inheritable = true
-  case object ContinuationFont extends PropertyName:
+  case object SystemFont extends PropertyName:
     type Value = FontInfo
     val default = Font.default
+    override val inheritable = true
   case object TextBoxEdge extends PropertyName:
     type Value = TextBoxEdges
     val default = TextBoxEdges.default
@@ -118,8 +119,12 @@ object LayoutStylesheets:
     val default = TextBoxTrimPolicy.default
     override val inheritable = true
   case object TextBoxAlign extends PropertyName:
-    type Value = librrd.TextBoxAlignPolicy
-    val default = librrd.TextBoxAlignPolicy.default
+    type Value = TextBoxAlignPolicy
+    val default = TextBoxAlignPolicy.default
+    override val inheritable = true
+  case object LabelPosition extends PropertyName:
+    type Value = LabelPositionValue
+    val default = LabelPositionValue(LabelPositionBlock.Top, LabelPositionInline.Right)
     override val inheritable = true
 
   class Property(val name: PropertyName, val value: name.Value):
@@ -150,5 +155,5 @@ object LayoutStylesheets:
 
   val defaultProperties =
     PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, ContinuationMarker,
-                     Font, TextBoxEdge, TextBoxTrim, TextBoxAlign)
+                     Font, TextBoxEdge, TextBoxTrim, TextBoxAlign, LabelPosition)
       .map(pn => Property(pn, pn.default)))
