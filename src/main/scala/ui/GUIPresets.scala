@@ -133,15 +133,10 @@ object GUIPresets:
         |}
         |
         |rect.librrd-group {
-        |    fill: none;
-        |    stroke: none;
-        |}
-        |
-        |.librrd-selected > rect.librrd-group {
         |    fill: hsl(0 0% 75% / 0.5);
         |    stroke: hsl(0 0% 50%);
         |    stroke-width: 2px;
-        |    stroke-dasharray: 4 2;
+        |    stroke-dasharray: 6 4;
         |}""".stripMargin,
 
     "JSON" ->
@@ -156,15 +151,10 @@ object GUIPresets:
         |}
         |
         |rect.librrd-group {
-        |    fill: none;
-        |    stroke: none;
-        |}
-        |
-        |.librrd-selected > rect.librrd-group {
         |    fill: hsl(0 0% 75% / 0.5);
         |    stroke: hsl(0 0% 50%);
         |    stroke-width: 2px;
-        |    stroke-dasharray: 4 2;
+        |    stroke-dasharray: 6 4;
         |}""".stripMargin,
 
     "default" ->
@@ -179,14 +169,9 @@ object GUIPresets:
         |}
         |
         |rect.librrd-group {
-        |    fill: none;
-        |    stroke: none;
-        |}
-        |
-        |.librrd-selected > rect.librrd-group {
         |    fill: hsl(0 0% 75% / 0.5);
         |    stroke: hsl(0 0% 50%);
         |    stroke-width: 2px;
-        |    stroke-dasharray: 4 2;
+        |    stroke-dasharray: 6 4;
         |}""".stripMargin,
   )
