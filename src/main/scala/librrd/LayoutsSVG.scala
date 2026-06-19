@@ -337,6 +337,11 @@ object LayoutsSVG extends LayoutsScalatags(scalatags.JsDom):
   // hidden `<canvas>`.
   lazy val textMetricsContext =
     val canvas = dom.document.createElement("canvas").asInstanceOf[dom.HTMLCanvasElement]
+    dom.document.body.append(canvas)
+    val bodyStyle = dom.window.getComputedStyle(dom.document.body)
+    canvas.style.fontFamily = bodyStyle.fontFamily
+    canvas.style.fontSize = bodyStyle.fontSize
+    canvas.style.display = "none"
     canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
   val tallProbe = "Áy"
 
