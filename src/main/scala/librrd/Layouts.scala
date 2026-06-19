@@ -26,7 +26,6 @@ trait Layouts[T]:
   object Layout:
     val unitWidth = 4.0
     val `class` = "librrd"
-    val rowGap = 3*unitWidth
 
   trait LayoutWidthProperties:
     def width: Double
@@ -177,6 +176,7 @@ trait Layouts[T]:
       direction: Direction,
       marker: Option[String],
       font: FontInfo,
+      middleHeight: Double,
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None,
       startHeight: Double = 0.0,
@@ -184,7 +184,6 @@ trait Layouts[T]:
         LineBreakWidthProperties(initWidth, LineBreak.markerWidth(marker, font)):
     val classes = initClasses + LineBreak.`class`
 
-    val middleHeight = 2*Layout.rowGap
     val sBlockRows = 2
     override def growStartHeight(by: Double) = this.copy(startHeight = startHeight + by)
     override def growEndHeight(by: Double) = this.copy(endHeight = endHeight + by)
@@ -458,6 +457,7 @@ trait Layouts[T]:
       direction: Direction,
       polarity: Polarity,
       tipSpecs: TipSpecifications,
+      rowGap: Double,
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None) extends BlockLayout, VerticalConcatenationWidthProperties(
         topSublayout, bottomSublayout, tipSpecs):
@@ -480,7 +480,7 @@ trait Layouts[T]:
       case _ => assert(topSublayout.direction == direction,
         "top sublayout of positive or negative-below vertical concatenation must have direction equal to self!")
 
-    val bottomOffset = topSublayout.height + Layout.rowGap
+    val bottomOffset = topSublayout.height + rowGap
     val startHeight = bottomOffset + bottomSublayout.height
 
     assert(Side.values.forall(s => topSublayout.tipSpecs(s) == Vertical)
@@ -548,6 +548,7 @@ trait Layouts[T]:
       direction: Direction,
       polarity: Polarity,
       tipSpecs: TipSpecifications,
+      rowGap: Double,
       extraStartHeight: Double = 0.0,
       extraEndHeight: Double = 0.0,
       initClasses: Set[String] = Set.empty,
@@ -583,7 +584,7 @@ trait Layouts[T]:
         + s"sub width ${sub.width} and extra width $extraWidth!")
 
     override val (startHeight, middleHeight, endHeight) = sub match
-      case _: BlockLayout => (sub.height + extraStartHeight, 2*Layout.rowGap, extraEndHeight)
+      case _: BlockLayout => (sub.height + extraStartHeight, rowGap, extraEndHeight)
       case _ => (sub.startHeight, sub.middleHeight, sub.endHeight)
 
     val sBlockRows = 2
@@ -615,7 +616,7 @@ trait Layouts[T]:
 
   object LabeledBlockLayout:
     val `class` = "librrd-label"
-    val paddingY = 3*Layout.rowGap
+    val paddingY = 8*Layout.unitWidth
 
   case class LabeledBlockLayout(
       sub: BlockLayout,

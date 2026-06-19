@@ -24,7 +24,7 @@ object JustifiedDiagrams:
           val vc = l.VerticalConcatenation(
             depthRec(topSubdiagram, width).block,
             depthRec(bottomSubdiagram, width).block,
-            direction, polarity, tipSpecs, classes, id)
+            direction, polarity, tipSpecs, properties.get(LayoutStylesheets.RowGap), classes, id)
           // assert(numRows == vc.tipRows)
           // assert(bvc.extraWidths == 0)
           (vc, gLabel, properties)
@@ -35,7 +35,8 @@ object JustifiedDiagrams:
             +: ivc.mids.map(s => depthRec(s, width - 2*ivc.markerWidth))
             :+ depthRec(ivc.last, width - ivc.markerWidth)
           val lineBreak = l.LineBreak(width, ivc.direction, marker,
-                                      ivc.properties.get(LayoutStylesheets.SystemFont))
+                                      ivc.properties.get(LayoutStylesheets.SystemFont),
+                                      2*ivc.properties.get(LayoutStylesheets.RowGap))
           val subsWithBreaks = subs
             .zipAll(List(), l.Rail(0, ivc.direction), lineBreak)
             .flatMap(ss => List(ss._1, ss._2))

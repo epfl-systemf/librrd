@@ -130,6 +130,7 @@ object StylesheetParser extends RegexParsers, InputParser[LayoutStylesheets.Styl
     | "justify-content:" ~> justifyContentValue ^^ (v => Property(JustifyContent, v))
     | "flex-absorb:" ~> """[0-9.]+""".r ^^ (v => Property(FlexAbsorb, v.toDouble))
     | "gap:" ~> """[0-9.]+""".r ^^ (v => Property(Gap, v.toDouble))
+    | "row-gap:" ~> """[0-9.]+""".r ^^ (v => Property(RowGap, v.toDouble))
     | "continuation-marker:" ~> (("none" ^^ (_ => Property(ContinuationMarker, None)))
       | """"\S+"""".r ^^ (v => Property(ContinuationMarker, Some(v.substring(1, v.length() - 1)))))
     | "text-box-edge:" ~> textBoxOverEdgeValue ~ textBoxUnderEdgeValue ^^ (_ match
@@ -202,7 +203,8 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
           val width = ls(0).width + backend.LineBreak.markerWidth(Some(marker), markerFont)
           backend.HorizontalConcatenation(
             backend.HorizontalConcatenation.adjustHeights(
-              ls.flatMap(l => Seq(l, backend.LineBreak(width, d, Some(marker), markerFont)))
+              ls.flatMap(l => Seq(l, backend.LineBreak(width, d, Some(marker), markerFont,
+                                                       LayoutStylesheets.RowGap.default)))
                 .dropRight(1)),
             false)
         } }
@@ -210,7 +212,8 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
         (direction ~ tipSpecification ~ tipSpecification ~ polarity ~ layout ~ layout) <~ ")"
         ^^ { _ match { case d ~ lts ~ rts ~ pol ~ ltop ~ lbot =>
           val tipSpecs = SidedProperty(lts, rts)
-          backend.VerticalConcatenation(ltop.block, lbot.block, d, pol, tipSpecs) } }
+          backend.VerticalConcatenation(ltop.block, lbot.block, d, pol, tipSpecs,
+            LayoutStylesheets.RowGap.default) } }
 
   def apply(input: String) = parseAll(layout, input) match
     case Success(result, _) => util.Success(result)

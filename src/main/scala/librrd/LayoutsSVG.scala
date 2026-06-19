@@ -181,7 +181,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
               case _ => List()))
 
       case vc @ VerticalConcatenation(
-          topSublayout, bottomSublayout, direction, polarity, tipSpecs, _, _) =>
+          topSublayout, bottomSublayout, direction, polarity, tipSpecs, rowGap, _, _) =>
         val leftExtraWidth = vc.extraWidths.left
 
         val brackets = List((Side.Left, leftExtraWidth, +1),
@@ -198,10 +198,10 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
 
               case _ =>
                 def topPath(subTipY: Double) = path(d:=
-                  s"M $x,${vc.bottomOffset - Layout.rowGap/2}  L $x,${subTipY + 2*unitWidth} "
+                  s"M $x,${vc.bottomOffset - rowGap/2}  L $x,${subTipY + 2*unitWidth} "
                   + s"$quarterArc $downwards ${sign*radius},${-radius}")
                 def bottomPath(subTipY: Double) = path(d:=
-                  s"M $x,${vc.bottomOffset - Layout.rowGap/2}  L $x,${subTipY - 2*unitWidth} "
+                  s"M $x,${vc.bottomOffset - rowGap/2}  L $x,${subTipY - 2*unitWidth} "
                   + s"$quarterArc $upwards ${sign*radius},$radius")
                 val inners = (1 to topSublayout.tipRowsPossible(side))
                   .map(r => topPath(topSublayout.tipY(side, Logical(r))))
@@ -237,7 +237,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
         +: brackets
 
 
-      case ve @ VerticalEpsilon(sub, width, direction, polarity, tipSpecs, _, _, _, _) =>
+      case ve @ VerticalEpsilon(sub, width, direction, polarity, tipSpecs, _, _, _, _, _) =>
         val (startSide, endSide) = (ve.startSide, ve.endSide)
         val tipY = ve.tipY(startSide)
         val startX = ve.startOffset + ve.extraWidth

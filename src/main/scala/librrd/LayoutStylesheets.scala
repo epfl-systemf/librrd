@@ -74,24 +74,22 @@ object LayoutStylesheets:
   sealed trait PropertyName:
     type Value
     val default: Value
-    val inheritable: Boolean = false
+    val inherited: Boolean = true
     def check(value: Value): Unit = ()
 
   case object AlignItems extends PropertyName:
     type Value = AlignItemsPolicy
     val default = AlignItemsPolicy.Top
-    override val inheritable = true
   case object AlignSelf extends PropertyName:
     type Value = SidedProperty[AlignItemsPolicy]
     val default = SidedProperty(AlignItems.default, AlignItems.default)
+    override val inherited = false
   case object JustifyContent extends PropertyName:
     type Value = JustifyContentPolicy
     val default = JustifyContentPolicy.SpaceBetween
-    override val inheritable = true
   case object FlexAbsorb extends PropertyName:
     type Value = Double
     val default = 0
-    override val inheritable = true
     override def check(value: Value) =
       assert(0 <= value && value <= 1, "flex-absorb value must be in [0, 1]")
   case object Gap extends PropertyName:
@@ -99,33 +97,34 @@ object LayoutStylesheets:
     val default = 0
     override def check(value: Value) =
       assert(0 <= value, "gap value must be nonnegative")
+  case object RowGap extends PropertyName:
+    type Value = Double
+    val default = 12
+    override def check(value: Value) =
+      assert(0 <= value, "row-gap value must be nonnegative")
+    override val inherited = false
   case object ContinuationMarker extends PropertyName:
     type Value = Option[String]
     val default = None
   case object Font extends PropertyName:
     type Value = FontInfo
     val default = FontInfo("sans-serif", "normal", "normal", "14px")
-    override val inheritable = true
+    override val inherited = false
   case object SystemFont extends PropertyName:
     type Value = FontInfo
     val default = Font.default
-    override val inheritable = true
   case object TextBoxEdge extends PropertyName:
     type Value = TextBoxEdges
     val default = TextBoxEdges.default
-    override val inheritable = true
   case object TextBoxTrim extends PropertyName:
     type Value = TextBoxTrimPolicy
     val default = TextBoxTrimPolicy.default
-    override val inheritable = true
   case object TextBoxAlign extends PropertyName:
     type Value = TextBoxAlignPolicy
     val default = TextBoxAlignPolicy.default
-    override val inheritable = true
   case object LabelPosition extends PropertyName:
     type Value = LabelPositionValue
     val default = LabelPositionValue(LabelPositionBlock.Top, LabelPositionInline.Right)
-    override val inheritable = true
 
   class Property(val name: PropertyName, val value: name.Value):
     name.check(value)
@@ -146,7 +145,7 @@ object LayoutStylesheets:
     def get(name: PropertyName): name.Value = getOption(name).getOrElse(name.default)
     def getOption(name: PropertyName): Option[name.Value] =
       properties.collectFirst({ case Property(`name`, value: name.Value) => value })
-    def filterInheritable = new PropertyMap(properties.filter(_.name.inheritable))
+    def filterInheritable = new PropertyMap(properties.filter(_.name.inherited))
 
   object PropertyMap:
     def apply() = new PropertyMap(Vector())
@@ -154,6 +153,6 @@ object LayoutStylesheets:
     private def compact(properties: Vector[Property]) = properties.distinctBy(_.name)
 
   val defaultProperties =
-    PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, ContinuationMarker,
+    PropertyMap(List(AlignItems, AlignSelf, JustifyContent, FlexAbsorb, Gap, RowGap, ContinuationMarker,
                      Font, TextBoxEdge, TextBoxTrim, TextBoxAlign, LabelPosition)
       .map(pn => Property(pn, pn.default)))
