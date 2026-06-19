@@ -14,7 +14,14 @@ enum Direction:
 
 enum Side { case Left, Right }
 
-enum Polarity { case +, - }
+enum PrePolarity { case +, -, -?, -! }
+enum Polarity:
+  case +, -?, -!
+  def toPre: PrePolarity = this match
+    case `+` => PrePolarity.+
+    case -? => PrePolarity.-?
+    case -! => PrePolarity.-!
+
 
 enum TipSpecification:
   case Vertical

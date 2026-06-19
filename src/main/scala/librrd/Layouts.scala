@@ -434,6 +434,8 @@ trait Layouts[T]:
     val `class` = "librrd-vconcat"
     val positiveClass = "librrd-vconcat-positive"
     val negativeClass = "librrd-vconcat-negative"
+    val negativeAboveClass = "librrd-vconcat-negative-above"
+    val negativeBelowClass = "librrd-vconcat-negative-below"
 
     def extraWidths(tipSpecs: TipSpecifications): SidedProperty[Double] = SidedProperty.forEach(s =>
       if tipSpecs(s) == TipSpecification.Vertical then 0 else 3*Layout.unitWidth)
@@ -459,19 +461,25 @@ trait Layouts[T]:
       initClasses: Set[String] = Set.empty,
       id: Option[String] = None) extends BlockLayout, VerticalConcatenationWidthProperties(
         topSublayout, bottomSublayout, tipSpecs):
-    val `classes` = initClasses
-      + VerticalConcatenation.`class`
-      + (polarity match
-           case Polarity.+ => VerticalConcatenation.positiveClass
-           case Polarity.- => VerticalConcatenation.negativeClass)
+    val `classes` = (initClasses + VerticalConcatenation.`class`)
+      | (polarity match
+           case Polarity.+ => Set(VerticalConcatenation.positiveClass)
+           case Polarity.-? =>
+             Set(VerticalConcatenation.negativeClass, VerticalConcatenation.negativeBelowClass)
+           case Polarity.-! =>
+             Set(VerticalConcatenation.negativeClass, VerticalConcatenation.negativeAboveClass))
 
-    assert(topSublayout.direction == direction,
-      "top sublayout of vertical concatenation must have direction equal to self!")
-    assert(topSublayout.direction == (polarity match
-        case Polarity.+ =>  bottomSublayout.direction
-        case Polarity.- =>  bottomSublayout.direction.reverse),
-      "bottom sublayout of vertical concatenation must have direction equal to " +
-      "top sublayout iff polarity is positive!")
+    polarity match
+      case Polarity.+ => assert(topSublayout.direction == bottomSublayout.direction,
+        "sublayouts of positive vertical concatenation must have same directions!")
+      case _ => assert(topSublayout.direction == bottomSublayout.direction.reverse,
+        "sublayouts of negative vertical concatenation must have opposite directions!")
+    polarity match
+      case Polarity.-! => assert(bottomSublayout.direction == direction,
+        "bottom sublayout of negative-above vertical concatenation must have direction equal to self!")
+      case _ => assert(topSublayout.direction == direction,
+        "top sublayout of positive or negative-below vertical concatenation must have direction equal to self!")
+
     val bottomOffset = topSublayout.height + Layout.rowGap
     val startHeight = bottomOffset + bottomSublayout.height
 
@@ -485,9 +493,12 @@ trait Layouts[T]:
       polarity match
         case Polarity.+ => NumRows.forEach(s =>
           topSublayout.tipRows(s) + bottomSublayout.tipRows(s))
-        case Polarity.- => NumRows.forEach(s =>
+        case Polarity.-? => NumRows.forEach(s =>
           topSublayout.tipRowsPossible(s) + bottomSublayout.tipRowsPossible(s)
           - topSublayout.tipRows(s) + 1)
+        case Polarity.-! => NumRows.forEach(s =>
+          bottomSublayout.tipRowsPossible(s) + topSublayout.tipRowsPossible(s)
+          - bottomSublayout.tipRows(s) + 1)
 
     override val tipRows = NumRows.forEach(s => (tipSpecs(s), polarity) match
       case (Vertical, Polarity.+) => tipRowsPossible(s)
@@ -497,16 +508,16 @@ trait Layouts[T]:
       case Vertical => tipYInternal(s, Logical(1))
       case Physical(p) => linearInterpolate(
           0, topSublayout.tipY(s, polarity match
-            case Polarity.+ => Physical(0)
-            case Polarity.- => Logical(topSublayout.tipRowsPossible(s))),
+            case Polarity.+ | Polarity.-! => Physical(0)
+            case Polarity.-? => Logical(topSublayout.tipRowsPossible(s))),
           1, bottomOffset + bottomSublayout.tipY(s, Physical(1)), p)
         case Logical(r) =>
           val topRows = topSublayout.tipRows(s)
           polarity match
-            case Polarity.+ =>
+            case Polarity.+ | Polarity.-! =>
               if r <= topRows then topSublayout.tipY(s, Logical(r))
               else bottomOffset + bottomSublayout.tipY(s, Logical(r - topRows))
-            case Polarity.- =>
+            case Polarity.-? =>
               if r == 1 then topSublayout.tipY(s, Logical(topRows))
               else bottomOffset + bottomSublayout.tipY(s, Logical(r - 1))
 
@@ -547,6 +558,9 @@ trait Layouts[T]:
     val (startSide, endSide) = direction.swap((Side.Left, Side.Right))
     assert(sub.direction == direction, "vertical epsilon sub must have same direction")
 
+    // TODO: in strict mode, + and -? stack -> only "final" (sub-on-top) VE,
+    // and -! stack -> only "initial" VE. but in non-strict mode, no constraints.
+
     sub match
       case _: BlockLayout =>
         assert(Side.values.forall(s => sub.tipSpecs(s) == Vertical),
@@ -583,7 +597,7 @@ trait Layouts[T]:
       case _ => this.copy(sub = sub.growEndHeight(by))
 
     override val tipRowsPossible = NumRows(direction,
-      polarity match { case Polarity.+ => sub.tipRows(startSide); case Polarity.- => 1 },
+      polarity match { case Polarity.+ => sub.tipRows(startSide); case _ => 1 },
       1)
 
     assert(tipSpecs(endSide) == Logical(1), "vertical epsilon end side tip spec must be Logical(1)")
@@ -591,7 +605,9 @@ trait Layouts[T]:
     override def tipYInternal(s: Side, ts: TipSpecification): Double =
       if s == startSide then
         (ts, polarity) match
-          case (Logical(r), Polarity.-) => sub.tipYInternal(s, Logical(sub.tipRows(s)))
+          // TODO: can't we pass along r?
+          case (Logical(r), Polarity.-?) => sub.tipYInternal(s, Logical(sub.tipRows(s)))
+          case (Logical(r), Polarity.-!) => sub.tipYInternal(s, Logical(1))
           case _ => sub.tipYInternal(s, ts)
       else endHeight
 

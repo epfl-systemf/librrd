@@ -196,7 +196,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
                 case _ => positiveBrackets(tipY,
                   (1 to vc.tipRowsPossible(side)).map(r => vc.tipY(side, Logical(r))), sign, x)
 
-              case Polarity.- =>
+              case _ =>
                 def topPath(subTipY: Double) = path(d:=
                   s"M $x,${vc.bottomOffset - Layout.rowGap/2}  L $x,${subTipY + 2*unitWidth} "
                   + s"$quarterArc $downwards ${sign*radius},${-radius}")
@@ -209,14 +209,26 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
                   .map(r => bottomPath(vc.bottomOffset + bottomSublayout.tipY(side, Logical(r))))
                 val outerPath = rail(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*unitWidth},0 "
-                  + s"$quarterArc $upwards ${sign*radius},${-radius}")
+                  + (polarity match
+                       case Polarity.-? => s"$quarterArc $upwards ${sign*radius},${-radius}"
+                       case Polarity.-! => s"$quarterArc $downwards ${sign*radius},$radius"
+                       case _ => ??? /* unreachable */))
                 val straight = rail(d:=
                   s"M ${x - sign*3*unitWidth},$tipY  l ${sign*5*unitWidth},0")
 
                 tipSpecs(side) match
                   case Vertical => inners
-                  case Physical(0) | Logical(1) =>
-                    if topSublayout.tipRowsPossible(side) == 1 then straight +: inners
+                  case Physical(0) | Logical(1) if polarity == Polarity.-? =>
+                    if topSublayout.tipRowsPossible(side) == 1
+                    then straight +: inners
+                    else straight +: outerPath +: inners
+                  case Physical(1) if polarity == Polarity.-! =>
+                    if bottomSublayout.tipRowsPossible(side) == 1
+                    then straight +: inners
+                    else straight +: outerPath +: inners
+                  case Logical(r) if polarity == Polarity.-! && r == vc.tipRowsPossible(side) =>
+                    if bottomSublayout.tipRowsPossible(side) == 1
+                    then straight +: inners
                     else straight +: outerPath +: inners
                   case _ => outerPath +: inners)
 
@@ -239,16 +251,15 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
                    + s"$quarterArc 0 $radius,$radius"))
                :+ (polarity match
                  case Polarity.+ => rail(d:=s"M $startX,0  L $startX,${ve.startHeight}")
-                 case Polarity.- => rail(d:=s"M ${startX + radius},${sub.tipY(startSide, Logical(1))} "
-                   + s"$quarterArc 0 ${-radius},$radius  L $startX,${ve.startHeight}",
-                   `class`:="blah"))
+                 case _ => rail(d:=s"M ${startX + radius},${sub.tipY(startSide, Logical(1))} "
+                   + s"$quarterArc 0 ${-radius},$radius  L $startX,${ve.startHeight}"))
              case (_, Polarity.+) =>
                positiveBrackets(tipY,
                  (1 to sub.tipRows(startSide)).map(r => sub.tipY(startSide, Logical(r))),
                  1, startX)
                :+ rail(d:=s"M ${ve.startOffset},$tipY  L ${startX - radius},$tipY  "
                  + s"$quarterArc 1 $radius,$radius  L $startX,${ve.startHeight}")
-             case (_, Polarity.-) =>
+             case (_, _) =>
                val subPossible = sub.tipRows(startSide)
                (if subPossible > 1 then
                   positiveBrackets(tipY, // tipY must be lowest Logical
@@ -273,7 +284,7 @@ abstract class LayoutsScalatags[Builder, Output <: FragT, FragT]
             + s"L ${ve.endWidth},${ve.height - radius}")
 
         val linebreakConnector =
-          if polarity == Polarity.- then
+          if polarity != Polarity.+ then
             rail(d:=s"M $startX,${ve.startHeight}  L $startX,${halfHeight - radius}  "
             + s"$quarterArc 0 $radius,$radius")
           else if width - ve.extraWidth ~= sub.width then

@@ -26,7 +26,7 @@ object Diagrams:
                       groupLabel: Option[String] = None) extends Diagram
   case class Stack(topSubdiagram: Diagram,
                    bottomSubdiagram: Diagram,
-                   polarity: Polarity,
+                   polarity: PrePolarity,
                    classes: Set[String] = Set.empty,
                    id: Option[String] = None,
                    groupLabel: Option[String] = None) extends Diagram

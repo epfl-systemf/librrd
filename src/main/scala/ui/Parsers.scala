@@ -17,7 +17,9 @@ object DiagramParser extends RegexParsers, InputParser[Diagrams.Diagram]:
     | "[" ~> """[^\]]+""".r <~ "]"
   def nonterminal: Parser[NonterminalToken] = withClassId(nonterminalLabel) ^^ NonterminalToken.apply
   def sequence: Parser[Sequence] = withClassId("(" ~> diagram.* <~ ")") ^^ Sequence.apply
-  def polarity: Parser[Polarity] = ("+" | "-") ^^ { case "+" => Polarity.+; case "-" => Polarity.- }
+  def polarity: Parser[PrePolarity] = ("+" | "-?" | "-!" | "-") ^^ {
+    case "+" => PrePolarity.+; case "-" => PrePolarity.-;
+    case "-?" => PrePolarity.-?; case "-!" => PrePolarity.-! }
   def stack: Parser[Stack] = withClassId("(" ~> polarity ~ diagram ~ diagram <~ ")") ^^ {
     case (pol ~ top ~ bot, c, i, gl) => Stack(top, bot, pol, classes = c, id = i, groupLabel = gl) }
 
@@ -149,7 +151,8 @@ class LayoutParser[T](val backend: Layouts[T]) extends RegexParsers:
     "ltr" ^^ (_ => Direction.LTR) | "rtl" ^^ (_ => Direction.RTL)
   def width: Parser[Double] = realNumber.filter(_ >= 0)
   def flag: Parser[Boolean] = "#t" ^^ (_ => true) | "#f" ^^ (_ => false)
-  def polarity: Parser[Polarity] = "+" ^^ (_ => Polarity.+) | "-" ^^ (_ => Polarity.-)
+  def polarity: Parser[Polarity] =
+    "+" ^^ (_ => Polarity.+) | ("-?" | "-") ^^ (_ => Polarity.-?) | ("-!") ^^ (_ => Polarity.-!)
   def rowNumber: Parser[Integer] = wholeNumber.filter(_ > 0)
   def proportion: Parser[Double] = realNumber.filter(p => 0 <= p && p <= 1)
   def side: Parser[Side] = "left" ^^ (_ => Side.Left) | "right" ^^ (_ => Side.Right)

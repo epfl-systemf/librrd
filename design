@@ -1,3 +1,12 @@
+2026-06-19
+==========
+
+TODO: in strict mode, + and -? stack -> only "final" (sub-on-top) VE,
+and -! stack -> only "initial" VE. but in non-strict mode, no constraints.
+
+TODO: in non-strict mode, - chooses between -? and -! during alignment
+
+
 2026-06-16
 ==========
 
@@ -9,10 +18,9 @@ translators from:
 * JS regexes, classical and modern
 
 JS API
-* done basic, need proper
+* proper
 
 new layout+compiler features:
-* labeled groups DONE
 * parametric row gap
 * parametric choice of (dis)continuous line breaks
 * for a set of diagrams:
@@ -25,6 +33,13 @@ webpage with live examples of everything
 
 experimental: structured control flow graphs
 * (stretch goal) vertical layout
+
+
+DONE
+
+* basic JS API
+* labeled groups
+* negative-above stacks
 
 
 TODO for poster

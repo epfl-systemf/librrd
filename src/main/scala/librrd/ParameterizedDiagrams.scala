@@ -34,7 +34,7 @@ object ParameterizedDiagrams:
 
   case class Stack(topSubdiagram: ParameterizedDiagram,
                    bottomSubdiagram: ParameterizedDiagram,
-                   polarity: Polarity,
+                   polarity: PrePolarity,
                    properties: PropertyMap,
                    classes: Set[String] = Set.empty,
                    id: Option[String] = None,

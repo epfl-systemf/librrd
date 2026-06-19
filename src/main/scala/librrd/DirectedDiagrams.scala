@@ -37,7 +37,7 @@ object DirectedDiagrams:
   case class Stack(topSubdiagram: DirectedDiagram,
                    bottomSubdiagram: DirectedDiagram,
                    direction: Direction,
-                   polarity: Polarity,
+                   polarity: PrePolarity,
                    properties: LayoutStylesheets.PropertyMap,
                    classes: Set[String] = Set.empty,
                    id: Option[String] = None,
@@ -61,5 +61,5 @@ object DirectedDiagrams:
         Stack(
           direct(topSubdiagram, direction),
           direct(bottomSubdiagram,
-            polarity match { case Polarity.- => direction.reverse; case _ => direction }),
+            polarity match { case PrePolarity.+ => direction; case _ => direction.reverse }),
           direction, polarity, properties, classes, id, gLabel)
