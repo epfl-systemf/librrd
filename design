@@ -21,11 +21,10 @@ JS API
 * proper
 
 new layout+compiler features:
-* parametric row gap
-* parametric choice of (dis)continuous line breaks
 * for a set of diagrams:
   + nonterminal names and links
   + expand inline?
+  + in progress in xref-diagrams
 * (stretch goal) highlight active editing
 
 webpage with live examples of everything
@@ -40,6 +39,8 @@ DONE
 * basic JS API
 * labeled groups
 * negative-above stacks
+* parametric row gap
+* parametric choice of (dis)continuous line breaks
 
 
 TODO for poster
