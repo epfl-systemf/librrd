@@ -20,6 +20,14 @@ object API:
     StylesheetParser(stylesheet).get
 
   @JSExport
+  def minMaxContent(diagram: Diagram, stylesheet: Stylesheet): js.Object =
+    val m = LibRRD.minMaxContent(diagram, stylesheet)
+    new js.Object {
+      val minContent = m._1
+      val maxContent = m._2
+    }
+
+  @JSExport
   def layOutToSVG(diagram: Diagram, stylesheet: Stylesheet, width: Double): SVGSVGElement =
     LibRRD.layOutToSVG(diagram, stylesheet, width)
   @JSExport
@@ -45,14 +53,16 @@ object API:
   def normalizeID(id: String): String = LibRRD.normalizeID(id)
 
   @JSExport
-  def layOutSetToSVG(diagrams: js.Array[LibRRD.DiagramParameters], commonStylesheet: Stylesheet,
-                     topLevelID: Boolean)
-      : js.Array[SVGSVGElement] =
-    LibRRD.layOutSetToSVG(diagrams.toSeq, commonStylesheet, topLevelID)
-      .toJSArray
+  def layOutSetItemToSVG(diagram: LibRRD.DiagramParameters, topLevelID: Boolean): SVGSVGElement =
+    LibRRD.layOutSetItemToSVG(diagram, topLevelID)
+
   @JSExport
-  def layOutSetToSVG(diagrams: js.Array[LibRRD.DiagramParameters], commonStylesheet: String,
-                     topLevelID: Boolean)
+  def layOutSetToSVG(diagrams: js.Array[LibRRD.DiagramParameters], topLevelID: Boolean)
       : js.Array[SVGSVGElement] =
-    LibRRD.layOutSetToSVG(diagrams.toSeq, parseStylesheet(commonStylesheet), topLevelID)
-      .toJSArray
+    LibRRD.layOutSetToSVG(diagrams.toSeq, topLevelID).toJSArray
+
+  @JSExport
+  def inlineNonterminal(diagram: Diagram,
+                        nonterminal: String,
+                        replacement: Diagram): Diagram =
+    LibRRD.inlineNonterminal(diagram, nonterminal, replacement)

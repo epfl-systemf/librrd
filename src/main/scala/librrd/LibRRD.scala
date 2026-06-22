@@ -12,6 +12,10 @@ object LibRRD:
 
   val SVGWD = WrappedDiagrams(LayoutsSVG)
 
+  def minMaxContent(diagram: Diagrams.Diagram, stylesheet: LayoutStylesheets.Stylesheet): (Double, Double) =
+    val wrapped = SVGWD.wrapLocally(preLayOut(diagram, stylesheet))
+    (wrapped.minContent, wrapped.maxContent)
+
   def layOutToSVG(diagram: Diagrams.Diagram, stylesheet: LayoutStylesheets.Stylesheet,
                   width: Double): SVGSVGElement =
     val myWrappedDiagram = SVGWD.wrapLocally(preLayOut(diagram, stylesheet))
@@ -36,10 +40,7 @@ object LibRRD:
 
   def normalizeID(name: String): String = name.replaceAll(" ", "-")
 
-  def layOutSetToSVG(
-      diagrams: Seq[DiagramParameters],
-      commonStylesheet: LayoutStylesheets.Stylesheet,
-      topLevelID: Boolean = true): Seq[SVGSVGElement] =
+  def layOutSetItemToSVG(params: DiagramParameters, topLevelID: Boolean = true): SVGSVGElement =
     import LayoutStylesheets.*
 
     val topLevelLabelRule = Rule(List(Root),
@@ -50,36 +51,38 @@ object LibRRD:
       elem.textContent = "svg rect.librrd-group:has(+ g > .top-level) { fill: none; stroke: none; }"
       elem
 
-    diagrams.map(params =>
-      val normalizedName = normalizeID(params.name)
-      // TODO gross duplication but how else to do it?
-      val diagram = params.diagram match
-        case d: Diagrams.TerminalToken => d.copy(
-          groupLabel = Some(params.name),
-          id = if topLevelID then Some(normalizedName) else None,
-          classes = d.classes + "top-level")
-        case d: Diagrams.NonterminalToken => d.copy(
-          groupLabel = Some(params.name),
-          id = if topLevelID then Some(normalizedName) else None,
-          classes = d.classes + "top-level")
-        case d: Diagrams.Sequence => d.copy(
-          groupLabel = Some(params.name),
-          id = if topLevelID then Some(normalizedName) else None,
-          classes = d.classes + "top-level")
-        case d: Diagrams.Stack => d.copy(
-          groupLabel = Some(params.name),
-          id = if topLevelID then Some(normalizedName) else None,
-          classes = d.classes + "top-level")
-      val svg = layOutToSVG(
-        diagram,
-        Stylesheet((topLevelLabelRule +: commonStylesheet.rules) ++ params.stylesheet.rules),
-        params.width)
-      svg.appendChild(topLevelLabelCSS)
-      svg.querySelectorAll(".librrd-nonterminal:not(.librrd-nolink) > text").foreach{ e =>
-        val link = createElementNS("http://www.w3.org/2000/svg", "a")
-        link.setAttribute("href", s"#${normalizeID(e.textContent)}")
-        link.setAttribute("target", "_top")
-        e.replaceWith(link)
-        link.appendChild(e)
-      }
-      svg)
+    val normalizedName = normalizeID(params.name)
+    val diagram = params.diagram.withMeta(
+      classes = params.diagram.classes + "top-level",
+      id = if topLevelID then Some(normalizedName) else None,
+      groupLabel = Some(params.name))
+    val svg = layOutToSVG(
+      diagram,
+      Stylesheet(topLevelLabelRule +: params.stylesheet.rules),
+      params.width)
+    svg.appendChild(topLevelLabelCSS)
+    svg.querySelectorAll(".librrd-nonterminal:not(.librrd-nolink) > text").foreach { e =>
+      val link = createElementNS("http://www.w3.org/2000/svg", "a")
+      link.setAttribute("href", s"#${normalizeID(e.textContent)}")
+      link.setAttribute("target", "_top")
+      e.replaceWith(link)
+      link.appendChild(e)
+    }
+    svg
+
+  def layOutSetToSVG(diagrams: Seq[DiagramParameters], topLevelID: Boolean = true)
+      : Seq[SVGSVGElement] =
+    diagrams.map(params => layOutSetItemToSVG(params, topLevelID))
+
+  def inlineNonterminal(diagram: Diagrams.Diagram,
+                        nonterminal: String,
+                        replacement: Diagrams.Diagram): Diagrams.Diagram =
+    diagram match
+      case d: Diagrams.TerminalToken => d
+      case d @ Diagrams.NonterminalToken(label, _, _, _) =>
+        if label == nonterminal then replacement.withMeta(groupLabel = Some(nonterminal)) else d
+      case d @ Diagrams.Sequence(subdiagrams, _, _, _) =>
+        d.copy(subdiagrams = subdiagrams.map(inlineNonterminal(_, nonterminal, replacement)))
+      case d @ Diagrams.Stack(topSubdiagram, bottomSubdiagram, _, _, _, _) =>
+        d.copy(topSubdiagram = inlineNonterminal(topSubdiagram, nonterminal, replacement),
+               bottomSubdiagram = inlineNonterminal(bottomSubdiagram, nonterminal, replacement))

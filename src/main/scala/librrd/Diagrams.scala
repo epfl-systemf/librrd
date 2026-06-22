@@ -11,6 +11,15 @@ object Diagrams:
 
   sealed trait Diagram extends DiagramFields:
     def toDiagram = this
+    def withMeta(classes: Set[String] = this.classes,
+                 id: Option[String] = this.id,
+                 groupLabel: Option[String] = this.groupLabel) =
+      // TODO gross duplication but how else to do it?
+      this match
+        case d: TerminalToken => d.copy(groupLabel = groupLabel, id = id, classes = classes)
+        case d: NonterminalToken => d.copy(groupLabel = groupLabel, id = id, classes = classes)
+        case d: Sequence => d.copy(groupLabel = groupLabel, id = id, classes = classes)
+        case d: Stack => d.copy(groupLabel = groupLabel, id = id, classes = classes)
 
   case class TerminalToken(label: String,
                            classes: Set[String] = Set.empty,

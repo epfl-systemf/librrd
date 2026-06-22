@@ -125,6 +125,7 @@ object LayoutStylesheets:
   case object LabelPosition extends PropertyName:
     type Value = LabelPositionValue
     val default = LabelPositionValue(LabelPositionBlock.Top, LabelPositionInline.Right)
+    override val inherited = false
 
   class Property(val name: PropertyName, val value: name.Value):
     name.check(value)

@@ -21,10 +21,7 @@ JS API
 * proper
 
 new layout+compiler features:
-* for a set of diagrams:
-  + nonterminal names and links
-  + expand inline?
-  + in progress in xref-diagrams
+* proper click-to-inline
 * (stretch goal) highlight active editing
 
 webpage with live examples of everything
@@ -41,6 +38,9 @@ DONE
 * negative-above stacks
 * parametric row gap
 * parametric choice of (dis)continuous line breaks
+* for a set of diagrams:
+  + nonterminal names and links
+  + expand inline? quick and dirty version
 
 
 TODO for poster
