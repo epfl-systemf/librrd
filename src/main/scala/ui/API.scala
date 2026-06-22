@@ -26,22 +26,33 @@ object API:
   def layOutToSVG(diagram: String, stylesheet: String, width: Double): SVGSVGElement =
     layOutToSVG(parseDiagram(diagram), parseStylesheet(stylesheet), width)
 
-  @JSExportTopLevel("DiagramParameters", "librrd")
-  class DiagramParameters(
-      val name: String,
-      val diagram: Diagram,
-      val stylesheet: Stylesheet,
-      val width: Double) extends js.Object:
-    def this(name: String, diagram: String, stylesheet: String, width: Double) =
-      this(name, parseDiagram(diagram), parseStylesheet(stylesheet), width)
-    def _toLibRRDParams = LibRRD.DiagramParameters(name, diagram, stylesheet, width)
+  @JSExport
+  def makeDiagramParameters(
+      name: String,
+      diagram: Diagram,
+      stylesheet: Stylesheet,
+      width: Double): LibRRD.DiagramParameters =
+    LibRRD.DiagramParameters(name, diagram, stylesheet, width)
+  @JSExport
+  def makeDiagramParameters(
+      name: String,
+      diagram: String,
+      stylesheet: String,
+      width: Double): LibRRD.DiagramParameters =
+    LibRRD.DiagramParameters(name, parseDiagram(diagram), parseStylesheet(stylesheet), width)
 
   @JSExport
-  def layOutSetToSVG(diagrams: js.Array[DiagramParameters], commonStylesheet: Stylesheet)
-      : js.Array[SVGSVGElement] =
-    LibRRD.layOutSetToSVG(diagrams.toSeq.map(_._toLibRRDParams), commonStylesheet).toJSArray
+  def normalizeID(id: String): String = LibRRD.normalizeID(id)
+
   @JSExport
-  def layOutSetToSVG(diagrams: js.Array[DiagramParameters], commonStylesheet: String)
+  def layOutSetToSVG(diagrams: js.Array[LibRRD.DiagramParameters], commonStylesheet: Stylesheet,
+                     topLevelID: Boolean)
       : js.Array[SVGSVGElement] =
-    LibRRD.layOutSetToSVG(diagrams.toSeq.map(_._toLibRRDParams),
-      parseStylesheet(commonStylesheet)).toJSArray
+    LibRRD.layOutSetToSVG(diagrams.toSeq, commonStylesheet, topLevelID)
+      .toJSArray
+  @JSExport
+  def layOutSetToSVG(diagrams: js.Array[LibRRD.DiagramParameters], commonStylesheet: String,
+                     topLevelID: Boolean)
+      : js.Array[SVGSVGElement] =
+    LibRRD.layOutSetToSVG(diagrams.toSeq, parseStylesheet(commonStylesheet), topLevelID)
+      .toJSArray

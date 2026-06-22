@@ -34,13 +34,14 @@ object LibRRD:
     stylesheet: LayoutStylesheets.Stylesheet,
     width: Double)
 
+  def normalizeID(name: String): String = name.replaceAll(" ", "-")
+
   def layOutSetToSVG(
       diagrams: Seq[DiagramParameters],
       commonStylesheet: LayoutStylesheets.Stylesheet,
       topLevelID: Boolean = true): Seq[SVGSVGElement] =
     import LayoutStylesheets.*
 
-    def normalizeName(name: String): String = name.replaceAll(" ", "-")
     val topLevelLabelRule = Rule(List(Root),
       List(Property(LabelPosition,
         librrd.LabelPositionValue(librrd.LabelPositionBlock.Top, librrd.LabelPositionInline.Left))))
@@ -50,7 +51,7 @@ object LibRRD:
       elem
 
     diagrams.map(params =>
-      val normalizedName = normalizeName(params.name)
+      val normalizedName = normalizeID(params.name)
       // TODO gross duplication but how else to do it?
       val diagram = params.diagram match
         case d: Diagrams.TerminalToken => d.copy(
@@ -74,9 +75,9 @@ object LibRRD:
         Stylesheet((topLevelLabelRule +: commonStylesheet.rules) ++ params.stylesheet.rules),
         params.width)
       svg.appendChild(topLevelLabelCSS)
-      svg.querySelectorAll(".librrd-nonterminal > text").foreach{ e =>
+      svg.querySelectorAll(".librrd-nonterminal:not(.librrd-nolink) > text").foreach{ e =>
         val link = createElementNS("http://www.w3.org/2000/svg", "a")
-        link.setAttribute("href", s"#${normalizeName(e.textContent)}")
+        link.setAttribute("href", s"#${normalizeID(e.textContent)}")
         link.setAttribute("target", "_top")
         e.replaceWith(link)
         link.appendChild(e)
