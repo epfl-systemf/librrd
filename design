@@ -47,6 +47,47 @@ TODO for poster
 
 title: An expressive, customizable railroad layout engine
 
+Research problem and motivation
+
+* railroad layout is a style of graph layout for "extended" series-parallel digraphs:
+  SP digraphs where the parallel composition may reverse one component.
+  + (Thus all SP digraphs are also ESP digraphs.)
+  railroad layout assumes that the edges are labeled and are the primary focus of the visualization, with vertices left implicit.
+* most commonly used in visualizations of formal grammars
+  + examples
+* BUT, even the most capable tools capture only some of the rich variation in hand-drawn railroad layouts, and leave the user little control
+  + bad examples
+  + including our own
+
+
+Our methodology
+
+Extend the formalism of Chiplunkar and Pit-Claudel (2026) and develop a new layout algorithm, with:
+* Layout stylesheets (mostly finished)
+* Bounding boxes -> bounding S-blocks (ongoing; preliminary results)
+* Better wrapping heuristics (planned)
+
+
+Applications and evaluation
+
+* Existing corpuses of syntax diagrams (both manually and automatically laid out)
+  + To evaluate the above, design a similarity metric for granular, structural comparison of layouts
+* Reducible control flow graphs
+* Pretty-printing
+* Arbitrary graphs, with "spanning" ESP digraphs
+
+
+
+
+Research question
+Methodology, ideally illustrated with diagrams or schemas
+Main findings, focusing on 2–3 key insights
+Limitations and future work
+Implications and takeaways for academic and/or practical audiences
+Claims should be proportional to the evidence shown.
+
+
+
 
 
 ""applications""
