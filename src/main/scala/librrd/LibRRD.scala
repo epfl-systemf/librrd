@@ -38,9 +38,8 @@ object LibRRD:
     stylesheet: LayoutStylesheets.Stylesheet,
     width: Double)
 
-  def normalizeID(name: String): String = name.replaceAll(" ", "-")
-
-  def layOutSetItemToSVG(params: DiagramParameters, topLevelID: Boolean = true): SVGSVGElement =
+  def layOutSetItemToSVG(params: DiagramParameters,
+                         nonterminalTargets: Map[String, String]): SVGSVGElement =
     import LayoutStylesheets.*
 
     val topLevelLabelRule = Rule(List(Root),
@@ -51,10 +50,8 @@ object LibRRD:
       elem.textContent = "svg rect.librrd-group:has(+ g > .top-level) { fill: none; stroke: none; }"
       elem
 
-    val normalizedName = normalizeID(params.name)
     val diagram = params.diagram.withMeta(
       classes = params.diagram.classes + "top-level",
-      id = if topLevelID then Some(normalizedName) else None,
       groupLabel = Some(params.name))
     val svg = layOutToSVG(
       diagram,
@@ -62,17 +59,18 @@ object LibRRD:
       params.width)
     svg.appendChild(topLevelLabelCSS)
     svg.querySelectorAll(".librrd-nonterminal:not(.librrd-nolink) > text").foreach { e =>
-      val link = createElementNS("http://www.w3.org/2000/svg", "a")
-      link.setAttribute("href", s"#${normalizeID(e.textContent)}")
-      link.setAttribute("target", "_top")
-      e.replaceWith(link)
-      link.appendChild(e)
+      if nonterminalTargets.contains(e.textContent) then
+        val link = createElementNS("http://www.w3.org/2000/svg", "a")
+        link.setAttribute("href", s"#${nonterminalTargets(e.textContent)}")
+        link.setAttribute("target", "_top")
+        e.replaceWith(link)
+        link.appendChild(e): Unit
     }
     svg
 
-  def layOutSetToSVG(diagrams: Seq[DiagramParameters], topLevelID: Boolean = true)
+  def layOutSetToSVG(diagrams: Seq[DiagramParameters], nonterminalTargets: Map[String, String])
       : Seq[SVGSVGElement] =
-    diagrams.map(params => layOutSetItemToSVG(params, topLevelID))
+    diagrams.map(params => layOutSetItemToSVG(params, nonterminalTargets))
 
   def inlineNonterminal(diagram: Diagrams.Diagram,
                         nonterminal: String,

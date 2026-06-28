@@ -210,7 +210,8 @@ object AlignedDiagrams:
               case AlignItemsPolicy.Baseline =>
                 topSubdiagram match
                   case DirectedDiagrams.Sequence(subs, _, _, _, _, _)
-                    if subs.isEmpty && alignedBottom.numRows(s) == 1 => Logical(2)
+                    if subs.isEmpty && alignedBottom.numRows(s) == 1 && polarity == PrePolarity.+ =>
+                      Logical(2)
                   case _ => Logical((preNumRows(s) + 1)/2)
             }
             case _ => Vertical)

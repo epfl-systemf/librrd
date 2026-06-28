@@ -110,8 +110,9 @@ object GUI:
     InputsPresets.LayoutStylesheet.register("demo", true)
     InputsPresets.RenderingStylesheet.register("demo")
     saveOutputButton.addEventListener("click", (event) => {
-      outputDiv.querySelector("svg").appendChild(outputDiv.querySelector("style").cloneNode())
-      val serialized = dom.XMLSerializer().serializeToString(outputDiv.querySelector("svg"))
+      val svg = outputDiv.querySelector("svg").cloneNode(deep = true)
+      svg.appendChild(outputDiv.querySelector("style").cloneNode(deep = true))
+      val serialized = dom.XMLSerializer().serializeToString(svg)
       val blob = dom.Blob(scalajs.js.Array(serialized),
         new dom.BlobPropertyBag { `type` = "image/svg+xml" })
       val downloader = document.createElement("a")

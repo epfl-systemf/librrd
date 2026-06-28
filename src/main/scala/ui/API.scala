@@ -50,16 +50,15 @@ object API:
     LibRRD.DiagramParameters(name, parseDiagram(diagram), parseStylesheet(stylesheet), width)
 
   @JSExport
-  def normalizeID(id: String): String = LibRRD.normalizeID(id)
+  def layOutSetItemToSVG(diagram: LibRRD.DiagramParameters,
+                         nonterminalTargets: js.Map[String, String]): SVGSVGElement =
+    LibRRD.layOutSetItemToSVG(diagram, nonterminalTargets.toMap)
 
   @JSExport
-  def layOutSetItemToSVG(diagram: LibRRD.DiagramParameters, topLevelID: Boolean): SVGSVGElement =
-    LibRRD.layOutSetItemToSVG(diagram, topLevelID)
-
-  @JSExport
-  def layOutSetToSVG(diagrams: js.Array[LibRRD.DiagramParameters], topLevelID: Boolean)
+  def layOutSetToSVG(diagrams: js.Array[LibRRD.DiagramParameters],
+                     nonterminalTargets: js.Map[String, String])
       : js.Array[SVGSVGElement] =
-    LibRRD.layOutSetToSVG(diagrams.toSeq, topLevelID).toJSArray
+    LibRRD.layOutSetToSVG(diagrams.toSeq, nonterminalTargets.toMap).toJSArray
 
   @JSExport
   def inlineNonterminal(diagram: Diagram,

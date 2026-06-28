@@ -184,7 +184,8 @@ class WrappedDiagrams[T](val backend: Layouts[T]):
              direction.reverse(withSpaces.zip(spaceBetweenProperties).map((rowSubs, props) =>
                HorizontalConcatenation(
                  rowSubs, direction, props, classes, None))),
-             direction, properties, tipSpecs, groupLabel = groupLabel),
+             direction, properties, tipSpecs,
+             groupLabel = groupLabel, id = id, classes = classes),
            indices))
 
     val minContentOption = options.minBy(_._1.minContent)
