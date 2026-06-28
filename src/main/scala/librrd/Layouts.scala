@@ -412,7 +412,7 @@ trait Layouts[T]:
       s"blocked horizontal concatenation endWidth should equal width=${hc.width}, got ${hc.endWidth}")
 
     override val direction = hc.direction
-    override val id = hc.id
+    override val id = None
     override val classes = hc.classes + BlockedHorizontalConcatenation.`class`
     override val startHeight = hc.height
     override val tipRowsPossible = hc.tipRowsPossible

@@ -72,15 +72,32 @@ object LibRRD:
       : Seq[SVGSVGElement] =
     diagrams.map(params => layOutSetItemToSVG(params, nonterminalTargets))
 
-  def inlineNonterminal(diagram: Diagrams.Diagram,
-                        nonterminal: String,
-                        replacement: Diagrams.Diagram): Diagrams.Diagram =
+  def replaceByID(diagram: Diagrams.Diagram, id: String, replacement: Diagrams.Diagram): Diagrams.Diagram =
     diagram match
-      case d: Diagrams.TerminalToken => d
-      case d @ Diagrams.NonterminalToken(label, _, _, _) =>
-        if label == nonterminal then replacement.withMeta(groupLabel = Some(nonterminal)) else d
-      case d @ Diagrams.Sequence(subdiagrams, _, _, _) =>
-        d.copy(subdiagrams = subdiagrams.map(inlineNonterminal(_, nonterminal, replacement)))
-      case d @ Diagrams.Stack(topSubdiagram, bottomSubdiagram, _, _, _, _) =>
-        d.copy(topSubdiagram = inlineNonterminal(topSubdiagram, nonterminal, replacement),
-               bottomSubdiagram = inlineNonterminal(bottomSubdiagram, nonterminal, replacement))
+      case d @ Diagrams.TerminalToken(_, _, thisID, _) =>
+        if thisID.exists(_ == id) then replacement else d
+      case d @ Diagrams.NonterminalToken(_, _, thisID, _) =>
+        if thisID.exists(_ == id) then replacement else d
+      case d @ Diagrams.Sequence(subdiagrams, _, thisID, _) =>
+        if thisID.exists(_ == id) then replacement
+        else d.copy(subdiagrams = subdiagrams.map(replaceByID(_, id, replacement)))
+      case d @ Diagrams.Stack(topSubdiagram, bottomSubdiagram, _, _, thisID, _) =>
+        if thisID.exists(_ == id) then replacement
+        else d.copy(topSubdiagram = replaceByID(topSubdiagram, id, replacement),
+                    bottomSubdiagram = replaceByID(bottomSubdiagram, id, replacement))
+
+  def withSerialIDs(diagram: Diagrams.Diagram, prefix: String): Diagrams.Diagram =
+    var cur = 0
+    def withID(d: Diagrams.Diagram): Diagrams.Diagram =
+      cur += 1
+      d.withMeta(id = d.id.filterNot(_.startsWith(prefix))
+                        .orElse(Some(prefix + cur.toString())))
+    def rec(d: Diagrams.Diagram): Diagrams.Diagram =
+      d match
+        case d: (Diagrams.TerminalToken | Diagrams.NonterminalToken) => withID(d)
+        case d @ Diagrams.Sequence(subdiagrams, _, _, _) =>
+          withID(d.copy(subdiagrams = subdiagrams.map(rec)))
+        case d @ Diagrams.Stack(topSubdiagram, bottomSubdiagram, _, _, _, _) =>
+          withID(d.copy(topSubdiagram = rec(topSubdiagram),
+                        bottomSubdiagram = rec(bottomSubdiagram)))
+    rec(diagram)

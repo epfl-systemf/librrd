@@ -61,7 +61,18 @@ object API:
     LibRRD.layOutSetToSVG(diagrams.toSeq, nonterminalTargets.toMap).toJSArray
 
   @JSExport
-  def inlineNonterminal(diagram: Diagram,
-                        nonterminal: String,
-                        replacement: Diagram): Diagram =
-    LibRRD.inlineNonterminal(diagram, nonterminal, replacement)
+  def replaceByID(diagram: Diagram,
+                  id: String,
+                  replacement: Diagram): Diagram =
+    LibRRD.replaceByID(diagram, id, replacement)
+
+  @JSExport
+  def replaceByIDWithLabel(diagram: Diagram,
+                           id: String,
+                           replacement: Diagram,
+                           label: String): Diagram =
+    LibRRD.replaceByID(diagram, id, replacement.withMeta(groupLabel = Some(label)))
+
+  @JSExport
+  def withSerialIDs(diagram: Diagram, prefix: String): Diagram =
+    LibRRD.withSerialIDs(diagram, prefix)
